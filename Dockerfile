@@ -94,6 +94,7 @@ WORKDIR /var/www/html
 COPY docker/nginx.conf /etc/nginx/sites-available/default
 COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY docker/php.ini /usr/local/etc/php/conf.d/zz-app.ini
+COPY docker/zz-docker.conf /usr/local/etc/php-fpm.d/zz-docker.conf
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 
 RUN chmod +x /usr/local/bin/entrypoint.sh \
@@ -110,7 +111,11 @@ RUN chmod +x /usr/local/bin/entrypoint.sh \
         /var/www/html/backend/storage \
         /var/www/html/backend/bootstrap/cache \
     && rm -f /etc/nginx/sites-enabled/default \
-    && ln -s /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
+    && ln -s /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default \
+    && sed -i 's/^listen = .*/listen = 127.0.0.1:9000/' /usr/local/etc/php-fpm.d/www.conf \
+    && grep -q '^clear_env' /usr/local/etc/php-fpm.d/www.conf \
+        && sed -i 's/^clear_env = .*/clear_env = no/' /usr/local/etc/php-fpm.d/www.conf \
+        || echo 'clear_env = no' >> /usr/local/etc/php-fpm.d/www.conf
 
 ENV DB_CONNECTION=sqlite \
     DB_DATABASE=/var/www/html/data/app.sqlite \

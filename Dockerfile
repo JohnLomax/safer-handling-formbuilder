@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1
-
 # -----------------------------------------------------------------------------
 # Stage 1: build Laravel admin frontend assets (Vite)
 # -----------------------------------------------------------------------------
@@ -7,8 +5,8 @@ FROM node:20-alpine AS assets
 
 WORKDIR /app/backend
 
-COPY backend/package.json backend/package-lock.json* ./
-RUN npm ci
+COPY backend/package.json backend/package-lock.json ./
+RUN npm ci --no-audit --no-fund
 
 COPY backend/ ./
 RUN npm run build
@@ -18,7 +16,18 @@ RUN npm run build
 # -----------------------------------------------------------------------------
 FROM php:8.3-fpm-bookworm
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Keep build independent of Coolify runtime env (e.g. APP_ENV=local)
+ENV APP_ENV=production \
+    APP_DEBUG=false \
+    LOG_CHANNEL=stderr \
+    COMPOSER_ALLOW_SUPERUSER=1 \
+    COMPOSER_NO_INTERACTION=1 \
+    DEBIAN_FRONTEND=noninteractive
+
+# pdo_sqlite is already bundled in php:8.3-fpm — do not reinstall it (or sqlite3).
+# Install remaining extensions one-by-one (no -j) to avoid phpize race failures.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
         nginx \
         supervisor \
         curl \
@@ -28,32 +37,54 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libzip-dev \
         libicu-dev \
         libonig-dev \
-    && docker-php-ext-install -j$(nproc) \
-        pdo_sqlite \
-        sqlite3 \
-        zip \
-        intl \
-        mbstring \
-        bcmath \
-        opcache \
-        pcntl \
+    && docker-php-ext-install zip \
+    && docker-php-ext-install intl \
+    && docker-php-ext-install mbstring \
+    && docker-php-ext-install bcmath \
+    && docker-php-ext-install opcache \
+    && docker-php-ext-install pcntl \
+    && php -m | grep -qi pdo_sqlite \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www/html
 
-# App source (exclude heavy/dev paths via .dockerignore)
 COPY . .
 
-# Composer deps for Laravel admin
+# Minimal .env so artisan/composer scripts do not fail during image build
 WORKDIR /var/www/html/backend
-RUN composer install \
-        --no-dev \
-        --optimize-autoloader \
-        --no-interaction \
-        --prefer-dist \
-    && php artisan package:discover --ansi || true
+RUN printf '%s\n' \
+      'APP_NAME="Safe Handler Admin"' \
+      'APP_ENV=production' \
+      'APP_KEY=' \
+      'APP_DEBUG=false' \
+      'APP_URL=http://localhost' \
+      'DB_CONNECTION=sqlite' \
+      'DB_DATABASE=/var/www/html/data/app.sqlite' \
+      'APP_DATABASE_PATH=/var/www/html/data/app.sqlite' \
+      'SESSION_DRIVER=file' \
+      'CACHE_STORE=file' \
+      'QUEUE_CONNECTION=sync' \
+      'LOG_CHANNEL=stderr' \
+      > .env \
+    && mkdir -p \
+      storage/framework/cache \
+      storage/framework/sessions \
+      storage/framework/views \
+      storage/logs \
+      bootstrap/cache \
+      /var/www/html/data \
+    && touch /var/www/html/data/app.sqlite \
+    && composer install \
+      --no-dev \
+      --optimize-autoloader \
+      --no-interaction \
+      --prefer-dist \
+      --no-scripts \
+    && php artisan package:discover --ansi \
+    && php artisan key:generate --force --no-interaction \
+    && rm -f .env
 
 # Built Vite assets
 COPY --from=assets /app/backend/public/build /var/www/html/backend/public/build
@@ -69,7 +100,9 @@ RUN chmod +x /usr/local/bin/entrypoint.sh \
     && mkdir -p \
         /var/www/html/data \
         /var/www/html/data/booking-uploads \
-        /var/www/html/backend/storage/framework/{cache,sessions,views} \
+        /var/www/html/backend/storage/framework/cache \
+        /var/www/html/backend/storage/framework/sessions \
+        /var/www/html/backend/storage/framework/views \
         /var/www/html/backend/storage/logs \
         /var/www/html/backend/bootstrap/cache \
     && chown -R www-data:www-data \
@@ -79,12 +112,9 @@ RUN chmod +x /usr/local/bin/entrypoint.sh \
     && rm -f /etc/nginx/sites-enabled/default \
     && ln -s /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
 
-ENV APP_ENV=production \
-    APP_DEBUG=false \
-    DB_CONNECTION=sqlite \
+ENV DB_CONNECTION=sqlite \
     DB_DATABASE=/var/www/html/data/app.sqlite \
-    APP_DATABASE_PATH=/var/www/html/data/app.sqlite \
-    LOG_CHANNEL=stderr
+    APP_DATABASE_PATH=/var/www/html/data/app.sqlite
 
 EXPOSE 80
 

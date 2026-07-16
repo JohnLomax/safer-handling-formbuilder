@@ -76,6 +76,7 @@ RUN printf '%s\n' \
       bootstrap/cache \
       /var/www/html/data \
     && touch /var/www/html/data/app.sqlite \
+    && rm -f bootstrap/cache/packages.php bootstrap/cache/services.php \
     && composer install \
       --no-dev \
       --optimize-autoloader \

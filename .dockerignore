@@ -11,6 +11,8 @@ backend/node_modules
 backend/vendor
 backend/public/hot
 backend/public/build
+backend/bootstrap/cache/packages.php
+backend/bootstrap/cache/services.php
 backend/storage/logs/*
 backend/storage/framework/cache/*
 backend/storage/framework/sessions/*

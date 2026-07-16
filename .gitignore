@@ -1,0 +1,11 @@
+data/enquiries.sqlite
+data/enquiries.sqlite-journal
+data/enquiries.sqlite-wal
+data/enquiries.sqlite-shm
+data/app.sqlite
+data/app.sqlite-journal
+data/app.sqlite-wal
+data/app.sqlite-shm
+data/booking-uploads/
+enquiries.sqlite
+enquiries.sqlite-journal

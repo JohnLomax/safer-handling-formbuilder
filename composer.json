@@ -1,0 +1,11 @@
+{
+    "name": "safe-handler/form",
+    "description": "Safe Handler enquiry form",
+    "license": "proprietary",
+    "require": {
+        "php": ">=7.4",
+        "ext-curl": "*",
+        "ext-json": "*",
+        "ext-pdo_sqlite": "*"
+    }
+}

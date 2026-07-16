@@ -1,0 +1,13 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Preserve query strings on legacy HTML URLs
+    RewriteRule ^index\.html$ / [L,R=301]
+    RewriteRule ^feedback\.html$ /feedback [L,R=301]
+    RewriteRule ^enquiry\.html$ /enquiry [L,R=301]
+
+    # Clean form URLs
+    RewriteRule ^$ enquiry.php [L]
+    RewriteRule ^enquiry/?$ enquiry.php [L]
+    RewriteRule ^feedback/?$ feedback.php [L]
+</IfModule>

@@ -136,7 +136,7 @@ class XeroClient
             return $configured;
         }
 
-        return rtrim((string) config('app.url'), '/').'/admin/xero/callback';
+        return rtrim((string) config('app.url'), '/').'/admin/settings/xero/callback';
     }
 
     public function tenantId(): string

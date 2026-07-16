@@ -47,14 +47,17 @@ class SettingController extends Controller
     public function edit(): View
     {
         $settings = Setting::allCached();
-        $redirectUri = $settings['xero_redirect_uri'] ?? '';
+        // Connect always uses the current request host (see connectXero).
+        $liveRedirectUri = url('/admin/settings/xero/callback');
+        $redirectUri = trim((string) ($settings['xero_redirect_uri'] ?? ''));
         if ($redirectUri === '') {
-            $redirectUri = url('/admin/settings/xero/callback');
+            $redirectUri = $liveRedirectUri;
         }
 
         return view('admin.settings.edit', [
             'settings' => $settings,
             'xeroRedirectUri' => $redirectUri,
+            'xeroLiveRedirectUri' => $liveRedirectUri,
             'xeroConnected' => trim((string) ($settings['xero_refresh_token'] ?? '')) !== ''
                 && trim((string) ($settings['xero_tenant_id'] ?? '')) !== '',
             'xeroTokenExpiresAt' => (int) ($settings['xero_token_expires_at'] ?? 0),

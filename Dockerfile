@@ -24,8 +24,10 @@ ENV APP_ENV=production \
     COMPOSER_NO_INTERACTION=1 \
     DEBIAN_FRONTEND=noninteractive
 
-# pdo_sqlite is already bundled in php:8.3-fpm — do not reinstall it (or sqlite3).
-# Install remaining extensions one-by-one (no -j) to avoid phpize race failures.
+# Fast extension install (avoids Coolify timeouts from compiling each ext separately).
+COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         nginx \
@@ -33,23 +35,18 @@ RUN apt-get update \
         curl \
         git \
         unzip \
-        libsqlite3-dev \
-        default-libmysqlclient-dev \
-        libzip-dev \
-        libicu-dev \
-        libonig-dev \
-    && docker-php-ext-install zip \
-    && docker-php-ext-install intl \
-    && docker-php-ext-install mbstring \
-    && docker-php-ext-install bcmath \
-    && docker-php-ext-install opcache \
-    && docker-php-ext-install pcntl \
-    && docker-php-ext-install pdo_mysql \
+    && install-php-extensions \
+        zip \
+        intl \
+        mbstring \
+        bcmath \
+        opcache \
+        pcntl \
+        pdo_mysql \
+        pdo_sqlite \
     && php -m | grep -qi pdo_sqlite \
     && php -m | grep -qi pdo_mysql \
     && rm -rf /var/lib/apt/lists/*
-
-COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www/html
 

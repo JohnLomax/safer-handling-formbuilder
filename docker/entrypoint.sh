@@ -142,6 +142,20 @@ chown -R www-data:www-data \
 chmod 664 "${DB_FILE}" 2>/dev/null || true
 chmod 775 "${DATA_DIR}" 2>/dev/null || true
 
+# Coolify proxies to Ports Exposes / $PORT — keep nginx in sync (default 80).
+LISTEN_PORT="${PORT:-80}"
+if [[ ! "${LISTEN_PORT}" =~ ^[0-9]+$ ]]; then
+  log "WARNING: invalid PORT='${LISTEN_PORT}', falling back to 80"
+  LISTEN_PORT=80
+fi
+NGINX_SITE="/etc/nginx/sites-available/default"
+if [[ -f "${NGINX_SITE}" ]]; then
+  sed -i "s/__LISTEN_PORT__/${LISTEN_PORT}/g" "${NGINX_SITE}"
+  # Also rewrite a concrete listen line if the placeholder was already replaced
+  sed -i -E "s/^(\\s*listen\\s+)[0-9]+(\\s+default_server;)/\\1${LISTEN_PORT}\\2/" "${NGINX_SITE}"
+fi
+log "nginx will listen on 0.0.0.0:${LISTEN_PORT} (set Coolify Ports Exposes to ${LISTEN_PORT})"
+
 if ! nginx -t 2>&1; then
   log "WARNING: nginx -t failed (continuing — supervisord will surface nginx errors)"
 fi

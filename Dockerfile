@@ -122,7 +122,12 @@ ENV DB_CONNECTION=sqlite \
     DB_DATABASE=/var/www/html/data/app.sqlite \
     APP_DATABASE_PATH=/var/www/html/data/app.sqlite
 
+# Coolify: set "Ports Exposes" to this same port (default 80).
+ENV PORT=80
 EXPOSE 80
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+  CMD curl -fsS "http://127.0.0.1:${PORT:-80}/" >/dev/null || exit 1
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

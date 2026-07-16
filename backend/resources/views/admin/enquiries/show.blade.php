@@ -25,6 +25,14 @@
                         <span class="text-xs font-semibold text-sh-text">Monday</span>
                     </span>
                 @endif
+                @if (in_array($enquiry->status, ['quote_sent', 'quote_accepted'], true)
+                    || $enquiry->quote_email_sent_at
+                    || filled($enquiry->xero_quote_id))
+                    <span class="inline-flex items-center gap-1.5 rounded-full border border-[#9ad7ea] bg-[#e8f8fc] px-2.5 py-1">
+                        <x-xero-badge compact />
+                        <span class="text-xs font-semibold text-[#0b6e8a]">Xero</span>
+                    </span>
+                @endif
             </div>
         </div>
     </x-slot>
@@ -44,12 +52,18 @@
                     <p class="text-xs text-sh-mid">{{ $enquiry->submitted_at?->format('H:i') ?? 'Not yet' }}</p>
                 </div>
                 <div class="enquiry-stat">
-                    <p class="text-xs font-semibold uppercase tracking-wide text-sh-mid">Monday sync</p>
+                    <p class="text-xs font-semibold uppercase tracking-wide text-sh-mid inline-flex items-center gap-1.5">
+                        <x-monday-badge compact class="!h-3.5 !w-3.5" />
+                        Monday sync
+                    </p>
                     <p class="mt-1 text-sm font-semibold text-sh-text">{{ $enquiry->isMondaySynced() ? 'Synced' : 'Pending' }}</p>
                     <p class="text-xs text-sh-mid">{{ $enquiry->monday_synced_at?->format('d M Y H:i') ?? '—' }}</p>
                 </div>
                 <div class="enquiry-stat">
-                    <p class="text-xs font-semibold uppercase tracking-wide text-sh-mid">Quote email</p>
+                    <p class="text-xs font-semibold uppercase tracking-wide text-sh-mid inline-flex items-center gap-1.5">
+                        <x-xero-badge compact class="!h-3.5 !w-3.5" />
+                        Xero Quote
+                    </p>
                     <p class="mt-1 text-sm font-semibold text-sh-text">{{ $enquiry->quote_email_sent_at ? 'Sent' : 'Not sent' }}</p>
                     <p class="text-xs text-sh-mid">{{ $enquiry->quote_email_sent_at?->format('d M Y H:i') ?? '—' }}</p>
                 </div>
@@ -124,10 +138,10 @@
                                 </div>
                             @endif
                         @endif
-                        @if ($enquiry->preferred_date_time)
+                        @if ($enquiry->preferredDateTimeLabel() !== '')
                             <div class="enquiry-detail-row">
                                 <dt class="enquiry-detail-label">Preferred date</dt>
-                                <dd class="enquiry-detail-value">{{ $enquiry->preferred_date_time }}</dd>
+                                <dd class="enquiry-detail-value">{{ $enquiry->preferredDateTimeLabel() }}</dd>
                             </div>
                         @endif
                         @if ($enquiry->extra_notes)
@@ -162,21 +176,27 @@
 
                             <div class="rounded-[12px] border border-sh-border bg-white/70 p-4">
                                 <div class="flex items-center justify-between gap-3">
-                                    <span class="text-sm font-semibold text-sh-text">Quote email</span>
+                                    <div class="flex items-center gap-2">
+                                        <x-xero-badge compact />
+                                        <span class="text-sm font-semibold text-sh-text">Xero Quote</span>
+                                    </div>
                                     @if ($enquiry->quote_email_sent_at)
                                         <span class="status-pill status-pill-success">Sent</span>
                                     @else
                                         <span class="status-pill status-pill-muted">Not sent</span>
                                     @endif
                                 </div>
+                                @if ($enquiry->xero_quote_number)
+                                    <p class="mt-3 text-xs text-sh-mid">{{ $enquiry->xero_quote_number }}</p>
+                                @endif
                                 @if ($enquiry->quote_email_sent_at)
-                                    <p class="mt-3 text-xs text-sh-mid">{{ $enquiry->quote_email_sent_at->format('d M Y · H:i') }}</p>
+                                    <p class="mt-1 text-xs text-sh-mid">{{ $enquiry->quote_email_sent_at->format('d M Y · H:i') }}</p>
                                 @endif
                                 @if (in_array('quote_email', $retryableActions, true))
                                     <form method="POST" action="{{ route('admin.enquiries.retry.quote-email', $enquiry) }}" class="mt-3">
                                         @csrf
                                         <button type="submit" class="btn-brand-outline text-xs">
-                                            Send quote email
+                                            Send quote
                                         </button>
                                     </form>
                                 @endif
@@ -215,7 +235,15 @@
 
                             <div class="rounded-[12px] border border-sh-border bg-white/70 p-4">
                                 <div class="flex items-center justify-between gap-3">
-                                    <span class="text-sm font-semibold text-sh-text">Lead notification</span>
+                                    <div class="flex items-center gap-2">
+                                        <span class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-[#b9d4ef] bg-[#eef6ff] text-brand" title="Email" aria-hidden="true">
+                                            <svg class="h-3 w-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                                <path d="M3 4a2 2 0 00-2 2v1.161l8.441 4.221a1.25 1.25 0 001.118 0L19 7.162V6a2 2 0 00-2-2H3z" />
+                                                <path d="M19 8.839l-7.77 3.885a2.75 2.75 0 01-2.46 0L1 8.839V14a2 2 0 002 2h14a2 2 0 002-2V8.839z" />
+                                            </svg>
+                                        </span>
+                                        <span class="text-sm font-semibold text-sh-text">Lead notification</span>
+                                    </div>
                                     @php
                                         $leadSent = $enquiry->events->contains(fn ($event) => $event->event_type === 'lead_notification_sent');
                                         $leadFailed = $enquiry->events->contains(fn ($event) => $event->event_type === 'lead_notification_failed');
@@ -257,6 +285,18 @@
                                 @endif
 
                                 <div class="mt-3 flex flex-wrap gap-2">
+                                    <a
+                                        href="{{ $enquiry->formEditUrl() }}"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        class="btn-brand-outline text-xs inline-flex items-center gap-1.5"
+                                        title="Open enquiry form to edit"
+                                    >
+                                        <svg class="h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                            <path d="M2.695 14.763l-1.262 3.154a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.501a2.121 2.121 0 00-3-3L3.58 13.42a4 4 0 00-.885 1.343z" />
+                                        </svg>
+                                        Edit form
+                                    </a>
                                     @if (in_array('resume_email', $retryableActions, true))
                                         <form method="POST" action="{{ route('admin.enquiries.retry.resume-email', $enquiry) }}">
                                             @csrf
@@ -268,7 +308,7 @@
                                                 Send email
                                             </button>
                                         </form>
-                                    @elseif (in_array('resend_resume_email', $retryableActions, true))
+                                    @elseif ($enquiry->resume_email_sent_at)
                                         <form method="POST" action="{{ route('admin.enquiries.resend.resume-email', $enquiry) }}">
                                             @csrf
                                             <button type="submit" class="btn-brand-outline text-xs inline-flex items-center gap-1.5" title="Resend Edit Enquiry Email">
@@ -344,17 +384,6 @@
                                                 Send email
                                             </button>
                                         </form>
-                                    @elseif (in_array('resend_booking_email', $retryableActions, true))
-                                        <form method="POST" action="{{ route('admin.enquiries.resend.booking-email', $enquiry) }}">
-                                            @csrf
-                                            <button type="submit" class="btn-brand-outline text-xs inline-flex items-center gap-1.5" title="Resend accept terms email">
-                                                <svg class="h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                                                    <path d="M3 4a2 2 0 00-2 2v1.161l8.441 4.221a1.25 1.25 0 001.118 0L19 7.162V6a2 2 0 00-2-2H3z" />
-                                                    <path d="M19 8.839l-7.77 3.885a2.75 2.75 0 01-2.46 0L1 8.839V14a2 2 0 002 2h14a2 2 0 002-2V8.839z" />
-                                                </svg>
-                                                Resend email
-                                            </button>
-                                        </form>
                                     @endif
                                 </div>
                             </div>
@@ -422,7 +451,14 @@
                                     'border-sh-border/80 bg-white/70' => ! $isSuccessHighlight && ! ($event->isFailed() && ! $isResolvedFailure),
                                 ])>
                                     <div class="flex flex-wrap items-start justify-between gap-2">
-                                        <p class="text-sm font-semibold text-sh-text">{{ $event->label() }}</p>
+                                        <p class="inline-flex items-center gap-1.5 text-sm font-semibold text-sh-text">
+                                            @if ($event->isXeroEvent())
+                                                <x-xero-badge compact class="!h-4 !w-4" />
+                                            @elseif ($event->isMondayEvent())
+                                                <x-monday-badge compact class="!h-4 !w-4" />
+                                            @endif
+                                            {{ $event->label() }}
+                                        </p>
                                         <div class="flex shrink-0 flex-wrap items-center gap-2">
                                             @php
                                                 $isBookingJourneyEvent = in_array($event->event_type, [
@@ -447,6 +483,18 @@
                                                 ], true);
                                             @endphp
                                             @if ($isResumeEmailJourneyEvent)
+                                                <a
+                                                    href="{{ $enquiry->formEditUrl() }}"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="btn-brand-outline px-2.5 py-1 text-xs inline-flex items-center gap-1"
+                                                    title="Edit enquiry form"
+                                                >
+                                                    <svg class="h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                                        <path d="M2.695 14.763l-1.262 3.154a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.501a2.121 2.121 0 00-3-3L3.58 13.42a4 4 0 00-.885 1.343z" />
+                                                    </svg>
+                                                    Edit form
+                                                </a>
                                                 @if (in_array('resume_email', $retryableActions, true))
                                                     <form method="POST" action="{{ route('admin.enquiries.retry.resume-email', $enquiry) }}">
                                                         @csrf
@@ -458,7 +506,7 @@
                                                             Send email
                                                         </button>
                                                     </form>
-                                                @elseif (in_array('resend_resume_email', $retryableActions, true))
+                                                @elseif ($enquiry->resume_email_sent_at)
                                                     <form method="POST" action="{{ route('admin.enquiries.resend.resume-email', $enquiry) }}">
                                                         @csrf
                                                         <button type="submit" class="btn-brand-outline px-2.5 py-1 text-xs inline-flex items-center gap-1.5" title="Resend Edit Enquiry Email">
@@ -488,7 +536,6 @@
                                                     <svg class="h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                                                         <path d="M2.695 14.763l-1.262 3.154a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.501a2.121 2.121 0 00-3-3L3.58 13.42a4 4 0 00-.885 1.343z" />
                                                     </svg>
-                                                    Complete
                                                 </button>
                                             @endif
                                             @if ($isAcceptTermsEmailJourneyEvent)
@@ -501,17 +548,6 @@
                                                                 <path d="M19 8.839l-7.77 3.885a2.75 2.75 0 01-2.46 0L1 8.839V14a2 2 0 002 2h14a2 2 0 002-2V8.839z" />
                                                             </svg>
                                                             Send email
-                                                        </button>
-                                                    </form>
-                                                @elseif (in_array('resend_booking_email', $retryableActions, true))
-                                                    <form method="POST" action="{{ route('admin.enquiries.resend.booking-email', $enquiry) }}">
-                                                        @csrf
-                                                        <button type="submit" class="btn-brand-outline px-2.5 py-1 text-xs inline-flex items-center gap-1.5" title="Resend accept terms email">
-                                                            <svg class="h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                                                                <path d="M3 4a2 2 0 00-2 2v1.161l8.441 4.221a1.25 1.25 0 001.118 0L19 7.162V6a2 2 0 00-2-2H3z" />
-                                                                <path d="M19 8.839l-7.77 3.885a2.75 2.75 0 01-2.46 0L1 8.839V14a2 2 0 002 2h14a2 2 0 002-2V8.839z" />
-                                                            </svg>
-                                                            Resend email
                                                         </button>
                                                     </form>
                                                 @endif

@@ -110,9 +110,16 @@
                                             </div>
                                             <div class="mt-0.5 text-[11px] text-sh-mid/80">#{{ $enquiry->id }}</div>
                                         </div>
-                                        @if ($enquiry->isMondaySynced())
-                                            <x-monday-badge compact class="mt-0.5" />
-                                        @endif
+                                        <div class="mt-0.5 flex shrink-0 items-center gap-1">
+                                            @if ($enquiry->isMondaySynced())
+                                                <x-monday-badge compact />
+                                            @endif
+                                            @if (in_array($enquiry->status, ['quote_sent', 'quote_accepted'], true)
+                                                || $enquiry->quote_email_sent_at
+                                                || filled($enquiry->xero_quote_id))
+                                                <x-xero-badge compact />
+                                            @endif
+                                        </div>
                                     </div>
                                 </td>
                                 <td class="whitespace-nowrap text-sh-mid">{{ $enquiry->enquiryTypeLabel() }}</td>

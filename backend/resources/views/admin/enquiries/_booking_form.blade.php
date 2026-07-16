@@ -19,7 +19,7 @@
         </div>
         <div>
             <x-input-label for="organisation" value="Organisation" />
-            <x-text-input id="organisation" name="organisation" type="text" class="mt-1 block w-full" :value="old('organisation', $booking['organisation'] ?? $enquiry->organisation_company)" required />
+            <x-text-input id="organisation" name="organisation" type="text" class="mt-1 block w-full" :value="old('organisation', $booking['organisation'] ?? $enquiry->organisation_company)" />
         </div>
         <div>
             <x-input-label for="email" value="Email" />

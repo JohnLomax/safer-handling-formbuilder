@@ -41,8 +41,9 @@ class EnquiryEvent extends Model
         'monday_move_failed' => 'Monday move failed',
         'monday_move_skipped' => 'Monday move skipped',
         'form_submitted' => 'Enquiry form submitted',
-        'quote_email_sent' => 'Quote emailed to customer',
-        'quote_email_failed' => 'Quote email failed',
+        'quote_email_sent' => 'Xero Quote',
+        'quote_email_failed' => 'Xero Quote failed',
+        'quote_email_skipped' => 'Xero Quote skipped',
         'resume_email_sent' => 'Edit Enquiry Email sent',
         'resume_email_failed' => 'Edit Enquiry Email failed',
         'booking_email_sent' => 'Booking details email sent',
@@ -77,6 +78,11 @@ class EnquiryEvent extends Model
 
     public function isXeroEvent(): bool
     {
+        if (str_starts_with($this->event_type, 'quote_email_')
+            || str_starts_with($this->event_type, 'xero_')) {
+            return true;
+        }
+
         $metadata = is_array($this->metadata) ? $this->metadata : [];
 
         if (($metadata['channel'] ?? null) === 'xero') {

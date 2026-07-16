@@ -75,7 +75,7 @@ function bookingH(string $value): string
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Safer Handling — Training Booking Details</title>
+  <title>Safer Handling — Accept Quote and add venue details</title>
   <link rel="icon" type="image/png" href="assets/safer-handling-logo.png" />
   <style>
     :root {
@@ -103,7 +103,7 @@ function bookingH(string $value): string
       border: 1px solid #cfe4f8;
       border-radius: 18px;
       box-shadow: 0 18px 45px rgba(0, 138, 252, 0.13), 0 2px 10px rgba(11, 71, 117, 0.07);
-      overflow: hidden;
+      overflow: visible;
     }
     .brand-header {
       background: #0255a4;
@@ -113,6 +113,8 @@ function bookingH(string $value): string
       align-items: center;
       justify-content: space-between;
       gap: 22px;
+      border-radius: 18px 18px 0 0;
+      overflow: hidden;
     }
     .logo { width: 220px; max-width: 42%; display: block; }
     .title-wrap h1 { margin: 0; font-size: 1.55rem; line-height: 1.15; }
@@ -157,6 +159,7 @@ function bookingH(string $value): string
       border-color: #dc2626 !important;
       box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.15) !important;
       background: #fff7f7 !important;
+      scroll-margin-top: 96px;
     }
     .checkbox-row {
       display: flex;
@@ -214,8 +217,8 @@ function bookingH(string $value): string
       <div class="brand-header">
         <img class="logo" src="assets/safer-handling-logo.png" alt="Safer Handling" />
         <div class="title-wrap">
-          <h1>Training Booking Details</h1>
-          <p>Accept terms and confirm venue &amp; delegate details</p>
+          <h1>Accept Quote and add venue details</h1>
+          <p>Accept terms and confirm your venue &amp; delegate details</p>
         </div>
       </div>
 
@@ -248,8 +251,8 @@ function bookingH(string $value): string
             <label for="bookerName">Booker Name *</label>
             <input type="text" id="bookerName" name="bookerName" required maxlength="200" value="<?= bookingH($prefill['bookerName']) ?>" />
 
-            <label for="organisation">Organisation *</label>
-            <input type="text" id="organisation" name="organisation" required maxlength="200" value="<?= bookingH($prefill['organisation']) ?>" />
+            <label for="organisation">Organisation</label>
+            <input type="text" id="organisation" name="organisation" maxlength="200" value="<?= bookingH($prefill['organisation']) ?>" />
 
             <label for="email">Email Address *</label>
             <input type="email" id="email" name="email" required maxlength="200" value="<?= bookingH($prefill['email']) ?>" />
@@ -384,6 +387,13 @@ TERMS
 
       function setError(el, on) {
         if (!el) return;
+        if (el.type === "checkbox") {
+          var row = el.closest(".checkbox-row");
+          if (row) {
+            row.classList.toggle("field-error", !!on);
+          }
+          return;
+        }
         el.classList.toggle("field-error", !!on);
       }
 
@@ -392,10 +402,76 @@ TERMS
         return el && String(el.value || "").trim() !== "";
       }
 
+      function isScrollableErrorTarget(el) {
+        if (!el || el.closest(".hidden")) {
+          return false;
+        }
+        if (el.tagName === "INPUT" && String(el.type || "").toLowerCase() === "hidden") {
+          return false;
+        }
+        var style = window.getComputedStyle(el);
+        return style.display !== "none" && style.visibility !== "hidden";
+      }
+
+      function scrollElementIntoView(el) {
+        if (!el) {
+          return;
+        }
+        var rect = el.getBoundingClientRect();
+        var y = Math.max(0, rect.top + (window.pageYOffset || document.documentElement.scrollTop || 0) - 96);
+        try {
+          el.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+        } catch (e1) {
+          try { el.scrollIntoView(true); } catch (e2) {}
+        }
+        try {
+          window.scrollTo({ top: y, left: 0, behavior: "smooth" });
+        } catch (e3) {
+          window.scrollTo(0, y);
+        }
+        document.documentElement.scrollTop = y;
+        document.body.scrollTop = y;
+      }
+
+      function scrollToFirstError() {
+        var selectors = ["input.field-error", "select.field-error", "textarea.field-error", ".field-error"];
+        var target = null;
+        for (var s = 0; s < selectors.length && !target; s++) {
+          var candidates = form.querySelectorAll(selectors[s]);
+          for (var i = 0; i < candidates.length; i++) {
+            if (isScrollableErrorTarget(candidates[i])) {
+              target = candidates[i];
+              break;
+            }
+          }
+        }
+        if (!target) {
+          return;
+        }
+
+        var focusTarget = /^(INPUT|SELECT|TEXTAREA)$/.test(target.tagName)
+          ? target
+          : (target.querySelector("input:not([type='hidden']), select, textarea") || target);
+
+        window.requestAnimationFrame(function () {
+          scrollElementIntoView(target);
+          window.setTimeout(function () {
+            scrollElementIntoView(target);
+            if (focusTarget && typeof focusTarget.focus === "function" && !focusTarget.disabled) {
+              try {
+                focusTarget.focus({ preventScroll: false });
+              } catch (e) {
+                try { focusTarget.focus(); } catch (e2) {}
+              }
+            }
+          }, 50);
+        });
+      }
+
       function validate() {
         var ok = true;
         var requiredIds = [
-          "bookerName", "organisation", "email", "phone", "venueAddress",
+          "bookerName", "email", "phone", "venueAddress",
           "invoiceName", "invoiceEmail", "invoiceAddress"
         ];
         requiredIds.forEach(function (id) {
@@ -407,8 +483,14 @@ TERMS
 
         var venueReq = document.getElementById("venueRequirements");
         var terms = document.getElementById("termsAccepted");
-        if (venueReq && !venueReq.checked) { ok = false; venueReq.focus(); }
-        if (terms && !terms.checked) { ok = false; if (ok !== false) terms.focus(); }
+        if (venueReq) {
+          setError(venueReq, !venueReq.checked);
+          if (!venueReq.checked) ok = false;
+        }
+        if (terms) {
+          setError(terms, !terms.checked);
+          if (!terms.checked) ok = false;
+        }
 
         var names = (document.getElementById("studentNames").value || "").trim();
         var emails = (document.getElementById("studentEmails").value || "").trim();
@@ -428,6 +510,8 @@ TERMS
           var emailLines = emails ? emails.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean) : [];
           if (nameLines.length !== emailLines.length) {
             window.alert("Student names and email addresses must have the same number of lines, in matching order.");
+            setError(document.getElementById("studentNames"), true);
+            setError(document.getElementById("studentEmails"), true);
             ok = false;
           }
         }
@@ -438,6 +522,7 @@ TERMS
       form.addEventListener("submit", function (event) {
         event.preventDefault();
         if (!validate()) {
+          scrollToFirstError();
           return;
         }
 

@@ -293,6 +293,19 @@
         }
       }
 
+      function scrollToFirstError() {
+        var target = form.querySelector(".field-error");
+        if (!target) {
+          return;
+        }
+        target.scrollIntoView({ behavior: "smooth", block: "center" });
+        try {
+          target.focus({ preventScroll: true });
+        } catch (e) {
+          target.focus();
+        }
+      }
+
       function validateForm() {
         var issueValid = issueFacedInput.value.trim() !== "";
         var descriptionValid = descriptionInput.value.trim() !== "";
@@ -325,6 +338,7 @@
         event.preventDefault();
 
         if (!validateForm()) {
+          scrollToFirstError();
           return;
         }
 

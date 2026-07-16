@@ -446,23 +446,48 @@ GQL;
 }
 
 /**
- * Monday `date` column JSON from an HTML datetime-local value (YYYY-MM-DDTHH:MM).
+ * Monday `date` column JSON from a preferred date value (YYYY-MM-DD, optionally with time).
+ * Preferred date is date-only — no time is written to Monday.
  *
- * @return array<string, string>
+ * @return array<string, string>|null Null when empty/unparseable (caller may clear the column).
  */
-function mondayDateColumnValueFromDatetimeLocal(string $datetimeLocal): array
+function mondayDateColumnValueFromDatetimeLocal(string $datetimeLocal): ?array
 {
     $datetimeLocal = trim($datetimeLocal);
     if ($datetimeLocal === '') {
-        return ['date' => '', 'time' => ''];
+        return null;
     }
-    $dt = \DateTimeImmutable::createFromFormat('Y-m-d\TH:i', $datetimeLocal)
+    $datetimeLocal = str_replace(' ', 'T', $datetimeLocal);
+    $dt = \DateTimeImmutable::createFromFormat('Y-m-d', substr($datetimeLocal, 0, 10))
+        ?: \DateTimeImmutable::createFromFormat('Y-m-d\TH:i', $datetimeLocal)
         ?: \DateTimeImmutable::createFromFormat('Y-m-d\TH:i:s', $datetimeLocal);
     if ($dt === false) {
-        return ['date' => '', 'time' => ''];
+        return null;
     }
 
-    return ['date' => $dt->format('Y-m-d'), 'time' => $dt->format('H:i:s')];
+    return ['date' => $dt->format('Y-m-d')];
+}
+
+/**
+ * Remove previous preferred-date note lines before writing a fresh one.
+ */
+function mondayStripPreferredDateNoteLines(string $notes): string
+{
+    $notes = trim($notes);
+    if ($notes === '') {
+        return '';
+    }
+
+    $lines = preg_split('/\r\n|\r|\n/', $notes) ?: [];
+    $kept = [];
+    foreach ($lines as $line) {
+        if (preg_match('/^preferred date(\s*\/\s*time)?\s*:/i', trim((string)$line))) {
+            continue;
+        }
+        $kept[] = $line;
+    }
+
+    return trim(implode("\n", $kept));
 }
 
 /**
@@ -543,7 +568,14 @@ GQL;
             $deliveryPreferenceColumnId = $id;
             $deliveryPreferenceColumnType = $type;
         }
-        if ($preferredDateColumnId === null && $title === 'preferred date') {
+        if ($preferredDateColumnId === null && in_array($title, [
+            'preferred date',
+            'preferred date/time',
+            'preferred date & time',
+            'preferred datetime',
+            'preferred day',
+            'preferred day(s)',
+        ], true)) {
             $preferredDateColumnId = $id;
             $preferredDateColumnType = $type;
         }
@@ -590,6 +622,14 @@ GQL;
         $enquiryId
     );
 
+    require_once __DIR__ . '/enquiry_logger.php';
+    $preferred = enquiryPreferredDateFromPost([
+        'preferredDateTime' => $orgData['preferredDateTime'] ?? '',
+        'dateNotSure' => (($orgData['dateNotSure'] ?? '') === '1') ? 'on' : null,
+    ]);
+    $preferredDateTime = $preferred['preferredDateTime'];
+    $dateNotSure = $preferred['dateNotSure'];
+
     $noteLines = [];
     if (($orgData['organisationCompany'] ?? '') !== '') {
         $noteLines[] = 'Company/Organisation: ' . trim((string)$orgData['organisationCompany']);
@@ -597,8 +637,12 @@ GQL;
     if (($orgData['courseStyle'] ?? '') !== '') {
         $noteLines[] = 'Course Style: ' . trim($orgData['courseStyle']);
     }
-    if (($orgData['dateNotSure'] ?? '') === '1') {
-        $noteLines[] = 'Preferred date / time: not sure yet';
+    if ($dateNotSure) {
+        $noteLines[] = 'Preferred date: not sure yet';
+    } elseif ($preferredDateTime !== '') {
+        require_once __DIR__ . '/brevo_email.php';
+        $formattedPreferred = formatPreferredTrainingDate($preferredDateTime, false);
+        $noteLines[] = 'Preferred date: ' . ($formattedPreferred !== '' ? $formattedPreferred : $preferredDateTime);
     }
     if (($orgData['trainersRequired'] ?? '') !== '') {
         $noteLines[] = 'Number of trainers required: ' . trim((string)$orgData['trainersRequired']);
@@ -669,21 +713,24 @@ GQL;
         $columnValues[$quoteValueColumnId] = toMondayColumnValue($quoteValueColumnType, $orgData['quoteValue']);
     }
 
-    if ($preferredDateColumnId !== null && ($orgData['dateNotSure'] ?? '') !== '1' && ($orgData['preferredDateTime'] ?? '') !== '') {
-        $pdt = trim($orgData['preferredDateTime']);
-        if ($preferredDateColumnType === 'date') {
-            $datePayload = mondayDateColumnValueFromDatetimeLocal($pdt);
-            if (($datePayload['date'] ?? '') !== '') {
+    if ($preferredDateColumnId !== null) {
+        if ($dateNotSure || $preferredDateTime === '') {
+            // Clear stale Preferred Date when the customer is not sure / clears the field.
+            $columnValues[$preferredDateColumnId] = null;
+        } elseif ($preferredDateColumnType === 'date') {
+            $datePayload = mondayDateColumnValueFromDatetimeLocal($preferredDateTime);
+            if (is_array($datePayload) && ($datePayload['date'] ?? '') !== '') {
                 $columnValues[$preferredDateColumnId] = $datePayload;
             }
         } else {
-            $columnValues[$preferredDateColumnId] = toMondayColumnValue($preferredDateColumnType, $pdt);
+            $columnValues[$preferredDateColumnId] = toMondayColumnValue($preferredDateColumnType, $preferredDateTime);
         }
     }
 
     if ($notesColumnId !== null && count($noteLines) > 0) {
+        $baseNotes = mondayStripPreferredDateNoteLines($existingNotes);
         $appendBlock = implode("\n", $noteLines);
-        $notesText = $existingNotes === '' ? $appendBlock : $existingNotes . "\n" . $appendBlock;
+        $notesText = $baseNotes === '' ? $appendBlock : $baseNotes . "\n" . $appendBlock;
         $columnValues[$notesColumnId] = toMondayColumnValue($notesColumnType, $notesText);
     }
 
@@ -762,17 +809,34 @@ if (!class_exists('PDO') || !in_array($requiredPdoDriver, PDO::getAvailableDrive
  */
 function persistEnquiryRecord(array $post, string $name, string $email, string $enquiryType): int
 {
-    // Only reuse an explicit enquiryId that has not already completed email delivery.
-    // Never fall back to "latest enquiry for this email" — that would attach a new
-    // booking to an old row and skip quote / lead / resume emails.
+    // Reuse the posted enquiryId when present (Edit Enquiry resume link).
+    // Never fall back to "latest enquiry for this email" — a brand-new form
+    // session without an id always creates a fresh row so emails still send.
     $enquiryId = enquiryLoggerPostId($post);
-    if ($enquiryId === null || !enquiryLoggerIsEligibleForSubmitReuse($enquiryId)) {
+    $reusingExisting = $enquiryId !== null && enquiryLoggerIsEligibleForSubmitReuse($enquiryId);
+    $alreadyHadQuote = $reusingExisting && enquiryLoggerQuoteEmailAlreadySent($enquiryId);
+    $alreadySubmitted = $reusingExisting && enquiryLoggerHasEvent($enquiryId, 'form_submitted');
+
+    if (!$reusingExisting) {
         $enquiryId = enquiryLoggerCreateInitial($post);
     }
 
     enquiryLoggerUpdateFromPost($enquiryId, $post, 'submitted');
     enquiryLoggerMarkSubmitted($enquiryId);
-    enquiryLoggerEvent($enquiryId, 'form_submitted', 'Enquiry form submitted by the customer.');
+
+    if ($alreadySubmitted || $alreadyHadQuote) {
+        enquiryLoggerEvent(
+            $enquiryId,
+            'details_updated',
+            'Customer updated their enquiry details via the Edit Enquiry link.',
+            [
+                'quote_already_sent' => $alreadyHadQuote,
+                'source' => 'edit_enquiry_form',
+            ]
+        );
+    } else {
+        enquiryLoggerEvent($enquiryId, 'form_submitted', 'Enquiry form submitted by the customer.');
+    }
     enquiryLoggerEvent($enquiryId, 'storage_saved', 'Enquiry saved to the admin database.');
 
     return $enquiryId;
@@ -851,10 +915,16 @@ try {
     $quoteEmailData = null;
     require_once __DIR__ . '/xero.php';
 
-    // Edit Enquiry Email is sent on full form submit (not on Continue),
-    // so the customer can return later if needed. Send before the quote so
-    // Monday can move Being Contacted → Quote Sent in order.
-    if ($enquiryId !== null) {
+    $isQuoteFlow = $isTrainerFlow || $isOrganisationTrainingFlow;
+    $quoteAlreadySent = $enquiryId !== null && enquiryLoggerQuoteEmailAlreadySent($enquiryId);
+    $shouldSendQuoteEmail = (brevoEmailEnabled() || xeroEnabled())
+        && $isQuoteFlow
+        && !$quoteAlreadySent;
+
+    // Edit Enquiry Email is for returning to the enquiry form. Skip it when a
+    // quote email is going out — that email’s Accept Quote button is the CTA
+    // and must open /booking, not /enquiry.
+    if ($enquiryId !== null && !$shouldSendQuoteEmail) {
         enquiryLoggerSafe(function () use ($enquiryId, $name, $email, $enquiryType): void {
             try {
                 maybeSendResumeEnquiryEmail($enquiryId, $name, $email, $enquiryType);
@@ -868,37 +938,43 @@ try {
             }
         });
     }
+    if ($isQuoteFlow && !$shouldSendQuoteEmail && $enquiryId !== null) {
+        enquiryLoggerSafe(function () use ($enquiryId, $quoteAlreadySent): void {
+            if ($quoteAlreadySent) {
+                enquiryLoggerEvent(
+                    $enquiryId,
+                    'quote_email_skipped',
+                    'Enquiry details updated without creating a new quote — a quote was already sent for this enquiry.',
+                    ['quote_already_sent' => true]
+                );
 
-    $isQuoteFlow = $isTrainerFlow || $isOrganisationTrainingFlow;
-    $shouldSendQuoteEmail = (brevoEmailEnabled() || xeroEnabled())
-        && $isQuoteFlow
-        && ($enquiryId === null || !enquiryLoggerQuoteEmailAlreadySent($enquiryId));
-    if ($isQuoteFlow && !$shouldSendQuoteEmail && $enquiryId !== null && !enquiryLoggerQuoteEmailAlreadySent($enquiryId)
-        && !brevoEmailEnabled() && !xeroEnabled()) {
-        enquiryLoggerSafe(function () use ($enquiryId): void {
-            enquiryLoggerEvent(
-                $enquiryId,
-                'quote_email_skipped',
-                'Quote email was not sent because Xero and Brevo quote sending are both disabled.',
-                ['xero_enabled' => false, 'brevo_email_enabled' => false]
-            );
+                return;
+            }
+
+            if (!brevoEmailEnabled() && !xeroEnabled()) {
+                enquiryLoggerEvent(
+                    $enquiryId,
+                    'quote_email_skipped',
+                    'Quote email was not sent because Xero and Brevo quote sending are both disabled.',
+                    ['xero_enabled' => false, 'brevo_email_enabled' => false]
+                );
+            }
         });
     }
     if ($shouldSendQuoteEmail) {
         try {
             $quoteEmailData = $resolvedOrganisation !== null
-                ? buildQuoteEmailDataFromResolvedOrganisation($resolvedOrganisation, $name, $email)
+                ? buildQuoteEmailDataFromResolvedOrganisation(
+                    array_merge($resolvedOrganisation, mondayAddressFromPost($_POST)),
+                    $name,
+                    $email
+                )
                 : buildQuoteEmailDataFromSubmission($_POST, $name, $email);
             if ($enquiryId !== null) {
-                $bookingToken = enquiryLoggerEnsureResumeToken($enquiryId);
-                $bookingUrl = buildBookingDetailsUrl($enquiryId, $bookingToken);
-                if ($bookingUrl === '') {
-                    throw new RuntimeException(
-                        'Form base URL is not configured. Set Form base URL in Admin → Settings to your public site URL (e.g. https://saferhandling.formsoffline.co.uk).'
-                    );
-                }
-                // Accept Quote must open the booking / terms form for this enquiry.
-                $quoteEmailData['acceptQuoteUrl'] = $bookingUrl;
+                // Accept Quote must open /booking (venue + terms), never /enquiry edit.
+                $quoteEmailData['enquiryId'] = $enquiryId;
+                $quoteEmailData['resumeToken'] = enquiryLoggerEnsureResumeToken($enquiryId);
+                $quoteEmailData['email'] = $email;
             }
             $quoteSendResult = sendQuoteToClient($email, $name, $quoteEmailData);
             if ($enquiryId !== null) {

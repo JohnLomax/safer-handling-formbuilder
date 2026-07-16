@@ -89,7 +89,7 @@ class EnquiryController extends Controller
     {
         $validated = $request->validate([
             'bookerName' => ['required', 'string', 'max:200'],
-            'organisation' => ['required', 'string', 'max:200'],
+            'organisation' => ['nullable', 'string', 'max:200'],
             'email' => ['required', 'email', 'max:200'],
             'phone' => ['required', 'string', 'max:40'],
             'venueAddress' => ['required', 'string', 'max:1000'],
@@ -188,7 +188,7 @@ class EnquiryController extends Controller
 
         $details = [
             'bookerName' => trim($validated['bookerName']),
-            'organisation' => trim($validated['organisation']),
+            'organisation' => trim((string) ($validated['organisation'] ?? '')),
             'email' => trim($validated['email']),
             'phone' => trim($validated['phone']),
             'venueAddress' => trim($validated['venueAddress']),

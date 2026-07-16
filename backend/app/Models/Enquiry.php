@@ -100,6 +100,31 @@ class Enquiry extends Model
     }
 
     /**
+     * Human-readable preferred date for admin display.
+     */
+    public function preferredDateTimeLabel(): string
+    {
+        if ($this->date_not_sure) {
+            return 'Not sure yet';
+        }
+
+        $raw = trim((string) $this->preferred_date_time);
+        if ($raw === '') {
+            return '';
+        }
+
+        $raw = str_replace(' ', 'T', $raw);
+        $dt = \DateTimeImmutable::createFromFormat('Y-m-d', substr($raw, 0, 10))
+            ?: \DateTimeImmutable::createFromFormat('Y-m-d\TH:i', $raw)
+            ?: \DateTimeImmutable::createFromFormat('Y-m-d\TH:i:s', $raw);
+        if ($dt === false) {
+            return $raw;
+        }
+
+        return $dt->format('l j F Y');
+    }
+
+    /**
      * Public form URL that restores this enquiry for viewing/editing.
      */
     public function formEditUrl(): string

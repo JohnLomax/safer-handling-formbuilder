@@ -40,10 +40,80 @@ function brevoQuoteAcceptUrl(string $email = ''): string
         return '';
     }
     if ($email !== '' && strpos($url, '{{email}}') !== false) {
-        return str_replace('{{email}}', rawurlencode($email), $url);
+        $url = str_replace('{{email}}', rawurlencode($email), $url);
+    }
+
+    // Misconfigured overrides that point at the enquiry edit form must not be used.
+    if (quoteAcceptUrlLooksLikeEnquiryEdit($url)) {
+        return '';
     }
 
     return $url;
+}
+
+/**
+ * True when a URL path is the enquiry resume/edit form (not the booking form).
+ */
+function quoteAcceptUrlLooksLikeEnquiryEdit(string $url): bool
+{
+    $path = strtolower(rtrim((string)(parse_url($url, PHP_URL_PATH) ?: ''), '/'));
+    if ($path === '') {
+        return false;
+    }
+
+    return $path === '/enquiry' || str_ends_with($path, '/enquiry');
+}
+
+/**
+ * True when a URL path targets the public booking / venue / terms form.
+ */
+function quoteAcceptUrlIsBookingForm(string $url): bool
+{
+    $path = strtolower((string)(parse_url($url, PHP_URL_PATH) ?: ''));
+
+    return $path !== '' && (str_ends_with(rtrim($path, '/'), '/booking') || str_contains($path, '/booking'));
+}
+
+/**
+ * Resolve the Accept Quote CTA to the booking form for this enquiry.
+ * Never returns the enquiry edit/resume URL.
+ *
+ * @param array<string, mixed> $quoteData
+ */
+function resolveQuoteAcceptUrl(array &$quoteData): string
+{
+    $enquiryId = (int)($quoteData['enquiryId'] ?? 0);
+    if ($enquiryId > 0) {
+        require_once __DIR__ . '/enquiry_logger.php';
+        $token = trim((string)($quoteData['resumeToken'] ?? ''));
+        if ($token === '') {
+            $token = enquiryLoggerEnsureResumeToken($enquiryId);
+            $quoteData['resumeToken'] = $token;
+        }
+        $bookingUrl = buildBookingDetailsUrl($enquiryId, $token);
+        if ($bookingUrl !== '') {
+            $quoteData['acceptQuoteUrl'] = $bookingUrl;
+
+            return $bookingUrl;
+        }
+    }
+
+    $current = trim((string)($quoteData['acceptQuoteUrl'] ?? ''));
+    if ($current !== '' && quoteAcceptUrlIsBookingForm($current) && !quoteAcceptUrlLooksLikeEnquiryEdit($current)) {
+        return $current;
+    }
+
+    $configured = brevoQuoteAcceptUrl(trim((string)($quoteData['email'] ?? '')));
+    if ($configured !== '' && quoteAcceptUrlIsBookingForm($configured)) {
+        $quoteData['acceptQuoteUrl'] = $configured;
+
+        return $configured;
+    }
+
+    // Drop enquiry-edit / invalid overrides so the mailto fallback is used instead.
+    $quoteData['acceptQuoteUrl'] = '';
+
+    return '';
 }
 
 function brevoResumeEmailEnabled(): bool
@@ -60,6 +130,29 @@ function brevoResumeEmailEnabled(): bool
     return brevoEmailEnabled();
 }
 
+/**
+ * Strip accidental form path suffixes from Form base URL settings
+ * (e.g. …/enquiry) so /booking and /enquiry links stay correct.
+ */
+function brevoNormalizeFormBaseUrl(string $url): string
+{
+    $normalized = rtrim(trim($url), '/');
+    if ($normalized === '') {
+        return '';
+    }
+
+    $lower = strtolower($normalized);
+    foreach (['/enquiry', '/booking', '/feedback', '/admin'] as $suffix) {
+        if (str_ends_with($lower, $suffix)) {
+            $normalized = substr($normalized, 0, -strlen($suffix));
+            $normalized = rtrim($normalized, '/');
+            break;
+        }
+    }
+
+    return $normalized;
+}
+
 function brevoFormBaseUrl(): string
 {
     // Prefer Admin → Settings form_base_url so Coolify APP_URL / temporary
@@ -74,15 +167,15 @@ function brevoFormBaseUrl(): string
         if ($candidate === '') {
             continue;
         }
-        $normalized = rtrim($candidate, '/');
-        if (brevoIsUsablePublicBaseUrl($normalized)) {
+        $normalized = brevoNormalizeFormBaseUrl($candidate);
+        if ($normalized !== '' && brevoIsUsablePublicBaseUrl($normalized)) {
             return $normalized;
         }
     }
 
     foreach ($candidates as $candidate) {
         if ($candidate !== '') {
-            return rtrim($candidate, '/');
+            return brevoNormalizeFormBaseUrl($candidate);
         }
     }
 
@@ -179,6 +272,7 @@ function buildBookingDetailsEmailHtml(array $data): string
     $bookingUrl = htmlspecialchars((string)($data['bookingUrl'] ?? ''), ENT_QUOTES, 'UTF-8');
     $contactEmail = htmlspecialchars(brevoContactEmail(), ENT_QUOTES, 'UTF-8');
     $logoSrc = htmlspecialchars(brevoLogoUrl(), ENT_QUOTES, 'UTF-8');
+    $whatsappBlock = brevoWhatsAppButtonHtml();
     $joiningUrl = trim((string)($data['joiningInstructionsUrl'] ?? ''));
     $joiningBlock = '';
     if ($joiningUrl !== '') {
@@ -237,11 +331,12 @@ HTML;
             </td>
           </tr>
           <tr>
-            <td align="center" style="padding:0 20px 24px; font-family:Arial,Helvetica,sans-serif; font-size:15px; line-height:1.6; color:#414141; text-align:center;">
+            <td align="center" style="padding:0 20px 16px; font-family:Arial,Helvetica,sans-serif; font-size:15px; line-height:1.6; color:#414141; text-align:center;">
               <p style="margin:0 0 12px;">This secure link is linked to your enquiry. Please do not forward it to someone else unless they should complete the booking for you.</p>
               <p style="margin:0;">Questions? <a href="mailto:{$contactEmail}" style="color:#0255a4; font-weight:700; text-decoration:underline;">Contact our team</a>.</p>
             </td>
           </tr>
+{$whatsappBlock}
           <tr>
             <td align="center" style="padding:20px; border-top:1px solid #e8eef5; font-family:Arial,Helvetica,sans-serif; font-size:13px; line-height:1.5; color:#666666; text-align:center;">
               <strong style="color:#0255a4;">Safer Handling</strong><br />
@@ -281,6 +376,7 @@ function buildBookingDetailsEmailText(array $data): string
     $lines[] = (string)($data['bookingUrl'] ?? '');
     $lines[] = '';
     $lines[] = 'Questions? Contact us at ' . brevoContactEmail() . '.';
+    $lines[] = 'WhatsApp: ' . brevoWhatsAppUrl();
     $lines[] = '';
     $lines[] = 'Safer Handling';
     $lines[] = 'https://www.safer-handling.co.uk';
@@ -358,44 +454,13 @@ function sendBookingDetailsEmailViaBrevo(string $toEmail, string $toName, array 
 
 /**
  * Send the booking details / terms acceptance email after a Xero quote is sent.
+ *
+ * Disabled: the Xero quote email “Accept Quote and add venue details” button
+ * already opens the same booking / venue details form, so this second email is redundant.
  */
 function maybeSendBookingDetailsEmail(int $enquiryId, string $name, string $email, bool $force = false): bool
 {
-    if (brevoApiKey() === '') {
-        return false;
-    }
-
-    if (!$force && enquiryLoggerBookingEmailAlreadySent($enquiryId)) {
-        return false;
-    }
-
-    $token = enquiryLoggerEnsureResumeToken($enquiryId);
-    $bookingUrl = buildBookingDetailsUrl($enquiryId, $token);
-    if ($bookingUrl === '') {
-        throw new RuntimeException('Form base URL is not configured.');
-    }
-
-    sendBookingDetailsEmailViaBrevo($email, $name, [
-        'name' => $name,
-        'email' => $email,
-        'bookingUrl' => $bookingUrl,
-        'joiningInstructionsUrl' => bookingJoiningInstructionsUrl(),
-    ]);
-
-    enquiryLoggerMarkBookingEmailSent($enquiryId);
-    enquiryLoggerEvent(
-        $enquiryId,
-        'booking_email_sent',
-        $force
-            ? 'Booking details / terms acceptance email resent to the customer via Brevo.'
-            : 'Booking details / terms acceptance email sent to the customer via Brevo.',
-        [
-            'booking_url' => $bookingUrl,
-            'resent' => $force,
-        ]
-    );
-
-    return true;
+    return false;
 }
 
 /**
@@ -408,6 +473,7 @@ function buildResumeEnquiryEmailHtml(array $data): string
     $resumeUrl = htmlspecialchars((string)($data['resumeUrl'] ?? ''), ENT_QUOTES, 'UTF-8');
     $contactEmail = htmlspecialchars(brevoContactEmail(), ENT_QUOTES, 'UTF-8');
     $logoSrc = htmlspecialchars(brevoLogoUrl(), ENT_QUOTES, 'UTF-8');
+    $whatsappBlock = brevoWhatsAppButtonHtml();
 
     return <<<HTML
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
@@ -451,11 +517,12 @@ function buildResumeEnquiryEmailHtml(array $data): string
             </td>
           </tr>
           <tr>
-            <td align="center" style="padding:0 20px 24px; font-family:Arial,Helvetica,sans-serif; font-size:15px; line-height:1.6; color:#414141; text-align:center;">
+            <td align="center" style="padding:0 20px 16px; font-family:Arial,Helvetica,sans-serif; font-size:15px; line-height:1.6; color:#414141; text-align:center;">
               <p style="margin:0 0 12px;">If you did not start this enquiry, you can ignore this email.</p>
               <p style="margin:0;">Questions? <a href="mailto:{$contactEmail}" style="color:#0255a4; font-weight:700; text-decoration:underline;">Contact our team</a>.</p>
             </td>
           </tr>
+{$whatsappBlock}
           <tr>
             <td align="center" style="padding:20px; border-top:1px solid #e8eef5; font-family:Arial,Helvetica,sans-serif; font-size:13px; line-height:1.5; color:#666666; text-align:center;">
               <strong style="color:#0255a4;">Safer Handling</strong><br />
@@ -488,6 +555,7 @@ function buildResumeEnquiryEmailText(array $data): string
         'If you did not start this enquiry, you can ignore this email.',
         '',
         'Questions? Contact us at ' . brevoContactEmail() . '.',
+        'WhatsApp: ' . brevoWhatsAppUrl(),
         '',
         'Safer Handling',
         'https://www.safer-handling.co.uk',
@@ -616,6 +684,43 @@ function brevoContactEmail(): string
     return brevoSenderConfig()['email'];
 }
 
+function brevoWhatsAppNumber(): string
+{
+    $configured = trim((string)(getenv('BREVO_WHATSAPP_NUMBER') ?: ($GLOBALS['brevoWhatsAppNumber'] ?? '')));
+    if ($configured !== '') {
+        return preg_replace('/\D+/', '', $configured) ?: '447872500272';
+    }
+
+    return '447872500272';
+}
+
+function brevoWhatsAppUrl(): string
+{
+    return 'https://wa.me/' . brevoWhatsAppNumber();
+}
+
+/**
+ * Green WhatsApp CTA block for customer emails.
+ */
+function brevoWhatsAppButtonHtml(): string
+{
+    $href = htmlspecialchars(brevoWhatsAppUrl(), ENT_QUOTES, 'UTF-8');
+
+    return <<<HTML
+          <tr>
+            <td align="center" style="padding:0 20px 28px;">
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="300" style="width:300px; background-color:#25D366; border-radius:4px;">
+                <tr>
+                  <td align="center" style="padding:14px 20px; border-radius:4px;">
+                    <a href="{$href}" target="_blank" style="display:block; font-family:Arial,Helvetica,sans-serif; font-size:16px; font-weight:700; color:#ffffff; text-decoration:none; line-height:1.2;">Message us on WhatsApp</a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+HTML;
+}
+
 function brevoLogoUrl(): string
 {
     $url = trim((string)(getenv('BREVO_LOGO_URL') ?: ($GLOBALS['brevoLogoUrl'] ?? '')));
@@ -644,13 +749,15 @@ function formatPreferredTrainingDate(string $preferredDateTime, bool $dateNotSur
         return '';
     }
 
-    $dt = \DateTimeImmutable::createFromFormat('Y-m-d\TH:i', $preferredDateTime)
+    $preferredDateTime = str_replace(' ', 'T', $preferredDateTime);
+    $dt = \DateTimeImmutable::createFromFormat('Y-m-d', substr($preferredDateTime, 0, 10))
+        ?: \DateTimeImmutable::createFromFormat('Y-m-d\TH:i', $preferredDateTime)
         ?: \DateTimeImmutable::createFromFormat('Y-m-d\TH:i:s', $preferredDateTime);
     if ($dt === false) {
         return $preferredDateTime;
     }
 
-    return $dt->format('l j F Y \a\t g:ia');
+    return $dt->format('l j F Y');
 }
 
 function quoteEmailHasPreferredDate(array $data): bool
@@ -685,7 +792,7 @@ function buildQuoteSummaryRows(array $data): string
 
     $quoteDisplay = trim((string)($data['quoteDisplay'] ?? ''));
     if ($quoteDisplay !== '') {
-        $rows[] = quoteEmailSummaryRow('Quote total (ex. VAT)', $quoteDisplay, true);
+        $rows[] = quoteEmailSummaryRow('Quote total (inc. VAT & travel)', $quoteDisplay, true);
     }
 
     if ($rows === []) {
@@ -788,8 +895,9 @@ function buildQuoteEmailHtml(array $data): string
     $quoteRows = buildQuoteSummaryRows($data);
     $trainingDateBlock = buildTrainingDateBlock($data);
     $delegatesBlock = buildDelegatesBlock($data);
+    $whatsappBlock = brevoWhatsAppButtonHtml();
 
-    $acceptUrl = trim((string)($data['acceptQuoteUrl'] ?? ''));
+    $acceptUrl = resolveQuoteAcceptUrl($data);
     if ($acceptUrl === '') {
         $acceptUrl = 'mailto:' . brevoContactEmail() . '?subject=' . rawurlencode('Accept Quote - Safer Handling Training');
     }
@@ -835,7 +943,7 @@ function buildQuoteEmailHtml(array $data): string
           <!-- Intro -->
           <tr>
             <td align="center" style="padding:0 20px 20px; font-family:Arial,Helvetica,sans-serif; font-size:16px; line-height:1.6; color:#414141; text-align:center;">
-              <p style="margin:0;">If you are happy to proceed, click <strong>Accept Quote</strong> to open the booking form, accept terms, and add your venue details.</p>
+              <p style="margin:0;">If you are happy to proceed, click <strong>Accept Quote and add venue details</strong> to open the accept quote form, accept terms, and add your venue details.</p>
             </td>
           </tr>
 
@@ -845,7 +953,7 @@ function buildQuoteEmailHtml(array $data): string
               <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="300" style="width:300px; background-color:#0255a4; border-radius:4px;">
                 <tr>
                   <td align="center" style="padding:14px 20px; border-radius:4px;">
-                    <a href="{$acceptHref}" target="_blank" style="display:block; font-family:Arial,Helvetica,sans-serif; font-size:16px; font-weight:700; color:#ffffff; text-decoration:none; line-height:1.2;">Accept Quote</a>
+                    <a href="{$acceptHref}" target="_blank" style="display:block; font-family:Arial,Helvetica,sans-serif; font-size:16px; font-weight:700; color:#ffffff; text-decoration:none; line-height:1.2;">Accept Quote and add venue details</a>
                   </td>
                 </tr>
               </table>
@@ -894,12 +1002,12 @@ function buildQuoteEmailHtml(array $data): string
 
           <!-- Closing -->
           <tr>
-            <td align="center" style="padding:0 20px 24px; font-family:Arial,Helvetica,sans-serif; font-size:15px; line-height:1.6; color:#414141; text-align:center;">
+            <td align="center" style="padding:0 20px 16px; font-family:Arial,Helvetica,sans-serif; font-size:15px; line-height:1.6; color:#414141; text-align:center;">
               <p style="margin:0 0 12px;">If you have any questions regarding the quote or the training, please don't hesitate to <a href="mailto:{$contactEmail}" style="color:#0255a4; font-weight:700; text-decoration:underline;">contact us</a>.</p>
               <p style="margin:0;">Thank you for considering us for your training requirements. We look forward to working with you.</p>
             </td>
           </tr>
-
+{$whatsappBlock}
           <!-- Footer -->
           <tr>
             <td align="center" style="padding:20px; border-top:1px solid #e8eef5; font-family:Arial,Helvetica,sans-serif; font-size:13px; line-height:1.5; color:#666666; text-align:center;">
@@ -922,13 +1030,16 @@ HTML;
  */
 function buildQuoteEmailText(array $data): string
 {
+    $acceptUrl = resolveQuoteAcceptUrl($data);
+
     $lines = [
         'Hello ' . (string)($data['name'] ?? '') . ',',
         '',
         'Thank you for requesting a quote for our Safer Handling Training.',
         'Please find your quote referenced below for your review.',
         '',
-        'If you are happy to proceed, simply reply to accept your quote. Once accepted, a member of our team will be in touch to arrange your training.',
+        'If you are happy to proceed, open the booking form to accept your quote and add venue details:',
+        $acceptUrl !== '' ? $acceptUrl : ('Email ' . brevoContactEmail() . ' to accept your quote.'),
         '',
         '--- Your Quote Summary ---',
     ];
@@ -940,7 +1051,7 @@ function buildQuoteEmailText(array $data): string
             'Delivery' => trim((string)($data['format'] ?? '') . ((string)($data['courseStyle'] ?? '') !== '' ? ' (' . (string)$data['courseStyle'] . ')' : '')),
             'Delegates' => (string)($data['attendees'] ?? ''),
             'Preferred date' => quoteEmailHasPreferredDate($data) ? (string)$data['preferredDate'] : '',
-            'Quote total (ex. VAT)' => (string)($data['quoteDisplay'] ?? ''),
+            'Quote total (inc. VAT & travel)' => (string)($data['quoteDisplay'] ?? ''),
         ] as $label => $value
     ) {
         if ($value !== '') {
@@ -962,6 +1073,7 @@ function buildQuoteEmailText(array $data): string
         $attendees !== '' ? $attendees . ' delegate(s) on your quote' : 'Please confirm delegate numbers with us.',
         '',
         'If you have any questions regarding the quote or the training, please contact us at ' . brevoContactEmail() . '.',
+        'WhatsApp: ' . brevoWhatsAppUrl(),
         '',
         'Thank you for considering us for your training requirements. We look forward to working with you.',
         '',
@@ -1105,7 +1217,7 @@ function buildNewLeadEmailHtml(array $data): string
         'Delivery' => trim($format . ($courseStyle !== '' ? ' (' . $courseStyle . ')' : '')),
         'Delegates' => $attendees,
         'Preferred date' => $preferredDate,
-        'Quote' => $quoteDisplay,
+        'Quote (inc. VAT & travel)' => $quoteDisplay,
         'Address' => $address,
     ];
 
@@ -1210,7 +1322,7 @@ function buildNewLeadEmailText(array $data): string
         'Delivery' => trim((string)($data['format'] ?? '') . ((string)($data['courseStyle'] ?? '') !== '' ? ' (' . (string)$data['courseStyle'] . ')' : '')),
         'Delegates' => (string)($data['attendees'] ?? ''),
         'Preferred date' => (string)($data['preferredDate'] ?? ''),
-        'Quote' => (string)($data['quoteDisplay'] ?? ''),
+        'Quote (inc. VAT & travel)' => (string)($data['quoteDisplay'] ?? ''),
         'Address' => (string)($data['address'] ?? ''),
         'Notes' => (string)($data['extraNotes'] ?? ''),
     ];
@@ -1350,7 +1462,9 @@ function buildNewLeadEmailData(
  */
 function buildQuoteEmailDataFromResolvedOrganisation(array $resolved, string $name, string $email): array
 {
-    return [
+    require_once __DIR__ . '/monday_helpers.php';
+
+    return array_merge([
         'name' => $name,
         'course' => $resolved['orgCourse'] ?? '',
         'format' => $resolved['deliveryPreference'] ?? '',
@@ -1363,9 +1477,10 @@ function buildQuoteEmailDataFromResolvedOrganisation(array $resolved, string $na
         ),
         'quoteValue' => (string)($resolved['quoteValue'] ?? ''),
         'quoteDisplay' => formatQuoteCurrency($resolved['quoteValue'] ?? ''),
-        'acceptQuoteUrl' => brevoQuoteAcceptUrl($email),
+        'email' => $email,
+        'acceptQuoteUrl' => '',
         'xeroItemCode' => (string)($resolved['orgCourse'] ?? ''),
-    ];
+    ], mondayAddressFromPost($resolved));
 }
 
 /**
@@ -1397,7 +1512,9 @@ function buildQuoteEmailDataFromSubmission(array $post, string $name, string $em
 
     $quoteValue = trim((string)($post['quoteValue'] ?? ''));
 
-    return [
+    require_once __DIR__ . '/monday_helpers.php';
+
+    return array_merge([
         'name' => $name,
         'course' => $course,
         'format' => $format,
@@ -1407,9 +1524,10 @@ function buildQuoteEmailDataFromSubmission(array $post, string $name, string $em
         'preferredDate' => formatPreferredTrainingDate($preferredDateTime, $dateNotSure),
         'quoteValue' => $quoteValue,
         'quoteDisplay' => formatQuoteCurrency($quoteValue),
-        'acceptQuoteUrl' => brevoQuoteAcceptUrl($email),
+        'email' => $email,
+        'acceptQuoteUrl' => '',
         'xeroItemCode' => $course,
-    ];
+    ], mondayAddressFromPost($post));
 }
 
 /**
@@ -1422,6 +1540,19 @@ function buildQuoteEmailDataFromSubmission(array $post, string $name, string $em
 function sendQuoteToClient(string $toEmail, string $toName, array $quoteData): array
 {
     require_once __DIR__ . '/xero.php';
+
+    $quoteData['email'] = $toEmail;
+    $quoteData['name'] = $quoteData['name'] ?? $toName;
+    // Always resolve Accept Quote → /booking before Xero/Brevo send.
+    resolveQuoteAcceptUrl($quoteData);
+    if (
+        (int)($quoteData['enquiryId'] ?? 0) > 0
+        && !quoteAcceptUrlIsBookingForm((string)($quoteData['acceptQuoteUrl'] ?? ''))
+    ) {
+        throw new RuntimeException(
+            'Could not build the Accept Quote booking form link. Set Form base URL in Admin → Settings.'
+        );
+    }
 
     if (xeroEnabled()) {
         $result = xeroSendQuoteToClient($toName, $toEmail, $quoteData);

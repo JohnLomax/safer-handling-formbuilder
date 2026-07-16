@@ -791,17 +791,160 @@ function mondayMoveEnquiryToBeingContactedAfterEditEmail(int $enquiryId): void
 }
 
 /**
- * Move the enquiry's Monday item to "Quote Sent" after a Xero quote is emailed.
+ * After a Xero quote is emailed: write Monday "Xero Quote ID" and "Quote Sent Date".
+ *
+ * @return array{
+ *   updated:bool,
+ *   xeroQuoteColumnId:?string,
+ *   xeroQuoteValue:?string,
+ *   quoteSentDateColumnId:?string,
+ *   quoteSentDate:?array<string,string>
+ * }
+ */
+function mondaySyncXeroQuoteSentFieldsOnItem(string $itemId, string $quoteId, string $quoteNumber = ''): array
+{
+    $itemId = trim($itemId);
+    $quoteId = trim($quoteId);
+    $quoteNumber = trim($quoteNumber);
+    $quoteValue = $quoteNumber !== '' ? $quoteNumber : $quoteId;
+    if ($itemId === '') {
+        throw new RuntimeException('Monday item ID is required.');
+    }
+
+    $monday = mondayAppConfig();
+    $token = $monday['token'];
+    $boardIdRaw = $monday['boardId'];
+    if ($token === '' || $boardIdRaw === '' || !is_numeric($boardIdRaw)) {
+        throw new RuntimeException(mondayConfigMissingMessage());
+    }
+
+    $boardId = (int)$boardIdRaw;
+    $columnsQuery = <<<'GQL'
+query ($boardId: [ID!]) {
+  boards(ids: $boardId) {
+    columns {
+      id
+      title
+      type
+    }
+  }
+}
+GQL;
+
+    $columnsResp = mondayGraphqlRequest($token, $columnsQuery, ['boardId' => [$boardId]]);
+    if ($columnsResp['status'] >= 400 || !empty($columnsResp['body']['errors'])) {
+        throw new RuntimeException('Could not read Monday columns for Xero quote sent sync.');
+    }
+
+    $boards = $columnsResp['body']['data']['boards'] ?? [];
+    if (!is_array($boards) || count($boards) === 0) {
+        throw new RuntimeException('Monday board not found.');
+    }
+    $columns = is_array($boards[0]['columns'] ?? null) ? $boards[0]['columns'] : [];
+
+    $columnValues = [];
+    $xeroQuoteColumnId = null;
+    $quoteSentDateColumnId = null;
+    $quoteSentDate = mondayDateColumnValueNow();
+
+    if ($quoteValue !== '') {
+        foreach (['xero quote id', 'xero quote number'] as $title) {
+            [$xeroQuoteColumnId, $xeroQuoteColumnType] = mondayFindColumnByTitles($columns, [$title]);
+            if ($xeroQuoteColumnId !== null) {
+                $columnValues[$xeroQuoteColumnId] = mondayColumnValueForType($xeroQuoteColumnType, $quoteValue);
+                break;
+            }
+        }
+    }
+
+    [$quoteSentDateColumnId, $quoteSentDateColumnType] = mondayFindColumnByTitles($columns, [
+        'quote sent date',
+    ]);
+    if ($quoteSentDateColumnId !== null) {
+        if (strtolower($quoteSentDateColumnType) === 'date') {
+            $columnValues[$quoteSentDateColumnId] = $quoteSentDate;
+        } else {
+            $columnValues[$quoteSentDateColumnId] = mondayColumnValueForType(
+                $quoteSentDateColumnType,
+                $quoteSentDate['date'] . ' ' . $quoteSentDate['time']
+            );
+        }
+    }
+
+    if ($columnValues === []) {
+        throw new RuntimeException(
+            'Monday columns "Xero Quote ID" / "Quote Sent Date" were not found (or no quote id to write).'
+        );
+    }
+
+    $updateQuery = <<<'GQL'
+mutation ($boardId: ID!, $itemId: ID!, $columnValues: JSON!) {
+  change_multiple_column_values(
+    board_id: $boardId,
+    item_id: $itemId,
+    column_values: $columnValues
+  ) {
+    id
+  }
+}
+GQL;
+
+    $updateResp = mondayGraphqlRequest($token, $updateQuery, [
+        'boardId' => (string)$boardId,
+        'itemId' => $itemId,
+        'columnValues' => json_encode($columnValues, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+    ]);
+    if ($updateResp['status'] >= 400 || !empty($updateResp['body']['errors'])) {
+        $message = '';
+        if (!empty($updateResp['body']['errors'][0]['message'])) {
+            $message = (string)$updateResp['body']['errors'][0]['message'];
+        }
+        throw new RuntimeException($message !== '' ? $message : 'Could not sync Monday quote-sent fields.');
+    }
+
+    return [
+        'updated' => true,
+        'xeroQuoteColumnId' => $xeroQuoteColumnId,
+        'xeroQuoteValue' => $quoteValue !== '' ? $quoteValue : null,
+        'quoteSentDateColumnId' => $quoteSentDateColumnId,
+        'quoteSentDate' => $quoteSentDateColumnId !== null ? $quoteSentDate : null,
+    ];
+}
+
+/**
+ * @deprecated Use mondaySyncXeroQuoteSentFieldsOnItem()
+ * @return array{updated:bool,columnId:?string,value:string}
+ */
+function mondaySetXeroQuoteIdOnItem(string $itemId, string $quoteId, string $quoteNumber = ''): array
+{
+    $synced = mondaySyncXeroQuoteSentFieldsOnItem($itemId, $quoteId, $quoteNumber);
+
+    return [
+        'updated' => $synced['updated'],
+        'columnId' => $synced['xeroQuoteColumnId'],
+        'value' => (string)($synced['xeroQuoteValue'] ?? ''),
+    ];
+}
+
+/**
+ * Move the enquiry's Monday item to "Quote Sent" after a Xero quote is emailed,
+ * and write Xero Quote ID + Quote Sent Date on the Monday item.
  */
 function mondayMoveEnquiryToQuoteSentAfterXeroQuote(int $enquiryId): void
 {
     require_once __DIR__ . '/enquiry_logger.php';
 
     $pdo = enquiryLoggerPdo();
-    $stmt = $pdo->prepare('SELECT monday_item_id FROM enquiries WHERE id = :id LIMIT 1');
+    enquiryLoggerEnsureColumn($pdo, 'enquiries', 'xero_quote_id', 'TEXT');
+    enquiryLoggerEnsureColumn($pdo, 'enquiries', 'xero_quote_number', 'TEXT');
+    $stmt = $pdo->prepare(
+        'SELECT monday_item_id, xero_quote_id, xero_quote_number FROM enquiries WHERE id = :id LIMIT 1'
+    );
     $stmt->execute([':id' => $enquiryId]);
     $row = $stmt->fetch();
     $itemId = trim((string)($row['monday_item_id'] ?? ''));
+    $quoteId = trim((string)($row['xero_quote_id'] ?? ''));
+    $quoteNumber = trim((string)($row['xero_quote_number'] ?? ''));
     if ($itemId === '') {
         enquiryLoggerEvent(
             $enquiryId,
@@ -810,6 +953,49 @@ function mondayMoveEnquiryToQuoteSentAfterXeroQuote(int $enquiryId): void
         );
 
         return;
+    }
+
+    try {
+        $synced = mondaySyncXeroQuoteSentFieldsOnItem($itemId, $quoteId, $quoteNumber);
+        if ($synced['xeroQuoteColumnId'] !== null && $synced['xeroQuoteValue'] !== null) {
+            enquiryLoggerEvent(
+                $enquiryId,
+                'monday_xero_quote_id_set',
+                'Xero Quote ID written to Monday enquiry.',
+                [
+                    'monday_item_id' => $itemId,
+                    'monday_column_id' => $synced['xeroQuoteColumnId'],
+                    'value' => $synced['xeroQuoteValue'],
+                    'xero_quote_id' => $quoteId !== '' ? $quoteId : null,
+                    'xero_quote_number' => $quoteNumber !== '' ? $quoteNumber : null,
+                ]
+            );
+        }
+        if ($synced['quoteSentDateColumnId'] !== null && is_array($synced['quoteSentDate'])) {
+            enquiryLoggerEvent(
+                $enquiryId,
+                'monday_quote_sent_date_set',
+                'Quote Sent Date written to Monday enquiry.',
+                [
+                    'monday_item_id' => $itemId,
+                    'monday_column_id' => $synced['quoteSentDateColumnId'],
+                    'date' => $synced['quoteSentDate']['date'] ?? null,
+                    'time' => $synced['quoteSentDate']['time'] ?? null,
+                ]
+            );
+        }
+    } catch (Throwable $e) {
+        enquiryLoggerEvent(
+            $enquiryId,
+            'monday_quote_sent_fields_failed',
+            'Could not write Xero Quote ID / Quote Sent Date to Monday enquiry.',
+            [
+                'monday_item_id' => $itemId,
+                'xero_quote_id' => $quoteId !== '' ? $quoteId : null,
+                'xero_quote_number' => $quoteNumber !== '' ? $quoteNumber : null,
+                'error' => $e->getMessage(),
+            ]
+        );
     }
 
     try {

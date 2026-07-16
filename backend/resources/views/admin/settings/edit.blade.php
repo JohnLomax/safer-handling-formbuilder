@@ -121,13 +121,16 @@
                 <div>
                     <x-input-label for="brevo_quote_accept_url" value="Quote accept URL" />
                     <x-text-input id="brevo_quote_accept_url" name="brevo_quote_accept_url" type="text" class="mt-1 block w-full" :value="old('brevo_quote_accept_url', $settings['brevo_quote_accept_url'] ?? '')" />
-                    <p class="mt-1 text-xs text-sh-mid">Leave blank. Accept Quote uses the booking form link automatically (<code>/booking?enquiry=…&amp;token=…</code>). Only set this to override that link.</p>
+                    <p class="mt-1 text-xs text-sh-mid">Leave blank. Accept Quote always uses the booking form (<code>/booking?enquiry=…&amp;token=…</code>), not the enquiry edit form. Only set this to override with another <code>/booking</code> URL.</p>
                 </div>
             </div>
 
             <div class="brand-panel space-y-4">
                 <div>
-                    <h3 class="text-base font-semibold text-brand-header">Xero quotes</h3>
+                    <div class="flex items-center gap-2">
+                        <x-xero-badge class="!h-6 !w-6" />
+                        <h3 class="text-base font-semibold text-brand-header">Xero quotes</h3>
+                    </div>
                     <p class="mt-1 text-sm text-sh-mid">Create a Xero contact and quote using the form total as VAT-inclusive, download the quote PDF, and email it to the client via Brevo (Xero has no quote-email API).</p>
                 </div>
 

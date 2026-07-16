@@ -192,9 +192,9 @@ function trainingMatrixResolveOrganisationSubmission(array $post): array
     }
 
     $organisationCompany = trim((string)($post['organisationCompany'] ?? ''));
-    if ($organisationCompany === '') {
-        throw new RuntimeException('Company/Organisation is required.');
-    }
+
+    require_once __DIR__ . '/enquiry_logger.php';
+    $preferred = enquiryPreferredDateFromPost($post);
 
     return [
         'sector' => (string)$row['sector'],
@@ -206,8 +206,8 @@ function trainingMatrixResolveOrganisationSubmission(array $post): array
         'organisationCompany' => $organisationCompany,
         'trainersRequired' => (string)trainingMatrixTrainersRequired($attendees),
         'quoteValue' => trainingMatrixFormatQuoteValue($quoteNumeric),
-        'preferredDateTime' => trim((string)($post['preferredDateTime'] ?? '')),
-        'dateNotSure' => isset($post['dateNotSure']) ? '1' : '0',
+        'preferredDateTime' => $preferred['preferredDateTime'],
+        'dateNotSure' => $preferred['dateNotSure'] ? '1' : '0',
         'extraNotes' => trim((string)($post['extraNotes'] ?? '')),
     ];
 }

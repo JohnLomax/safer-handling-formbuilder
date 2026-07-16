@@ -57,9 +57,16 @@
                                                 <div class="font-medium text-sh-text">{{ $enquiry->name }}</div>
                                                 <div class="text-xs text-sh-mid">{{ $enquiry->email }}</div>
                                             </div>
-                                            @if ($enquiry->isMondaySynced())
-                                                <x-monday-badge compact />
-                                            @endif
+                                            <div class="flex shrink-0 items-center gap-1">
+                                                @if ($enquiry->isMondaySynced())
+                                                    <x-monday-badge compact />
+                                                @endif
+                                                @if (in_array($enquiry->status, ['quote_sent', 'quote_accepted'], true)
+                                                    || $enquiry->quote_email_sent_at
+                                                    || filled($enquiry->xero_quote_id))
+                                                    <x-xero-badge compact />
+                                                @endif
+                                            </div>
                                         </div>
                                     </td>
                                     <td>

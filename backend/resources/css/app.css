@@ -168,39 +168,19 @@
     }
 
     .monday-badge-logo {
-        @apply inline-block h-5 w-auto max-w-[7.5rem] shrink-0 object-contain object-left;
+        @apply inline-block h-5 w-5 shrink-0 object-contain;
     }
 
     .monday-badge-compact {
-        @apply inline-flex h-5 shrink-0 items-center gap-0.5 rounded-full border border-sh-border bg-white px-1.5;
-    }
-
-    .monday-dot {
-        @apply block h-2 w-2 shrink-0 rounded-full;
-    }
-
-    .monday-dot-red {
-        background: #ff3d57;
-    }
-
-    .monday-dot-yellow {
-        background: #ffcb00;
-    }
-
-    .monday-dot-green {
-        background: #00ca72;
-    }
-
-    .monday-dot-blue {
-        background: #0086c0;
+        @apply inline-block h-5 w-5 shrink-0 object-contain;
     }
 
     .xero-badge-compact {
-        @apply inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-[#9ad7ea] bg-[#e8f8fc] text-[#13B5EA];
+        @apply inline-block h-5 w-5 shrink-0 rounded-full object-contain;
     }
 
     .xero-badge {
-        @apply inline-flex h-5 shrink-0 items-center gap-1 rounded-full border border-[#9ad7ea] bg-[#e8f8fc] px-1.5 text-[#13B5EA];
+        @apply inline-flex h-5 shrink-0 items-center gap-1 rounded-full border border-[#9ad7ea] bg-[#e8f8fc] px-1.5;
     }
 
     .admin-search-bar {

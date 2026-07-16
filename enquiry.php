@@ -45,7 +45,8 @@
       box-shadow:
         0 18px 45px rgba(0, 138, 252, 0.13),
         0 2px 10px rgba(11, 71, 117, 0.07);
-      overflow: hidden;
+      /* Keep visible so scroll/focus on invalid fields is not clipped. */
+      overflow: visible;
     }
 
     .brand-header {
@@ -57,6 +58,8 @@
       justify-content: space-between;
       gap: 22px;
       position: relative;
+      border-radius: 18px 18px 0 0;
+      overflow: hidden;
     }
 
     .brand-header::after {
@@ -156,7 +159,7 @@
       transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
     }
 
-    input[type="datetime-local"],
+    input[type="date"],
     select {
       width: 100%;
       padding: 11px 40px 11px 12px;
@@ -178,7 +181,7 @@
       box-shadow: 0 0 0 3px rgba(0, 138, 252, 0.18);
     }
 
-    input[type="datetime-local"]:focus,
+    input[type="date"]:focus,
     select:focus {
       outline: none;
       border-color: var(--brand-blue);
@@ -206,6 +209,7 @@
 
     .datetime-input {
       max-width: 100%;
+      margin-top: 8px;
       font-weight: 700;
       letter-spacing: 0.2px;
       background: linear-gradient(180deg, #ffffff 0%, #f7fcff 100%);
@@ -418,6 +422,7 @@
       border-color: #dc2626 !important;
       box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.15) !important;
       background: #fff7f7 !important;
+      scroll-margin-top: 96px;
     }
 
     .choice-group-error {
@@ -425,6 +430,7 @@
       border-radius: 10px;
       padding: 7px;
       background: #fff8f8;
+      scroll-margin-top: 96px;
     }
 
     .choice {
@@ -844,22 +850,23 @@
             </div>
 
             <div class="datetime-block">
-              <label for="preferredDateTime">Preferred day(s) or date and start time</label>
+              <label for="preferredDate">Preferred date</label>
               <input
                 class="datetime-input"
-                id="preferredDateTime"
-                name="preferredDateTime"
-                type="datetime-local"
+                id="preferredDate"
+                name="preferredDate"
+                type="date"
               />
+              <input type="hidden" id="preferredDateTime" name="preferredDateTime" value="" />
               <label class="datetime-choice" for="dateNotSure">
                 <input type="checkbox" id="dateNotSure" name="dateNotSure" />
                 <span>Not sure on date yet</span>
               </label>
-              <p class="datetime-hint">Pick a preferred date and start time for your session.</p>
+              <p class="datetime-hint">Pick a preferred date for your session.</p>
             </div>
 
             <div id="dateGuidance" class="date-guidance">
-              Select sector, course, format, course style, attendees, and a preferred date and start time to confirm a quote.
+              Select sector, course, format, course style, attendees, and a preferred date to confirm a quote.
             </div>
 
           </div>
@@ -873,7 +880,7 @@
               <h4>Live Quote</h4>
               <div class="pricing-grid">
                 <div id="trainersRequiredRow"><strong>Number of trainers required:</strong> <span id="trainersRequired">1</span></div>
-                <div id="totalWithVatRow"><strong>Total price estimate + VAT inc Travel:</strong> <span id="totalWithVatPrice">-</span></div>
+                <div id="totalWithVatRow"><strong>Total price estimate (inc. VAT &amp; travel):</strong> <span id="totalWithVatPrice">-</span></div>
               </div>
             </div>
 
@@ -938,6 +945,7 @@
       var extraNotesBlock = document.getElementById("extraNotesBlock");
       var extraNotesInput = document.getElementById("extraNotes");
       var submitBtn = document.getElementById("submitBtn");
+      var preferredDateInput = document.getElementById("preferredDate");
       var preferredDateTimeInput = document.getElementById("preferredDateTime");
       var dateNotSureInput = document.getElementById("dateNotSure");
       var sectorSelect = document.getElementById("sector");
@@ -997,7 +1005,60 @@
         fd.append("enquiryId", currentEnquiryId);
       }
 
+      function normalizePreferredDateValue(value) {
+        if (value == null) {
+          return "";
+        }
+        var raw = String(value).trim();
+        if (!raw) {
+          return "";
+        }
+        raw = raw.replace(" ", "T");
+        var match = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+        return match ? match[1] : "";
+      }
+
+      function preferredDateComplete() {
+        return !!preferredDateInput.value.trim();
+      }
+
+      function syncPreferredDateTimeHidden() {
+        if (!preferredDateTimeInput) {
+          return;
+        }
+        preferredDateTimeInput.value = preferredDateInput.value.trim();
+      }
+
+      function setPreferredDateValue(value) {
+        preferredDateInput.value = normalizePreferredDateValue(value);
+        syncPreferredDateTimeHidden();
+      }
+
+      function syncPreferredDateUiState() {
+        if (!preferredDateInput || !preferredDateTimeInput || !dateNotSureInput) {
+          return;
+        }
+        var orgPath = isOrganisationStyleTrainingPath();
+        if (dateNotSureInput.checked) {
+          preferredDateInput.value = "";
+          preferredDateTimeInput.value = "";
+          preferredDateInput.disabled = true;
+          preferredDateInput.required = false;
+          setInputError(preferredDateInput, false);
+        } else {
+          preferredDateInput.disabled = false;
+          preferredDateInput.required = orgPath;
+          syncPreferredDateTimeHidden();
+        }
+        refreshOrganisationDateGuidance();
+      }
+
       function applySavedFormValue(name, value) {
+        if (name === "preferredDateTime" || name === "preferredDate") {
+          setPreferredDateValue(value);
+          return;
+        }
+
         var fields = form.querySelectorAll('[name="' + name + '"]');
         if (!fields.length) {
           return;
@@ -1025,11 +1086,17 @@
         }
 
         Object.keys(data).forEach(function (name) {
-          if (name === "enquiryId") {
+          if (name === "enquiryId" || name === "preferredDate" || name === "preferredDateTime" || name === "preferredTime") {
             return;
           }
           applySavedFormValue(name, data[name]);
         });
+
+        if (data.preferredDate || data.preferredDateTime) {
+          setPreferredDateValue(data.preferredDate || data.preferredDateTime);
+        }
+
+        syncPreferredDateUiState();
       }
 
       function restoreOrganisationSelections(data) {
@@ -1155,6 +1222,7 @@
             // Re-apply after cascading selects rebuild their options / audience blocks.
             applySavedFormData(enquiry.formData || {});
             restoreOrganisationSelections(enquiry.formData || {});
+            syncPreferredDateUiState();
             updateFinalDetailsVisibility();
             if (enquiry.status === "quote_sent") {
               showResumeNotice("We restored this enquiry (quote already sent). You can review or update the details.");
@@ -1197,11 +1265,109 @@
       }
 
       function setInputError(inputElement, hasError) {
+        if (!inputElement) {
+          return;
+        }
         inputElement.classList.toggle("field-error", hasError);
       }
 
       function setGroupError(groupElement, hasError) {
+        if (!groupElement) {
+          return;
+        }
         groupElement.classList.toggle("choice-group-error", hasError);
+      }
+
+      function isScrollableErrorTarget(el) {
+        if (!el || el.closest(".hidden")) {
+          return false;
+        }
+        if (el.tagName === "INPUT" && String(el.type || "").toLowerCase() === "hidden") {
+          return false;
+        }
+        var style = window.getComputedStyle(el);
+        if (style.display === "none" || style.visibility === "hidden") {
+          return false;
+        }
+        return true;
+      }
+
+      function scrollElementIntoView(el) {
+        if (!el) {
+          return;
+        }
+
+        var anchor = el;
+        if (el.id) {
+          var label = document.querySelector('label[for="' + el.id + '"]');
+          if (label && !label.closest(".hidden")) {
+            anchor = label;
+          }
+        }
+
+        var rect = anchor.getBoundingClientRect();
+        var y = Math.max(0, rect.top + (window.pageYOffset || document.documentElement.scrollTop || 0) - 96);
+
+        try {
+          anchor.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+        } catch (e1) {
+          try {
+            anchor.scrollIntoView(true);
+          } catch (e2) {
+            // ignore
+          }
+        }
+
+        try {
+          window.scrollTo({ top: y, left: 0, behavior: "smooth" });
+        } catch (e3) {
+          window.scrollTo(0, y);
+        }
+        document.documentElement.scrollTop = y;
+        document.body.scrollTop = y;
+      }
+
+      function scrollToFirstError(root) {
+        var scope = root || form || document;
+        // Document order so the first incomplete required field is targeted.
+        var candidates = scope.querySelectorAll(
+          "input.field-error, select.field-error, textarea.field-error, .choice-group-error"
+        );
+        var target = null;
+        for (var i = 0; i < candidates.length; i++) {
+          if (isScrollableErrorTarget(candidates[i])) {
+            target = candidates[i];
+            break;
+          }
+        }
+        if (!target) {
+          return;
+        }
+
+        var focusTarget = target;
+        if (target.classList.contains("choice-group-error")) {
+          focusTarget = target.querySelector("input:not([type='hidden']), select, textarea") || target;
+        }
+
+        // Wait a frame so .field-error styles are applied before measuring/scrolling.
+        window.requestAnimationFrame(function () {
+          scrollElementIntoView(target);
+          window.setTimeout(function () {
+            scrollElementIntoView(target);
+            if (focusTarget && typeof focusTarget.focus === "function" && !focusTarget.disabled) {
+              try {
+                // Allow native focus scrolling as a fallback.
+                focusTarget.focus({ preventScroll: false });
+              } catch (e) {
+                try {
+                  focusTarget.focus();
+                } catch (e2) {
+                  // ignore
+                }
+              }
+            }
+          }, 50);
+        });
       }
 
       function isOnlineCourseMode() {
@@ -1325,45 +1491,45 @@
         var p = pkg.pricing;
         var n = attendeeCount;
         if (p.kind === "flat") {
-          return formatGbp(p.amount) + " + VAT inc. travel";
+          return formatGbp(p.amount) + " inc. VAT & travel";
         }
         if (p.kind === "flatUnlimited") {
-          return formatGbp(p.amount) + " + VAT inc. travel (unlimited attendees)";
+          return formatGbp(p.amount) + " inc. VAT & travel (unlimited attendees)";
         }
         if (p.kind === "perDelegate") {
-          var vatPhrase = p.perAttendee ? "+ VAT per attendee" : "+ VAT inc. travel";
+          var vatPhrase = p.perAttendee ? "inc. VAT per attendee" : "inc. VAT & travel";
           return formatGbp(p.rate * n) + " " + vatPhrase + " (" + n + " × " + formatGbp(p.rate) + ")";
         }
         if (p.kind === "addonBands") {
           if (n <= 12) {
-            return formatGbp(p.baseTo12) + " + VAT inc. travel (up to 12)";
+            return formatGbp(p.baseTo12) + " inc. VAT & travel (up to 12)";
           }
           if (n <= 19) {
             var t20 = p.baseTo12 + (n - 12) * p.per13to20;
-            return formatGbp(t20) + " + VAT inc. travel (" + formatGbp(p.baseTo12) + " + " + (n - 12) + " × " + formatGbp(p.per13to20) + ")";
+            return formatGbp(t20) + " inc. VAT & travel (" + formatGbp(p.baseTo12) + " + " + (n - 12) + " × " + formatGbp(p.per13to20) + ")";
           }
           if (n === 20) {
-            return formatGbp(p.fixed21Plus) + " + VAT inc. travel (20 attendee offer)";
+            return formatGbp(p.fixed21Plus) + " inc. VAT & travel (20 attendee offer)";
           }
           var tAfter20 = p.fixed21Plus + (n - 20) * p.per13to20;
-          return formatGbp(tAfter20) + " + VAT inc. travel (" + formatGbp(p.fixed21Plus) + " + " + (n - 20) + " × " + formatGbp(p.per13to20) + ", after 20)";
+          return formatGbp(tAfter20) + " inc. VAT & travel (" + formatGbp(p.fixed21Plus) + " + " + (n - 20) + " × " + formatGbp(p.per13to20) + ", after 20)";
         }
         if (p.kind === "addonBandsLinear") {
           if (n <= 12) {
-            return formatGbp(p.baseTo12) + " + VAT inc. travel (up to 12)";
+            return formatGbp(p.baseTo12) + " inc. VAT & travel (up to 12)";
           }
           var tLin = p.baseTo12 + (n - 12) * p.perAfter12;
-          return formatGbp(tLin) + " + VAT inc. travel (" + formatGbp(p.baseTo12) + " + " + (n - 12) + " × " + formatGbp(p.perAfter12) + ")";
+          return formatGbp(tLin) + " inc. VAT & travel (" + formatGbp(p.baseTo12) + " + " + (n - 12) + " × " + formatGbp(p.perAfter12) + ")";
         }
         if (p.kind === "addonBandsPer4621") {
           if (n <= 12) {
-            return formatGbp(p.baseTo12) + " + VAT inc. travel (up to 12)";
+            return formatGbp(p.baseTo12) + " inc. VAT & travel (up to 12)";
           }
           if (n <= 19) {
             var tMid = p.baseTo12 + (n - 12) * p.per13to20;
-            return formatGbp(tMid) + " + VAT inc. travel (" + formatGbp(p.baseTo12) + " + " + (n - 12) + " × " + formatGbp(p.per13to20) + ", 13–19)";
+            return formatGbp(tMid) + " inc. VAT & travel (" + formatGbp(p.baseTo12) + " + " + (n - 12) + " × " + formatGbp(p.per13to20) + ", 13–19)";
           }
-          return formatGbp(p.per21Plus * n) + " + VAT inc. travel (" + n + " × " + formatGbp(p.per21Plus) + ", 20+)";
+          return formatGbp(p.per21Plus * n) + " inc. VAT & travel (" + n + " × " + formatGbp(p.per21Plus) + ", 20+)";
         }
         return "";
       }
@@ -1599,7 +1765,7 @@
       function updateFinalDetailsVisibility() {
         var audienceType = getCheckedValue("audienceType");
         var personalGoal = getCheckedValue("personalGoal");
-        var orgEndStepSelected = preferredDateTimeInput.value.trim() || dateNotSureInput.checked;
+        var orgEndStepSelected = preferredDateComplete() || dateNotSureInput.checked;
         var shouldShowForMe = audienceType === "me" && personalGoal === "onlineCourse";
         var hasTrainerAttendees = !!trainerAttendeesInput.value && Number(trainerAttendeesInput.value) > 0;
         var shouldShowForTrainer = audienceType === "me" && personalGoal === "becomeTrainer" && !!trainerCourseSelect.value && hasTrainerAttendees;
@@ -1639,7 +1805,9 @@
         organisationCompanyInput.required = false;
         organisationCompanyInput.value = "";
         dateNotSureInput.checked = false;
-        preferredDateTimeInput.disabled = false;
+        preferredDateInput.value = "";
+        preferredDateTimeInput.value = "";
+        preferredDateInput.disabled = false;
         syncMatrixStepperButtons();
         setGroupError(audienceTypeGroup, false);
         setGroupError(personalGoalGroup, false);
@@ -1649,8 +1817,10 @@
         setInputError(formatSubOptionSelect, false);
         setInputError(matrixAttendeesInput, false);
         setInputError(organisationCompanyInput, false);
+        setInputError(document.getElementById("addressLine1"), false);
+        setInputError(document.getElementById("addressPostcode"), false);
         setInputError(trainerAttendeesInput, false);
-        setInputError(preferredDateTimeInput, false);
+        setInputError(preferredDateInput, false);
         setInputError(trainerCourseSelect, false);
         if (bookingViaCompanyInput) {
           bookingViaCompanyInput.checked = false;
@@ -1707,7 +1877,9 @@
             setInputError(formatSubOptionSelect, false);
             setInputError(matrixAttendeesInput, false);
             setInputError(organisationCompanyInput, false);
-            setInputError(preferredDateTimeInput, false);
+            setInputError(document.getElementById("addressLine1"), false);
+            setInputError(document.getElementById("addressPostcode"), false);
+            setInputError(preferredDateInput, false);
           }
         }
 
@@ -1718,8 +1890,11 @@
           var missingSubOption = !formatSubOptionSelect.value;
           var matrixCount = Number(matrixAttendeesInput.value);
           var missingMatrixAttendees = !matrixAttendeesInput.value || !Number.isInteger(matrixCount) || matrixCount < 1;
-          var missingOrganisationCompany = !organisationCompanyInput.value.trim();
-          var missingPreferredDate = !preferredDateTimeInput.value.trim() && !dateNotSureInput.checked;
+          var addressLine1Input = document.getElementById("addressLine1");
+          var addressPostcodeInput = document.getElementById("addressPostcode");
+          var missingAddressLine1 = !addressLine1Input || !addressLine1Input.value.trim();
+          var missingAddressPostcode = !addressPostcodeInput || !addressPostcodeInput.value.trim();
+          var missingPreferredDate = (!preferredDateComplete() && !dateNotSureInput.checked);
 
           if (isOrganisation) {
             setGroupError(personalGoalGroup, false);
@@ -1729,10 +1904,21 @@
           setInputError(courseFormatSelect, missingFormat);
           setInputError(formatSubOptionSelect, missingSubOption);
           setInputError(matrixAttendeesInput, missingMatrixAttendees);
-          setInputError(organisationCompanyInput, missingOrganisationCompany);
-          setInputError(preferredDateTimeInput, missingPreferredDate);
+          setInputError(organisationCompanyInput, false);
+          setInputError(addressLine1Input, missingAddressLine1);
+          setInputError(addressPostcodeInput, missingAddressPostcode);
+          setInputError(preferredDateInput, missingPreferredDate);
 
-          if (missingSector || missingCourse || missingFormat || missingSubOption || missingMatrixAttendees || missingOrganisationCompany || missingPreferredDate) {
+          if (
+            missingSector
+            || missingCourse
+            || missingFormat
+            || missingSubOption
+            || missingMatrixAttendees
+            || missingAddressLine1
+            || missingAddressPostcode
+            || missingPreferredDate
+          ) {
             hasError = true;
           }
         }
@@ -1745,7 +1931,9 @@
           setInputError(formatSubOptionSelect, false);
           setInputError(matrixAttendeesInput, false);
           setInputError(organisationCompanyInput, false);
-          setInputError(preferredDateTimeInput, false);
+          setInputError(document.getElementById("addressLine1"), false);
+          setInputError(document.getElementById("addressPostcode"), false);
+          setInputError(preferredDateInput, false);
           setInputError(trainerCourseSelect, false);
         }
 
@@ -1795,8 +1983,8 @@
         courseFormatSelect.required = orgStylePath;
         formatSubOptionSelect.required = orgStylePath;
         matrixAttendeesInput.required = orgStylePath && !matrixAttendeesInput.disabled;
-        organisationCompanyInput.required = orgStylePath;
-        preferredDateTimeInput.required = orgStylePath && !dateNotSureInput.checked;
+        organisationCompanyInput.required = false;
+        preferredDateInput.required = orgStylePath && !dateNotSureInput.checked;
         trainerCourseSelect.required = trainerPath;
         trainerAttendeesInput.required = trainerPath;
         if (!trainerPath) {
@@ -1823,7 +2011,7 @@
 
         if (!orgStylePath) {
           dateNotSureInput.checked = false;
-          preferredDateTimeInput.disabled = false;
+          preferredDateInput.disabled = false;
           organisationCompanyInput.value = "";
           setInputError(sectorSelect, false);
           setInputError(orgCourseSelect, false);
@@ -1831,7 +2019,9 @@
           setInputError(formatSubOptionSelect, false);
           setInputError(matrixAttendeesInput, false);
           setInputError(organisationCompanyInput, false);
-          setInputError(preferredDateTimeInput, false);
+          setInputError(document.getElementById("addressLine1"), false);
+          setInputError(document.getElementById("addressPostcode"), false);
+          setInputError(preferredDateInput, false);
         }
         if (!trainerPath) {
           setInputError(trainerCourseSelect, false);
@@ -1985,13 +2175,13 @@
       }
 
       function refreshOrganisationDateGuidance() {
-        if (!dateGuidance || !preferredDateTimeInput || !dateNotSureInput) {
+        if (!dateGuidance || !preferredDateInput || !dateNotSureInput) {
           return;
         }
         var showPreferredDate = isOrganisationStyleTrainingPath() && !dateNotSureInput.checked;
         if (showPreferredDate) {
           dateGuidance.textContent =
-            "Select sector, course, format, course style, attendees, and a preferred date and start time to confirm a quote.";
+            "Select sector, course, format, course style, attendees, and a preferred date to confirm a quote.";
         } else {
           dateGuidance.textContent =
             "Select sector, course, format, course style, and attendees to confirm a quote.";
@@ -2254,6 +2444,7 @@
         setGroupError(enquiryTypeGroup, !enquiryType);
 
         if (!name || !email || !enquiryType) {
+          scrollToFirstError();
           return;
         }
 
@@ -2445,52 +2636,75 @@
         scheduleTrainerMondayFieldSync();
       });
 
-      preferredDateTimeInput.addEventListener("input", function () {
-        setInputError(preferredDateTimeInput, !preferredDateTimeInput.value.trim());
+      function onPreferredDateInput() {
+        syncPreferredDateTimeHidden();
+        if (!dateNotSureInput.checked) {
+          setInputError(preferredDateInput, !preferredDateInput.value.trim());
+        }
         updateFinalDetailsVisibility();
         renderPricing(getSelectedTrainingRow());
-      });
+      }
+      preferredDateInput.addEventListener("input", onPreferredDateInput);
+      preferredDateInput.addEventListener("change", onPreferredDateInput);
 
       organisationCompanyInput.addEventListener("input", function () {
-        setInputError(organisationCompanyInput, !organisationCompanyInput.value.trim());
+        setInputError(organisationCompanyInput, false);
+      });
+
+      ["addressLine1", "addressPostcode"].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (!el) {
+          return;
+        }
+        el.addEventListener("input", function () {
+          if (isOrganisationStyleTrainingPath()) {
+            setInputError(el, !el.value.trim());
+          }
+        });
       });
 
       dateNotSureInput.addEventListener("change", function () {
-        if (dateNotSureInput.checked) {
-          preferredDateTimeInput.value = "";
-          preferredDateTimeInput.disabled = true;
-          setInputError(preferredDateTimeInput, false);
-        } else {
-          preferredDateTimeInput.disabled = false;
-        }
-        preferredDateTimeInput.required = isOrganisationStyleTrainingPath() && !dateNotSureInput.checked;
-        refreshOrganisationDateGuidance();
+        syncPreferredDateUiState();
         updateFinalDetailsVisibility();
         renderPricing(getSelectedTrainingRow());
       });
 
       form.addEventListener("submit", function (event) {
         event.preventDefault();
-        var attendeesValue = Number(attendeesInput.value);
+        syncPreferredDateUiState();
+
+        var trainingValid = true;
+        var attendeesSubmitInvalid = false;
+        try {
+          var attendeesValue = Number(attendeesInput.value);
+          var audienceType = getCheckedValue("audienceType");
+          var personalGoal = getCheckedValue("personalGoal");
+          var requiresAttendees = !isOnlineCourseMode() && !finalDetailsBlock.classList.contains("hidden");
+          var minAttendeesForSubmit = requiresAttendees ? getMinimumAttendeesForRow(getSelectedTrainingRow()) : 1;
+
+          attendeesSubmitInvalid = requiresAttendees && (!Number.isInteger(attendeesValue) || attendeesValue < minAttendeesForSubmit);
+          if (isOrganisationStyleTrainingPath()) {
+            setInputError(matrixAttendeesInput, attendeesSubmitInvalid);
+            setInputError(attendeesInput, false);
+          } else {
+            setInputError(attendeesInput, attendeesSubmitInvalid);
+          }
+
+          if (!attendeesSubmitInvalid && !trainingSection.classList.contains("hidden")) {
+            trainingValid = validateTrainingFields();
+          }
+        } catch (validationError) {
+          console.error(validationError);
+          trainingValid = false;
+        }
+
+        if (attendeesSubmitInvalid || !trainingValid) {
+          scrollToFirstError();
+          return;
+        }
+
         var audienceType = getCheckedValue("audienceType");
         var personalGoal = getCheckedValue("personalGoal");
-        var requiresAttendees = !isOnlineCourseMode() && !finalDetailsBlock.classList.contains("hidden");
-        var minAttendeesForSubmit = requiresAttendees ? getMinimumAttendeesForRow(getSelectedTrainingRow()) : 1;
-
-        var attendeesSubmitInvalid = requiresAttendees && (!Number.isInteger(attendeesValue) || attendeesValue < minAttendeesForSubmit);
-        if (isOrganisationStyleTrainingPath()) {
-          setInputError(matrixAttendeesInput, attendeesSubmitInvalid);
-          setInputError(attendeesInput, false);
-        } else {
-          setInputError(attendeesInput, attendeesSubmitInvalid);
-        }
-        if (attendeesSubmitInvalid) {
-          return;
-        }
-
-        if (!trainingSection.classList.contains("hidden") && !validateTrainingFields()) {
-          return;
-        }
 
         syncMondaySpecificCourse();
         if (isOrganisationStyleTrainingPath()) {

@@ -70,7 +70,6 @@ $termsAccepted = isset($_POST['termsAccepted']);
 
 $required = [
     'Booker name' => $bookerName,
-    'Organisation' => $organisation,
     'Email address' => $email,
     'Phone number' => $phone,
     'Training venue address' => $venueAddress,

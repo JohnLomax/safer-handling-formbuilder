@@ -37,14 +37,6 @@ class EnquiryProcessRetry
             $actions[] = 'booking_email';
         }
 
-        if ($this->canResendResumeEmail($enquiry)) {
-            $actions[] = 'resend_resume_email';
-        }
-
-        if ($this->canResendBookingEmail($enquiry)) {
-            $actions[] = 'resend_booking_email';
-        }
-
         if ($this->canRetryXeroInvoice($enquiry)) {
             $actions[] = 'xero_invoice';
         }
@@ -77,11 +69,8 @@ class EnquiryProcessRetry
 
     public function canRetryBookingEmail(Enquiry $enquiry): bool
     {
-        return $enquiry->status === 'quote_sent'
-            && $enquiry->xero_quote_sent_at !== null
-            && $enquiry->booking_email_sent_at === null
-            && ! $this->hasSuccessfulEvent($enquiry, 'booking_email_sent')
-            && ($this->isTrainerFlow($enquiry) || $this->isOrganisationTrainingFlow($enquiry));
+        // Booking-details email is disabled (quote email already links to the booking form).
+        return false;
     }
 
     public function canResendResumeEmail(Enquiry $enquiry): bool
@@ -93,15 +82,8 @@ class EnquiryProcessRetry
 
     public function canResendBookingEmail(Enquiry $enquiry): bool
     {
-        return trim((string) $enquiry->email) !== ''
-            && trim((string) $enquiry->name) !== ''
-            && brevoApiKey() !== ''
-            && (
-                $enquiry->booking_email_sent_at !== null
-                || $enquiry->xero_quote_sent_at !== null
-                || in_array($enquiry->status, ['quote_sent', 'quote_accepted'], true)
-                || $enquiry->canStaffProgressBooking()
-            );
+        // Booking-details email is disabled (quote email already links to the booking form).
+        return false;
     }
 
     public function canRetryXeroInvoice(Enquiry $enquiry): bool
@@ -124,14 +106,9 @@ class EnquiryProcessRetry
         }
 
         $quoteData = $this->buildQuoteEmailData($enquiry);
-        $token = enquiryLoggerEnsureResumeToken((int) $enquiry->id);
-        $bookingUrl = buildBookingDetailsUrl((int) $enquiry->id, $token);
-        if ($bookingUrl === '') {
-            throw new RuntimeException(
-                'Form base URL is not configured. Set Form base URL in Admin → Settings to your public site URL.'
-            );
-        }
-        $quoteData['acceptQuoteUrl'] = $bookingUrl;
+        $quoteData['enquiryId'] = (int) $enquiry->id;
+        $quoteData['resumeToken'] = enquiryLoggerEnsureResumeToken((int) $enquiry->id);
+        $quoteData['email'] = (string) $enquiry->email;
 
         try {
             $result = sendQuoteToClient((string) $enquiry->email, (string) $enquiry->name, $quoteData);
@@ -500,8 +477,12 @@ class EnquiryProcessRetry
             $payload['quoteValue'] = $payload['quoteValue'] ?? '';
         }
 
-        if ($enquiry->date_not_sure && ! isset($payload['dateNotSure'])) {
-            $payload['dateNotSure'] = '1';
+        if ($enquiry->date_not_sure) {
+            $payload['dateNotSure'] = 'on';
+            unset($payload['preferredDateTime']);
+        } elseif (! isset($payload['dateNotSure']) && filled($enquiry->preferred_date_time)) {
+            unset($payload['dateNotSure']);
+            $payload['preferredDateTime'] = $enquiry->preferred_date_time;
         }
 
         if ($enquiry->booking_via_company && ! isset($payload['bookingViaCompany'])) {

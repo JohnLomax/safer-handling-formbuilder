@@ -291,25 +291,256 @@ function xeroApiRequest(
 
 function xeroApiErrorMessage(array $body, string $fallback): string
 {
-    if (!empty($body['Message']) && is_string($body['Message'])) {
-        return trim($body['Message']);
+    $validationMessages = [];
+    foreach ($body['Elements'] ?? [] as $element) {
+        if (!is_array($element)) {
+            continue;
+        }
+        foreach ($element['ValidationErrors'] ?? [] as $error) {
+            $message = trim((string)($error['Message'] ?? ''));
+            if ($message !== '') {
+                $validationMessages[] = $message;
+            }
+        }
+        foreach ($element['LineItems'] ?? [] as $line) {
+            if (!is_array($line)) {
+                continue;
+            }
+            foreach ($line['ValidationErrors'] ?? [] as $error) {
+                $message = trim((string)($error['Message'] ?? ''));
+                if ($message !== '') {
+                    $validationMessages[] = $message;
+                }
+            }
+        }
+    }
+    if ($validationMessages !== []) {
+        return implode(' ', array_unique($validationMessages));
     }
 
     if (!empty($body['Detail']) && is_string($body['Detail'])) {
         return trim($body['Detail']);
     }
 
-    if (!empty($body['Elements'][0]['ValidationErrors'][0]['Message'])) {
-        return trim((string)$body['Elements'][0]['ValidationErrors'][0]['Message']);
+    if (!empty($body['Message']) && is_string($body['Message'])) {
+        return trim($body['Message']);
     }
 
     return $fallback;
 }
 
 /**
+ * Quotes often return LineAmountTypes in UPPERCASE; Invoices require title case.
+ */
+function xeroNormalizeLineAmountTypes(string $value): string
+{
+    return match (strtoupper(trim($value))) {
+        'INCLUSIVE' => 'Inclusive',
+        'NOTAX' => 'NoTax',
+        default => 'Exclusive',
+    };
+}
+
+/**
+ * True when address parts are enough for a Xero contact address.
+ *
+ * @param array<string, string> $address
+ */
+function xeroAddressHasContent(array $address): bool
+{
+    return trim((string)($address['addressLine1'] ?? '')) !== ''
+        || trim((string)($address['addressPostcode'] ?? '')) !== '';
+}
+
+/**
+ * Normalise structured address fields used by the enquiry form / Monday helpers.
+ *
+ * @param array<string, mixed> $address
+ * @return array{addressLine1:string,addressLine2:string,addressTown:string,addressPostcode:string,country:string}
+ */
+function xeroNormalizeAddressParts(array $address): array
+{
+    $country = trim((string)($address['country'] ?? $address['addressCountry'] ?? ''));
+    if ($country === '') {
+        $country = 'United Kingdom';
+    }
+
+    return [
+        'addressLine1' => trim((string)($address['addressLine1'] ?? '')),
+        'addressLine2' => trim((string)($address['addressLine2'] ?? '')),
+        'addressTown' => trim((string)($address['addressTown'] ?? $address['city'] ?? '')),
+        'addressPostcode' => strtoupper(trim((string)($address['addressPostcode'] ?? $address['postalCode'] ?? ''))),
+        'country' => $country,
+    ];
+}
+
+/**
+ * Parse a free-text booking invoice/venue address into structured parts.
+ *
+ * @return array{addressLine1:string,addressLine2:string,addressTown:string,addressPostcode:string,country:string}
+ */
+function xeroAddressPartsFromFreeText(string $text): array
+{
+    $text = trim(str_replace(["\r\n", "\r"], "\n", $text));
+    if ($text === '') {
+        return xeroNormalizeAddressParts([]);
+    }
+
+    $lines = array_values(array_filter(array_map('trim', explode("\n", $text)), static function (string $line): bool {
+        return $line !== '';
+    }));
+    if ($lines === []) {
+        // Single-line address separated by commas.
+        $lines = array_values(array_filter(array_map('trim', explode(',', $text)), static function (string $line): bool {
+            return $line !== '';
+        }));
+    }
+
+    $postcode = '';
+    $postcodePattern = '/\b([A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2})\b/i';
+    for ($i = count($lines) - 1; $i >= 0; $i--) {
+        if (preg_match($postcodePattern, $lines[$i], $matches)) {
+            $postcode = strtoupper(preg_replace('/\s+/', ' ', trim($matches[1])) ?? '');
+            $lines[$i] = trim(preg_replace($postcodePattern, '', $lines[$i]) ?? '');
+            if ($lines[$i] === '') {
+                array_splice($lines, $i, 1);
+            }
+            break;
+        }
+    }
+
+    $town = '';
+    if (count($lines) >= 2) {
+        $town = (string)array_pop($lines);
+    }
+
+    $line1 = $lines[0] ?? ($postcode !== '' ? $postcode : $text);
+    $line2 = $lines[1] ?? '';
+    if (count($lines) > 2) {
+        $line2 = trim(implode(', ', array_slice($lines, 1)));
+    }
+
+    return xeroNormalizeAddressParts([
+        'addressLine1' => $line1,
+        'addressLine2' => $line2,
+        'addressTown' => $town,
+        'addressPostcode' => $postcode,
+        'country' => 'United Kingdom',
+    ]);
+}
+
+/**
+ * Prefer invoice address, then venue address, from booking details.
+ *
+ * @param array<string, mixed> $bookingDetails
+ * @return array{addressLine1:string,addressLine2:string,addressTown:string,addressPostcode:string,country:string}
+ */
+function xeroAddressPartsFromBookingDetails(array $bookingDetails): array
+{
+    $invoiceAddress = trim((string)($bookingDetails['invoiceAddress'] ?? ''));
+    if ($invoiceAddress !== '') {
+        return xeroAddressPartsFromFreeText($invoiceAddress);
+    }
+
+    $venueAddress = trim((string)($bookingDetails['venueAddress'] ?? ''));
+    if ($venueAddress !== '') {
+        return xeroAddressPartsFromFreeText($venueAddress);
+    }
+
+    return xeroNormalizeAddressParts($bookingDetails);
+}
+
+/**
+ * Build Xero contact Addresses (POBOX is used on tax invoices).
+ *
+ * @param array<string, mixed> $address
+ * @return list<array<string, string>>
+ */
+function xeroContactAddressesPayload(array $address): array
+{
+    $parts = xeroNormalizeAddressParts($address);
+    if (!xeroAddressHasContent($parts)) {
+        return [];
+    }
+
+    $line1 = $parts['addressLine1'] !== '' ? $parts['addressLine1'] : $parts['addressPostcode'];
+    $entry = [
+        'AddressType' => 'POBOX',
+        'AddressLine1' => substr($line1, 0, 500),
+        'Country' => substr($parts['country'], 0, 50),
+    ];
+    if ($parts['addressLine2'] !== '') {
+        $entry['AddressLine2'] = substr($parts['addressLine2'], 0, 500);
+    }
+    if ($parts['addressTown'] !== '') {
+        $entry['City'] = substr($parts['addressTown'], 0, 255);
+    }
+    if ($parts['addressPostcode'] !== '') {
+        $entry['PostalCode'] = substr($parts['addressPostcode'], 0, 50);
+    }
+
+    // Mirror onto STREET so both contact address slots are populated.
+    $street = $entry;
+    $street['AddressType'] = 'STREET';
+
+    return [$entry, $street];
+}
+
+/**
+ * Update an existing Xero contact with billing address (and optional phone).
+ *
+ * @param array<string, mixed> $address
+ */
+function xeroEnsureContactAddress(
+    string $contactId,
+    array $address,
+    string $name = '',
+    string $email = '',
+    string $phone = ''
+): void {
+    $contactId = trim($contactId);
+    if ($contactId === '') {
+        return;
+    }
+
+    $addresses = xeroContactAddressesPayload($address);
+    if ($addresses === []) {
+        return;
+    }
+
+    $contact = [
+        'ContactID' => $contactId,
+        'Addresses' => $addresses,
+    ];
+    $name = trim($name);
+    if ($name !== '') {
+        $contact['Name'] = $name;
+    }
+    $email = trim($email);
+    if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $contact['EmailAddress'] = $email;
+    }
+    $phone = trim($phone);
+    if ($phone !== '') {
+        $contact['Phones'] = [[
+            'PhoneType' => 'DEFAULT',
+            'PhoneNumber' => substr($phone, 0, 50),
+        ]];
+    }
+
+    $resp = xeroApiRequest('POST', 'Contacts', [
+        'Contacts' => [$contact],
+    ]);
+    if ($resp['status'] >= 400) {
+        throw new RuntimeException(xeroApiErrorMessage($resp['body'], 'Could not update Xero contact address.'));
+    }
+}
+
+/**
+ * @param array<string, mixed> $address Optional structured address for tax invoice compliance.
  * @return array{ContactID:string,Name:string}
  */
-function xeroFindOrCreateContact(string $name, string $email): array
+function xeroFindOrCreateContact(string $name, string $email, array $address = []): array
 {
     $name = trim($name);
     $email = trim($email);
@@ -317,6 +548,7 @@ function xeroFindOrCreateContact(string $name, string $email): array
         throw new RuntimeException('A valid contact name and email are required for Xero.');
     }
 
+    $addresses = xeroContactAddressesPayload($address);
     $where = 'EmailAddress!=null&&EmailAddress=="' . str_replace('"', '', $email) . '"';
     $existing = xeroApiRequest('GET', 'Contacts', null, [
         'where' => $where,
@@ -326,23 +558,31 @@ function xeroFindOrCreateContact(string $name, string $email): array
     if ($existing['status'] < 400) {
         $contacts = $existing['body']['Contacts'] ?? [];
         if (is_array($contacts) && isset($contacts[0]['ContactID'])) {
+            $contactId = (string)$contacts[0]['ContactID'];
+            if ($addresses !== []) {
+                xeroEnsureContactAddress($contactId, $address, $name, $email);
+            }
+
             return [
-                'ContactID' => (string)$contacts[0]['ContactID'],
+                'ContactID' => $contactId,
                 'Name' => (string)($contacts[0]['Name'] ?? $name),
             ];
         }
     }
 
-    $payload = [
-        'Contacts' => [[
-            'Name' => $name,
-            'EmailAddress' => $email,
-            'FirstName' => $name,
-            'IsCustomer' => true,
-        ]],
+    $contactPayload = [
+        'Name' => $name,
+        'EmailAddress' => $email,
+        'FirstName' => $name,
+        'IsCustomer' => true,
     ];
+    if ($addresses !== []) {
+        $contactPayload['Addresses'] = $addresses;
+    }
 
-    $created = xeroApiRequest('POST', 'Contacts', $payload);
+    $created = xeroApiRequest('POST', 'Contacts', [
+        'Contacts' => [$contactPayload],
+    ]);
     if ($created['status'] >= 400 || empty($created['body']['Contacts'][0]['ContactID'])) {
         throw new RuntimeException(xeroApiErrorMessage($created['body'], 'Could not create Xero contact.'));
     }
@@ -417,23 +657,23 @@ function xeroBuildQuoteLineFromEnquiry(array $quoteData): array
         ? ' (' . trim($format . ($courseStyle !== '' ? ' · ' . $courseStyle : '')) . ')'
         : ''));
 
-    $netRaw = trim((string)($quoteData['quoteValue'] ?? ''));
-    if ($netRaw === '' && !empty($quoteData['quoteDisplay'])) {
-        $netRaw = preg_replace('/[^0-9.\-]/', '', (string)$quoteData['quoteDisplay']) ?? '';
+    $grossRaw = trim((string)($quoteData['quoteValue'] ?? ''));
+    if ($grossRaw === '' && !empty($quoteData['quoteDisplay'])) {
+        $grossRaw = preg_replace('/[^0-9.\-]/', '', (string)$quoteData['quoteDisplay']) ?? '';
     }
-    if ($netRaw === '' || !is_numeric($netRaw)) {
+    if ($grossRaw === '' || !is_numeric($grossRaw)) {
         throw new RuntimeException('Quote amount is missing or invalid for Xero.');
     }
 
-    // Form quoteValue is the amount shown before "+ VAT" (ex-VAT / net).
-    $net = round((float)$netRaw, 2);
-    if ($net <= 0) {
+    // Form quoteValue is the customer-facing total including VAT (and travel).
+    $gross = round((float)$grossRaw, 2);
+    if ($gross <= 0) {
         throw new RuntimeException('Quote amount must be greater than zero for Xero.');
     }
 
     $rate = xeroVatRate();
-    $vat = round($net * ($rate / 100), 2);
-    $gross = round($net + $vat, 2);
+    $net = round($gross / (1 + ($rate / 100)), 2);
+    $vat = round($gross - $net, 2);
 
     $descriptionParts = [];
     if ($attendees !== '') {
@@ -442,8 +682,9 @@ function xeroBuildQuoteLineFromEnquiry(array $quoteData): array
     if ($trainingType !== '') {
         $descriptionParts[] = 'Training: ' . $trainingType;
     }
-    $descriptionParts[] = 'Cost (ex. VAT): ' . number_format($net, 2, '.', '');
-    $descriptionParts[] = 'Total (inc. VAT): ' . number_format($gross, 2, '.', '');
+    $descriptionParts[] = 'Total (inc. VAT & travel): ' . number_format($gross, 2, '.', '');
+    $descriptionParts[] = 'Net: ' . number_format($net, 2, '.', '');
+    $descriptionParts[] = 'VAT (' . rtrim(rtrim(number_format($rate, 2, '.', ''), '0'), '.') . '%): ' . number_format($vat, 2, '.', '');
     $description = implode(' | ', $descriptionParts);
 
     $itemCode = trim((string)($quoteData['xeroItemCode'] ?? ''));
@@ -482,15 +723,15 @@ function xeroBuildQuoteLineFromEnquiry(array $quoteData): array
 function xeroCreateQuote(string $contactId, array $quoteData): array
 {
     $line = xeroBuildQuoteLineFromEnquiry($quoteData);
-    // Form amounts are ex-VAT. Send Exclusive so Xero shows:
-    // Subtotal = net, VAT = 20%, Total = net + VAT.
+    // Form amounts are VAT-inclusive. Send Inclusive so Xero Total = form total
+    // (e.g. £1200 inc. VAT), with net/VAT calculated by Xero.
     $lineItem = [
         'Description' => $line['description'],
         'Quantity' => 1,
-        'UnitAmount' => $line['net'],
+        'UnitAmount' => $line['gross'],
         'AccountCode' => xeroSalesAccountCode(),
         'TaxType' => 'OUTPUT2',
-        'LineAmount' => $line['net'],
+        'LineAmount' => $line['gross'],
     ];
 
     if (is_array($line['item'])) {
@@ -501,8 +742,8 @@ function xeroCreateQuote(string $contactId, array $quoteData): array
             $lineItem['Item'] = ['ItemID' => (string)$line['item']['ItemID']];
         }
         // Keep UnitAmount from enquiry so price can differ from the catalogue item.
-        $lineItem['UnitAmount'] = $line['net'];
-        $lineItem['LineAmount'] = $line['net'];
+        $lineItem['UnitAmount'] = $line['gross'];
+        $lineItem['LineAmount'] = $line['gross'];
     }
 
     $title = trim((string)($quoteData['course'] ?? 'Training Quote'));
@@ -518,7 +759,7 @@ function xeroCreateQuote(string $contactId, array $quoteData): array
         'ExpiryDate' => gmdate('Y-m-d', strtotime('+30 days')),
         'Title' => $title,
         'Summary' => 'Safer Handling training quote',
-        'LineAmountTypes' => 'Exclusive',
+        'LineAmountTypes' => 'Inclusive',
         'LineItems' => [$lineItem],
         'Status' => 'DRAFT',
         'CurrencyCode' => 'GBP',
@@ -543,6 +784,8 @@ function xeroCreateQuote(string $contactId, array $quoteData): array
     $sentResp = xeroApiRequest('POST', 'Quotes', [
         'Quotes' => [[
             'QuoteID' => $quoteId,
+            'Contact' => ['ContactID' => $contactId],
+            'Date' => (string)($quote['DateString'] ?? gmdate('Y-m-d')),
             'Status' => 'SENT',
         ]],
     ]);
@@ -592,7 +835,7 @@ function xeroDownloadQuotePdf(string $quoteId, string $quoteNumber = ''): array
 }
 
 /**
- * Create/find contact and create quote in Xero (ex-VAT + VAT). Returns PDF bytes for emailing.
+ * Create/find contact and create quote in Xero (form total VAT-inclusive). Returns PDF bytes for emailing.
  *
  * @param array<string, mixed> $quoteData
  * @return array{
@@ -607,7 +850,7 @@ function xeroSendQuoteToClient(string $name, string $email, array $quoteData): a
         throw new RuntimeException('Xero quote sending is disabled.');
     }
 
-    $contact = xeroFindOrCreateContact($name, $email);
+    $contact = xeroFindOrCreateContact($name, $email, $quoteData);
     $quote = xeroCreateQuote($contact['ContactID'], $quoteData);
     $pdf = xeroDownloadQuotePdf($quote['QuoteID'], $quote['QuoteNumber'] ?? '');
 
@@ -646,9 +889,38 @@ function xeroMarkQuoteAccepted(string $quoteId): void
         return;
     }
 
+    $quote = xeroGetQuote($quoteId);
+    $contactId = trim((string)($quote['Contact']['ContactID'] ?? ''));
+    $date = trim((string)($quote['DateString'] ?? ''));
+    if ($date === '') {
+        $date = gmdate('Y-m-d');
+    }
+    $status = strtoupper(trim((string)($quote['Status'] ?? '')));
+
+    // Xero only accepts ACCEPTED from SENT (not directly from DRAFT).
+    if ($status === 'DRAFT') {
+        $sentResp = xeroApiRequest('POST', 'Quotes', [
+            'Quotes' => [[
+                'QuoteID' => $quoteId,
+                'Contact' => ['ContactID' => $contactId],
+                'Date' => $date,
+                'Status' => 'SENT',
+            ]],
+        ]);
+        if ($sentResp['status'] >= 400) {
+            throw new RuntimeException(xeroApiErrorMessage($sentResp['body'], 'Could not mark Xero quote as sent.'));
+        }
+    }
+
+    if (in_array($status, ['ACCEPTED', 'INVOICED'], true)) {
+        return;
+    }
+
     $resp = xeroApiRequest('POST', 'Quotes', [
         'Quotes' => [[
             'QuoteID' => $quoteId,
+            'Contact' => ['ContactID' => $contactId],
+            'Date' => $date,
             'Status' => 'ACCEPTED',
         ]],
     ]);
@@ -659,7 +931,9 @@ function xeroMarkQuoteAccepted(string $quoteId): void
 }
 
 /**
- * Map Xero quote line items into invoice line items.
+ * Map Xero quote line items into invoice line items (faithful quote → invoice conversion).
+ * Uses Quantity + UnitAmount + TaxType so Xero recalculates the same totals as the quote.
+ * Omits ItemCode so catalogue defaults cannot change price/tax.
  *
  * @param array<int, array<string, mixed>> $quoteLines
  * @return list<array<string, mixed>>
@@ -674,40 +948,52 @@ function xeroInvoiceLineItemsFromQuoteLines(array $quoteLines): array
 
         $description = trim((string)($quoteLine['Description'] ?? ''));
         $quantity = (float)($quoteLine['Quantity'] ?? 0);
-        $unitAmount = isset($quoteLine['UnitAmount']) ? (float)$quoteLine['UnitAmount'] : null;
-        if ($description === '' && ($unitAmount === null || $quantity <= 0)) {
+        $unitAmount = isset($quoteLine['UnitAmount']) && is_numeric($quoteLine['UnitAmount'])
+            ? round((float)$quoteLine['UnitAmount'], 4)
+            : null;
+        $lineAmount = isset($quoteLine['LineAmount']) && is_numeric($quoteLine['LineAmount'])
+            ? round((float)$quoteLine['LineAmount'], 4)
+            : null;
+
+        if ($description === '' && $unitAmount === null && $lineAmount === null) {
+            continue;
+        }
+
+        if ($quantity <= 0) {
+            $quantity = 1;
+        }
+
+        // Prefer UnitAmount; fall back to LineAmount / Quantity when UnitAmount is missing.
+        if ($unitAmount === null && $lineAmount !== null) {
+            $unitAmount = round($lineAmount / $quantity, 4);
+        }
+        if ($unitAmount === null) {
             continue;
         }
 
         $line = [
             'Description' => $description !== '' ? $description : 'Training',
-            'Quantity' => $quantity > 0 ? $quantity : 1,
+            'Quantity' => $quantity,
+            'UnitAmount' => $unitAmount,
+            'AccountCode' => !empty($quoteLine['AccountCode'])
+                ? (string)$quoteLine['AccountCode']
+                : xeroSalesAccountCode(),
+            'TaxType' => !empty($quoteLine['TaxType'])
+                ? (string)$quoteLine['TaxType']
+                : 'OUTPUT2',
         ];
 
-        if ($unitAmount !== null) {
-            $line['UnitAmount'] = $unitAmount;
-        }
-        if (isset($quoteLine['LineAmount']) && is_numeric($quoteLine['LineAmount'])) {
-            $line['LineAmount'] = (float)$quoteLine['LineAmount'];
-        }
-        if (!empty($quoteLine['AccountCode'])) {
-            $line['AccountCode'] = (string)$quoteLine['AccountCode'];
-        } else {
-            $line['AccountCode'] = xeroSalesAccountCode();
-        }
-        if (!empty($quoteLine['TaxType'])) {
-            $line['TaxType'] = (string)$quoteLine['TaxType'];
-        } else {
-            $line['TaxType'] = 'OUTPUT2';
-        }
-        if (!empty($quoteLine['ItemCode'])) {
-            $line['ItemCode'] = (string)$quoteLine['ItemCode'];
-        }
-        if (isset($quoteLine['DiscountRate']) && is_numeric($quoteLine['DiscountRate'])) {
-            $line['DiscountRate'] = (float)$quoteLine['DiscountRate'];
-        }
-        if (isset($quoteLine['DiscountAmount']) && is_numeric($quoteLine['DiscountAmount'])) {
-            $line['DiscountAmount'] = (float)$quoteLine['DiscountAmount'];
+        // Copy only one discount field so Xero cannot double-apply.
+        $discountRate = isset($quoteLine['DiscountRate']) && is_numeric($quoteLine['DiscountRate'])
+            ? (float)$quoteLine['DiscountRate']
+            : 0.0;
+        $discountAmount = isset($quoteLine['DiscountAmount']) && is_numeric($quoteLine['DiscountAmount'])
+            ? (float)$quoteLine['DiscountAmount']
+            : 0.0;
+        if ($discountRate > 0) {
+            $line['DiscountRate'] = $discountRate;
+        } elseif ($discountAmount > 0) {
+            $line['DiscountAmount'] = $discountAmount;
         }
 
         $lines[] = $line;
@@ -721,10 +1007,82 @@ function xeroInvoiceLineItemsFromQuoteLines(array $quoteLines): array
 }
 
 /**
- * Create a DRAFT sales invoice from an existing Xero quote. Does not email or authorise it.
+ * True when quote and invoice money fields match within 1p.
+ */
+function xeroMoneyMatches(float $a, float $b): bool
+{
+    return abs(round($a, 2) - round($b, 2)) < 0.015;
+}
+
+/**
+ * Delete a draft invoice (used when totals do not match the source quote).
+ */
+function xeroDeleteDraftInvoice(string $invoiceId): void
+{
+    $invoiceId = trim($invoiceId);
+    if ($invoiceId === '') {
+        return;
+    }
+
+    $resp = xeroApiRequest('DELETE', 'Invoices/' . rawurlencode($invoiceId));
+    if ($resp['status'] >= 400) {
+        throw new RuntimeException(xeroApiErrorMessage($resp['body'], 'Could not delete mismatched Xero draft invoice.'));
+    }
+}
+
+/**
+ * Mark an accepted quote as INVOICED after a draft invoice has been created from it.
+ */
+function xeroMarkQuoteInvoiced(string $quoteId): void
+{
+    $quoteId = trim($quoteId);
+    if ($quoteId === '') {
+        return;
+    }
+
+    $quote = xeroGetQuote($quoteId);
+    $status = strtoupper(trim((string)($quote['Status'] ?? '')));
+    if ($status === 'INVOICED') {
+        return;
+    }
+
+    if ($status !== 'ACCEPTED') {
+        xeroMarkQuoteAccepted($quoteId);
+        $quote = xeroGetQuote($quoteId);
+        $status = strtoupper(trim((string)($quote['Status'] ?? '')));
+    }
+
+    if ($status === 'INVOICED') {
+        return;
+    }
+
+    $contactId = trim((string)($quote['Contact']['ContactID'] ?? ''));
+    $date = trim((string)($quote['DateString'] ?? ''));
+    if ($date === '') {
+        $date = gmdate('Y-m-d');
+    }
+
+    $resp = xeroApiRequest('POST', 'Quotes', [
+        'Quotes' => [[
+            'QuoteID' => $quoteId,
+            'Contact' => ['ContactID' => $contactId],
+            'Date' => $date,
+            'Status' => 'INVOICED',
+        ]],
+    ]);
+
+    if ($resp['status'] >= 400) {
+        throw new RuntimeException(xeroApiErrorMessage($resp['body'], 'Could not mark Xero quote as invoiced.'));
+    }
+}
+
+/**
+ * Create a DRAFT sales invoice by converting an existing Xero quote.
+ * Copies quote line amounts, verifies totals match, then marks the quote INVOICED.
+ * Does not email or authorise the invoice.
  *
  * @param array<string, mixed> $bookingDetails
- * @return array{InvoiceID:string,InvoiceNumber:string,Status:string,Total:float,TotalTax:float,SubTotal:float,QuoteID:string,QuoteNumber:string}
+ * @return array{InvoiceID:string,InvoiceNumber:string,Status:string,Total:float,TotalTax:float,SubTotal:float,QuoteID:string,QuoteNumber:string,QuoteStatus:string}
  */
 function xeroCreateDraftInvoiceFromQuote(string $quoteId, array $bookingDetails = []): array
 {
@@ -743,11 +1101,37 @@ function xeroCreateDraftInvoiceFromQuote(string $quoteId, array $bookingDetails 
     if (!in_array($quoteStatus, ['ACCEPTED', 'INVOICED'], true)) {
         try {
             xeroMarkQuoteAccepted($quoteId);
-            $quoteStatus = 'ACCEPTED';
         } catch (Throwable $e) {
             // Quote may already be accepted/invoiced; continue with invoice creation.
         }
+        // Reload so line items / totals are current after the status change.
+        $quote = xeroGetQuote($quoteId);
+        $quoteStatus = strtoupper(trim((string)($quote['Status'] ?? '')));
+        $contactId = trim((string)($quote['Contact']['ContactID'] ?? $contactId));
+        $quoteNumber = trim((string)($quote['QuoteNumber'] ?? $quoteNumber));
     }
+
+    $quoteSubTotal = round((float)($quote['SubTotal'] ?? 0), 2);
+    $quoteTax = round((float)($quote['TotalTax'] ?? 0), 2);
+    $quoteTotal = round((float)($quote['Total'] ?? 0), 2);
+    if ($quoteTotal <= 0) {
+        throw new RuntimeException('Xero quote total is missing or zero; cannot create a matching invoice.');
+    }
+
+    // Tax invoices require a contact postal address — update from booking details first.
+    $address = xeroAddressPartsFromBookingDetails($bookingDetails);
+    if (!xeroAddressHasContent($address)) {
+        throw new RuntimeException(
+            'Contact address is required for tax invoice compliance. Add an invoice address on the booking form before creating the invoice.'
+        );
+    }
+    xeroEnsureContactAddress(
+        $contactId,
+        $address,
+        trim((string)($bookingDetails['invoiceName'] ?? $bookingDetails['bookerName'] ?? '')),
+        trim((string)($bookingDetails['invoiceEmail'] ?? $bookingDetails['email'] ?? '')),
+        trim((string)($bookingDetails['invoicePhone'] ?? $bookingDetails['phone'] ?? ''))
+    );
 
     $lineItems = xeroInvoiceLineItemsFromQuoteLines(
         is_array($quote['LineItems'] ?? null) ? $quote['LineItems'] : []
@@ -768,7 +1152,7 @@ function xeroCreateDraftInvoiceFromQuote(string $quoteId, array $bookingDetails 
         'Contact' => ['ContactID' => $contactId],
         'Date' => gmdate('Y-m-d'),
         'DueDate' => gmdate('Y-m-d', strtotime('+30 days')),
-        'LineAmountTypes' => (string)($quote['LineAmountTypes'] ?? 'Exclusive'),
+        'LineAmountTypes' => xeroNormalizeLineAmountTypes((string)($quote['LineAmountTypes'] ?? 'Inclusive')),
         'LineItems' => $lineItems,
         'Status' => 'DRAFT',
         'CurrencyCode' => (string)($quote['CurrencyCode'] ?? 'GBP'),
@@ -795,17 +1179,64 @@ function xeroCreateDraftInvoiceFromQuote(string $quoteId, array $bookingDetails 
     }
 
     $invoice = $resp['body']['Invoices'][0];
+    $invoiceId = (string)$invoice['InvoiceID'];
+    $invoiceSubTotal = round((float)($invoice['SubTotal'] ?? 0), 2);
+    $invoiceTax = round((float)($invoice['TotalTax'] ?? 0), 2);
+    $invoiceTotal = round((float)($invoice['Total'] ?? 0), 2);
+
+    if (
+        !xeroMoneyMatches($invoiceTotal, $quoteTotal)
+        || !xeroMoneyMatches($invoiceSubTotal, $quoteSubTotal)
+        || !xeroMoneyMatches($invoiceTax, $quoteTax)
+    ) {
+        try {
+            xeroDeleteDraftInvoice($invoiceId);
+        } catch (Throwable $deleteError) {
+            throw new RuntimeException(
+                'Draft invoice total (£'
+                . number_format($invoiceTotal, 2)
+                . ') does not match quote total (£'
+                . number_format($quoteTotal, 2)
+                . '), and the mismatched draft could not be deleted: '
+                . $deleteError->getMessage()
+            );
+        }
+
+        throw new RuntimeException(
+            'Draft invoice total (£'
+            . number_format($invoiceTotal, 2)
+            . ') does not match quote '
+            . ($quoteNumber !== '' ? $quoteNumber . ' ' : '')
+            . 'total (£'
+            . number_format($quoteTotal, 2)
+            . '). The mismatched draft invoice was removed.'
+        );
+    }
+
+    // Mirror Xero UI conversion: quote moves to Invoiced once the invoice exists.
+    if ($quoteStatus !== 'INVOICED') {
+        try {
+            xeroMarkQuoteInvoiced($quoteId);
+            $quoteStatus = 'INVOICED';
+        } catch (Throwable $e) {
+            // Invoice is already correct; leave quote status as-is if Xero rejects the update.
+            $quoteStatus = strtoupper(trim((string)($quote['Status'] ?? $quoteStatus)));
+        }
+    }
 
     return [
-        'InvoiceID' => (string)$invoice['InvoiceID'],
+        'InvoiceID' => $invoiceId,
         'InvoiceNumber' => (string)($invoice['InvoiceNumber'] ?? ''),
         'Status' => (string)($invoice['Status'] ?? 'DRAFT'),
-        'Total' => (float)($invoice['Total'] ?? 0),
-        'TotalTax' => (float)($invoice['TotalTax'] ?? 0),
-        'SubTotal' => (float)($invoice['SubTotal'] ?? 0),
+        'Total' => $invoiceTotal,
+        'TotalTax' => $invoiceTax,
+        'SubTotal' => $invoiceSubTotal,
         'QuoteID' => $quoteId,
         'QuoteNumber' => $quoteNumber,
         'QuoteStatus' => $quoteStatus,
+        'QuoteTotal' => $quoteTotal,
+        'QuoteTotalTax' => $quoteTax,
+        'QuoteSubTotal' => $quoteSubTotal,
     ];
 }
 
@@ -829,7 +1260,7 @@ function xeroMaybeCreateDraftInvoiceAfterQuoteAccepted(int $enquiryId, array $bo
 
     $pdo = enquiryLoggerPdo();
     $stmt = $pdo->prepare(
-        'SELECT xero_quote_id, xero_quote_number, xero_contact_id, name, email
+        'SELECT xero_quote_id, xero_quote_number, xero_contact_id, name, email, form_data_json
          FROM enquiries WHERE id = :id LIMIT 1'
     );
     $stmt->execute([':id' => $enquiryId]);
@@ -849,6 +1280,32 @@ function xeroMaybeCreateDraftInvoiceAfterQuoteAccepted(int $enquiryId, array $bo
         return null;
     }
 
+    // Prefer booking invoice address; fall back to enquiry form address.
+    $address = xeroAddressPartsFromBookingDetails($bookingDetails);
+    if (!xeroAddressHasContent($address)) {
+        $formData = [];
+        $rawForm = trim((string)($row['form_data_json'] ?? ''));
+        if ($rawForm !== '') {
+            $decoded = json_decode($rawForm, true);
+            if (is_array($decoded)) {
+                $formData = $decoded;
+            }
+        }
+        require_once __DIR__ . '/monday_helpers.php';
+        $address = xeroNormalizeAddressParts(mondayAddressFromPost($formData));
+    }
+    if (xeroAddressHasContent($address)) {
+        $bookingDetails = array_merge($bookingDetails, $address);
+        if (trim((string)($bookingDetails['invoiceAddress'] ?? '')) === '') {
+            $bookingDetails['invoiceAddress'] = trim(implode("\n", array_filter([
+                $address['addressLine1'] ?? '',
+                $address['addressLine2'] ?? '',
+                $address['addressTown'] ?? '',
+                $address['addressPostcode'] ?? '',
+            ])));
+        }
+    }
+
     try {
         $invoice = xeroCreateDraftInvoiceFromQuote($quoteId, $bookingDetails);
         enquiryLoggerMarkXeroInvoiceCreated(
@@ -859,14 +1316,22 @@ function xeroMaybeCreateDraftInvoiceAfterQuoteAccepted(int $enquiryId, array $bo
         enquiryLoggerEvent(
             $enquiryId,
             'xero_invoice_created',
-            'Draft invoice created in Xero from the accepted quote (not sent).',
+            'Draft invoice created in Xero from the accepted quote (totals matched; not sent).',
             [
                 'channel' => 'xero',
                 'xero_quote_id' => $invoice['QuoteID'],
                 'xero_quote_number' => $invoice['QuoteNumber'],
+                'xero_quote_status' => $invoice['QuoteStatus'] ?? null,
                 'xero_invoice_id' => $invoice['InvoiceID'],
                 'xero_invoice_number' => $invoice['InvoiceNumber'],
                 'xero_invoice_status' => $invoice['Status'],
+                'quote_subtotal' => $invoice['QuoteSubTotal'] ?? null,
+                'quote_vat' => $invoice['QuoteTotalTax'] ?? null,
+                'quote_total' => $invoice['QuoteTotal'] ?? null,
+                'invoice_subtotal' => $invoice['SubTotal'],
+                'invoice_vat' => $invoice['TotalTax'],
+                'invoice_total' => $invoice['Total'],
+                'totals_matched' => true,
                 'sent' => false,
             ]
         );

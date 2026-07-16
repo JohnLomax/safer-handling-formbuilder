@@ -210,8 +210,7 @@ function enquiryLoggerCreateInitial(array $post): int
 
 /**
  * Reuse an in-progress enquiry for the same email when possible.
- * Never reuse a row that already completed quote/lead emails — a new enquiry
- * with the same address must get a fresh row so emails send again.
+ * Brand-new sessions without an enquiryId create a fresh row.
  *
  * @param array<string, mixed> $post
  */
@@ -298,6 +297,7 @@ function enquiryLoggerGetForResume(int $enquiryId, string $token): ?array
              :status_contacted,
              :status_submitted,
              :status_quote_sent,
+             :status_quote_accepted,
              :status_failed
            )
          LIMIT 1'
@@ -309,6 +309,7 @@ function enquiryLoggerGetForResume(int $enquiryId, string $token): ?array
         ':status_contacted' => 'contacted',
         ':status_submitted' => 'submitted',
         ':status_quote_sent' => 'quote_sent',
+        ':status_quote_accepted' => 'quote_accepted',
         ':status_failed' => 'failed',
     ]);
     $row = $stmt->fetch();
@@ -356,9 +357,28 @@ function enquiryLoggerLeadNotificationAlreadySent(int $enquiryId): bool
 }
 
 /**
- * Whether an existing enquiry row can be reused for a new form submission.
- * Rows that already sent quote/lead emails must not be reused — otherwise a
- * repeat booking with the same email address would silently skip emails.
+ * Relative journey order — higher means further along.
+ */
+function enquiryLoggerStatusRank(string $status): int
+{
+    return match ($status) {
+        'in_progress' => 1,
+        'failed' => 2,
+        'submitted' => 3,
+        'contacted' => 4,
+        'quote_sent' => 5,
+        'quote_accepted' => 6,
+        default => 0,
+    };
+}
+
+/**
+ * Whether an explicit enquiryId from the form (including Edit Enquiry resume)
+ * can be updated in place. Quote/lead email flags must NOT force a new row —
+ * those only gate whether emails are sent again on that same enquiry.
+ *
+ * New bookings without an enquiryId still create a fresh row, so repeat
+ * customers keep receiving emails.
  */
 function enquiryLoggerIsEligibleForSubmitReuse(int $enquiryId): bool
 {
@@ -374,11 +394,8 @@ function enquiryLoggerIsEligibleForSubmitReuse(int $enquiryId): bool
         return false;
     }
 
-    if (enquiryLoggerQuoteEmailAlreadySent($enquiryId)) {
-        return false;
-    }
-
-    if (enquiryLoggerLeadNotificationAlreadySent($enquiryId)) {
+    // Booking/terms already completed — do not reopen via enquiry form submit.
+    if ((string)($row['status'] ?? '') === 'quote_accepted') {
         return false;
     }
 
@@ -403,10 +420,93 @@ function enquiryLoggerMarkResumeEmailSent(int $enquiryId): void
 /**
  * @param array<string, mixed> $post
  */
+/**
+ * Normalise preferred date / "not sure" from enquiry form POST.
+ * Stored as YYYY-MM-DD (date only). "Not sure" clears the date.
+ *
+ * @param array<string, mixed> $post
+ * @return array{preferredDateTime: string, dateNotSure: bool}
+ */
+function enquiryPreferredDateFromPost(array $post): array
+{
+    $rawNotSure = $post['dateNotSure'] ?? null;
+    $dateNotSure = $rawNotSure !== null
+        && $rawNotSure !== ''
+        && $rawNotSure !== '0'
+        && $rawNotSure !== 0
+        && $rawNotSure !== false
+        && strtolower((string)$rawNotSure) !== 'false';
+
+    $preferredDate = trim((string)($post['preferredDate'] ?? ''));
+    $pdt = trim((string)($post['preferredDateTime'] ?? ''));
+    if ($preferredDate === '' && $pdt !== '') {
+        $preferredDate = $pdt;
+    }
+
+    $dateOnly = '';
+    if ($preferredDate !== '') {
+        $preferredDate = str_replace(' ', 'T', $preferredDate);
+        $dt = \DateTimeImmutable::createFromFormat('Y-m-d', substr($preferredDate, 0, 10))
+            ?: \DateTimeImmutable::createFromFormat('Y-m-d\TH:i', $preferredDate)
+            ?: \DateTimeImmutable::createFromFormat('Y-m-d\TH:i:s', $preferredDate);
+        if ($dt !== false) {
+            $dateOnly = $dt->format('Y-m-d');
+        }
+    }
+
+    if ($dateNotSure) {
+        $dateOnly = '';
+    }
+
+    return [
+        'preferredDateTime' => $dateOnly,
+        'dateNotSure' => $dateNotSure,
+    ];
+}
+
+/**
+ * Apply normalised preferred-date fields onto a POST/form-data array for storage.
+ *
+ * @param array<string, mixed> $post
+ * @return array<string, mixed>
+ */
+function enquiryPostWithNormalisedPreferredDate(array $post): array
+{
+    $preferred = enquiryPreferredDateFromPost($post);
+    $out = $post;
+    unset($out['preferredTime']);
+    if ($preferred['preferredDateTime'] !== '') {
+        $out['preferredDateTime'] = $preferred['preferredDateTime'];
+        $out['preferredDate'] = $preferred['preferredDateTime'];
+    } else {
+        unset($out['preferredDateTime'], $out['preferredDate']);
+    }
+    if ($preferred['dateNotSure']) {
+        $out['dateNotSure'] = 'on';
+    } else {
+        unset($out['dateNotSure']);
+    }
+
+    return $out;
+}
+
 function enquiryLoggerUpdateFromPost(int $enquiryId, array $post, string $status = 'in_progress'): void
 {
     $pdo = enquiryLoggerPdo();
     $now = enquiryLoggerNow();
+    $post = enquiryPostWithNormalisedPreferredDate($post);
+    $preferred = enquiryPreferredDateFromPost($post);
+
+    $currentStmt = $pdo->prepare('SELECT status FROM enquiries WHERE id = :id LIMIT 1');
+    $currentStmt->execute([':id' => $enquiryId]);
+    $currentStatus = (string)($currentStmt->fetchColumn() ?: '');
+    // Never move an enquiry backwards in the journey (e.g. quote_sent → in_progress).
+    if (
+        $currentStatus !== ''
+        && enquiryLoggerStatusRank($currentStatus) > enquiryLoggerStatusRank($status)
+    ) {
+        $status = $currentStatus;
+    }
 
     $stmt = $pdo->prepare(
         'UPDATE enquiries SET
@@ -451,8 +551,8 @@ function enquiryLoggerUpdateFromPost(int $enquiryId, array $post, string $status
         ':format_sub_option' => trim((string)($post['formatSubOption'] ?? '')),
         ':matrix_attendees' => isset($post['matrixAttendees']) && $post['matrixAttendees'] !== '' ? (int)$post['matrixAttendees'] : null,
         ':organisation_company' => trim((string)($post['organisationCompany'] ?? '')),
-        ':preferred_date_time' => trim((string)($post['preferredDateTime'] ?? '')),
-        ':date_not_sure' => isset($post['dateNotSure']) ? 1 : 0,
+        ':preferred_date_time' => $preferred['preferredDateTime'],
+        ':date_not_sure' => $preferred['dateNotSure'] ? 1 : 0,
         ':attendees' => isset($post['attendees']) && $post['attendees'] !== '' ? (int)$post['attendees'] : null,
         ':extra_notes' => trim((string)($post['extraNotes'] ?? '')),
         ':form_data_json' => json_encode($post, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
@@ -466,14 +566,19 @@ function enquiryLoggerMarkSubmitted(int $enquiryId): void
     $now = enquiryLoggerNow();
 
     $stmt = $pdo->prepare(
-        'UPDATE enquiries SET status = :status, submitted_at = :submitted_at, updated_at = :updated_at WHERE id = :id'
+        'UPDATE enquiries SET
+            submitted_at = COALESCE(submitted_at, :submitted_at),
+            updated_at = :updated_at
+         WHERE id = :id'
     );
     $stmt->execute([
         ':id' => $enquiryId,
-        ':status' => 'submitted',
         ':submitted_at' => $now,
         ':updated_at' => $now,
     ]);
+
+    // Keep quote_sent / quote_accepted / contacted when the customer edits later.
+    enquiryLoggerSetStatusIfNotPast($enquiryId, 'submitted', ['contacted', 'quote_sent', 'quote_accepted']);
 }
 
 function enquiryLoggerMarkContacted(int $enquiryId): void

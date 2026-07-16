@@ -51,6 +51,22 @@ try {
         }
     }
 
+    // Prefer dedicated columns when form JSON is missing/stale (common after edits).
+    $preferredFromColumns = [
+        'preferredDateTime' => trim((string)($row['preferred_date_time'] ?? '')),
+        'dateNotSure' => !empty($row['date_not_sure']) ? 'on' : null,
+    ];
+    if ($preferredFromColumns['preferredDateTime'] !== '') {
+        $formData['preferredDateTime'] = $preferredFromColumns['preferredDateTime'];
+    }
+    if ($preferredFromColumns['dateNotSure'] !== null) {
+        $formData['dateNotSure'] = 'on';
+        unset($formData['preferredDateTime']);
+    } else {
+        unset($formData['dateNotSure']);
+    }
+    $formData = enquiryPostWithNormalisedPreferredDate($formData);
+
     echo json_encode([
         'success' => true,
         'enquiry' => [

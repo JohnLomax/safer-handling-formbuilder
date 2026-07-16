@@ -125,12 +125,19 @@ class SettingController extends Controller
 
     public function connectXero(): RedirectResponse
     {
-        $clientId = trim((string) Setting::getValue('xero_client_id', ''));
+        $clientId = trim((string) (getenv('XERO_CLIENT_ID') ?: Setting::getValue('xero_client_id', '')));
+        $clientSecret = trim((string) (getenv('XERO_CLIENT_SECRET') ?: Setting::getValue('xero_client_secret', '')));
 
         if ($clientId === '') {
             return redirect()
                 ->route('admin.settings.edit')
                 ->withErrors(['xero' => 'Add your Xero client ID before connecting.']);
+        }
+
+        if ($clientSecret === '') {
+            return redirect()
+                ->route('admin.settings.edit')
+                ->withErrors(['xero' => 'Add your Xero client secret and save settings before connecting.']);
         }
 
         // Xero only allows http for localhost; every other host must be https
@@ -188,11 +195,18 @@ class SettingController extends Controller
                 ->withErrors(['xero' => $error]);
         }
 
-        $clientId = trim((string) Setting::getValue('xero_client_id', ''));
-        $clientSecret = trim((string) Setting::getValue('xero_client_secret', ''));
-        $redirectUri = trim((string) Setting::getValue('xero_redirect_uri', ''));
-        if ($redirectUri === '') {
-            $redirectUri = url('/admin/settings/xero/callback');
+        $clientId = trim((string) (getenv('XERO_CLIENT_ID') ?: Setting::getValue('xero_client_id', '')));
+        $clientSecret = trim((string) (getenv('XERO_CLIENT_SECRET') ?: Setting::getValue('xero_client_secret', '')));
+        // Must match the redirect_uri used in the authorize request exactly.
+        $redirectUri = $this->resolveXeroRedirectUri();
+        Setting::setValue('xero_redirect_uri', $redirectUri);
+
+        if ($clientSecret === '') {
+            return redirect()
+                ->route('admin.settings.edit')
+                ->withErrors([
+                    'xero' => 'Xero client secret is missing. Paste it from the Xero developer portal into Client secret, click Save, then Connect again.',
+                ]);
         }
 
         try {
@@ -205,7 +219,18 @@ class SettingController extends Controller
                 ]);
 
             if (! $tokenResponse->successful()) {
-                throw new \RuntimeException('Could not exchange Xero authorization code for tokens.');
+                $detail = trim((string) ($tokenResponse->json('error_description')
+                    ?? $tokenResponse->json('error')
+                    ?? $tokenResponse->body()));
+                if (strlen($detail) > 240) {
+                    $detail = substr($detail, 0, 240).'…';
+                }
+
+                throw new \RuntimeException(
+                    'Could not exchange Xero authorization code for tokens.'
+                    .($detail !== '' ? ' Xero said: '.$detail : '')
+                    .' Check the Client secret matches this Client ID, then Connect again (codes are single-use).'
+                );
             }
 
             $token = $tokenResponse->json();

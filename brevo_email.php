@@ -62,12 +62,34 @@ function brevoResumeEmailEnabled(): bool
 
 function brevoFormBaseUrl(): string
 {
-    $url = trim((string)(getenv('FORM_BASE_URL') ?: ($GLOBALS['formBaseUrl'] ?? '')));
-    if ($url !== '') {
-        return rtrim($url, '/');
+    // Prefer Admin → Settings form_base_url so Coolify APP_URL / temporary
+    // sslip hosts do not rewrite customer booking links to the wrong domain.
+    $candidates = [
+        trim((string)($GLOBALS['formBaseUrl'] ?? '')),
+        trim((string)(getenv('FORM_BASE_URL') ?: '')),
+        trim((string)(getenv('APP_URL') ?: '')),
+    ];
+
+    foreach ($candidates as $candidate) {
+        if ($candidate === '') {
+            continue;
+        }
+        $normalized = rtrim($candidate, '/');
+        if (brevoIsUsablePublicBaseUrl($normalized)) {
+            return $normalized;
+        }
     }
 
-    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    foreach ($candidates as $candidate) {
+        if ($candidate !== '') {
+            return rtrim($candidate, '/');
+        }
+    }
+
+    $forwardedProto = strtolower(trim((string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')));
+    $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || $forwardedProto === 'https';
+    $scheme = $https ? 'https' : 'http';
     $host = trim((string)($_SERVER['HTTP_HOST'] ?? ''));
     if ($host === '') {
         return '';
@@ -77,6 +99,27 @@ function brevoFormBaseUrl(): string
     $dir = rtrim(dirname($script), '/');
 
     return $scheme . '://' . $host . ($dir !== '' && $dir !== '.' ? $dir : '');
+}
+
+/**
+ * Prefer real public hostnames over localhost / Coolify temporary sslip URLs.
+ */
+function brevoIsUsablePublicBaseUrl(string $url): bool
+{
+    $host = strtolower((string)(parse_url($url, PHP_URL_HOST) ?: ''));
+    if ($host === '') {
+        return false;
+    }
+
+    if (in_array($host, ['localhost', '127.0.0.1', '::1'], true)) {
+        return false;
+    }
+
+    if (str_ends_with($host, '.sslip.io') || str_ends_with($host, '.nip.io')) {
+        return false;
+    }
+
+    return true;
 }
 
 function buildEnquiryResumeUrl(int $enquiryId, string $resumeToken): string
@@ -792,7 +835,7 @@ function buildQuoteEmailHtml(array $data): string
           <!-- Intro -->
           <tr>
             <td align="center" style="padding:0 20px 20px; font-family:Arial,Helvetica,sans-serif; font-size:16px; line-height:1.6; color:#414141; text-align:center;">
-              <p style="margin:0;">If you are happy to proceed, simply click <strong>Accept Quote</strong>. Once accepted, a member of our team will be in touch to arrange your training.</p>
+              <p style="margin:0;">If you are happy to proceed, click <strong>Accept Quote</strong> to open the booking form, accept terms, and add your venue details.</p>
             </td>
           </tr>
 

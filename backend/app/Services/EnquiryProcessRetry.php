@@ -126,9 +126,12 @@ class EnquiryProcessRetry
         $quoteData = $this->buildQuoteEmailData($enquiry);
         $token = enquiryLoggerEnsureResumeToken((int) $enquiry->id);
         $bookingUrl = buildBookingDetailsUrl((int) $enquiry->id, $token);
-        if ($bookingUrl !== '') {
-            $quoteData['acceptQuoteUrl'] = $bookingUrl;
+        if ($bookingUrl === '') {
+            throw new RuntimeException(
+                'Form base URL is not configured. Set Form base URL in Admin → Settings to your public site URL.'
+            );
         }
+        $quoteData['acceptQuoteUrl'] = $bookingUrl;
 
         try {
             $result = sendQuoteToClient((string) $enquiry->email, (string) $enquiry->name, $quoteData);

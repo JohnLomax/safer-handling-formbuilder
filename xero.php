@@ -7,13 +7,16 @@ declare(strict_types=1);
 
 function xeroEnabled(): bool
 {
+    // Admin → Settings is the source of truth once settings are loaded.
+    // A Coolify/local XERO_ENABLED=false must not silently disable quotes
+    // when the checkbox is on in the database.
+    if (array_key_exists('xeroEnabled', $GLOBALS)) {
+        return (bool)$GLOBALS['xeroEnabled'];
+    }
+
     $env = getenv('XERO_ENABLED');
     if ($env !== false && $env !== '') {
         return filter_var($env, FILTER_VALIDATE_BOOLEAN);
-    }
-
-    if (array_key_exists('xeroEnabled', $GLOBALS)) {
-        return (bool)$GLOBALS['xeroEnabled'];
     }
 
     return false;

@@ -110,13 +110,7 @@ class Enquiry extends Model
             $this->forceFill(['resume_token' => $token])->save();
         }
 
-        $base = rtrim(trim((string) Setting::getValue('form_base_url', '')), '/');
-        if ($base === '') {
-            $base = rtrim((string) config('app.url'), '/');
-        }
-        if ($base === '') {
-            $base = rtrim(url('/'), '/');
-        }
+        $base = $this->publicFormBaseUrl();
 
         return $base.'/enquiry?'.http_build_query([
             'enquiry' => $this->id,
@@ -135,18 +129,44 @@ class Enquiry extends Model
             $this->forceFill(['resume_token' => $token])->save();
         }
 
-        $base = rtrim(trim((string) Setting::getValue('form_base_url', '')), '/');
-        if ($base === '') {
-            $base = rtrim((string) config('app.url'), '/');
-        }
-        if ($base === '') {
-            $base = rtrim(url('/'), '/');
-        }
+        $base = $this->publicFormBaseUrl();
 
         return $base.'/booking?'.http_build_query([
             'enquiry' => $this->id,
             'token' => $token,
         ]);
+    }
+
+    private function publicFormBaseUrl(): string
+    {
+        $candidates = [
+            rtrim(trim((string) Setting::getValue('form_base_url', '')), '/'),
+            rtrim(trim((string) config('app.url')), '/'),
+            rtrim(url('/'), '/'),
+        ];
+
+        foreach ($candidates as $candidate) {
+            if ($candidate === '') {
+                continue;
+            }
+            $host = strtolower((string) (parse_url($candidate, PHP_URL_HOST) ?: ''));
+            if ($host === '' || in_array($host, ['localhost', '127.0.0.1', '::1'], true)) {
+                continue;
+            }
+            if (str_ends_with($host, '.sslip.io') || str_ends_with($host, '.nip.io')) {
+                continue;
+            }
+
+            return $candidate;
+        }
+
+        foreach ($candidates as $candidate) {
+            if ($candidate !== '') {
+                return $candidate;
+            }
+        }
+
+        return '';
     }
 
     public function hasBookingDetails(): bool

@@ -10,4 +10,5 @@
     RewriteRule ^$ enquiry.php [L]
     RewriteRule ^enquiry/?$ enquiry.php [L]
     RewriteRule ^feedback/?$ feedback.php [L]
+    RewriteRule ^booking/?$ booking.php [L]
 </IfModule>

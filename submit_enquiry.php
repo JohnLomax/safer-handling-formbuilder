@@ -869,9 +869,21 @@ try {
         });
     }
 
+    $isQuoteFlow = $isTrainerFlow || $isOrganisationTrainingFlow;
     $shouldSendQuoteEmail = (brevoEmailEnabled() || xeroEnabled())
-        && ($isTrainerFlow || $isOrganisationTrainingFlow)
+        && $isQuoteFlow
         && ($enquiryId === null || !enquiryLoggerQuoteEmailAlreadySent($enquiryId));
+    if ($isQuoteFlow && !$shouldSendQuoteEmail && $enquiryId !== null && !enquiryLoggerQuoteEmailAlreadySent($enquiryId)
+        && !brevoEmailEnabled() && !xeroEnabled()) {
+        enquiryLoggerSafe(function () use ($enquiryId): void {
+            enquiryLoggerEvent(
+                $enquiryId,
+                'quote_email_skipped',
+                'Quote email was not sent because Xero and Brevo quote sending are both disabled.',
+                ['xero_enabled' => false, 'brevo_email_enabled' => false]
+            );
+        });
+    }
     if ($shouldSendQuoteEmail) {
         try {
             $quoteEmailData = $resolvedOrganisation !== null
@@ -880,9 +892,13 @@ try {
             if ($enquiryId !== null) {
                 $bookingToken = enquiryLoggerEnsureResumeToken($enquiryId);
                 $bookingUrl = buildBookingDetailsUrl($enquiryId, $bookingToken);
-                if ($bookingUrl !== '') {
-                    $quoteEmailData['acceptQuoteUrl'] = $bookingUrl;
+                if ($bookingUrl === '') {
+                    throw new RuntimeException(
+                        'Form base URL is not configured. Set Form base URL in Admin → Settings to your public site URL (e.g. https://saferhandling.formsoffline.co.uk).'
+                    );
                 }
+                // Accept Quote must open the booking / terms form for this enquiry.
+                $quoteEmailData['acceptQuoteUrl'] = $bookingUrl;
             }
             $quoteSendResult = sendQuoteToClient($email, $name, $quoteEmailData);
             if ($enquiryId !== null) {

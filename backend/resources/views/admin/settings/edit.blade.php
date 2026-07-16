@@ -121,7 +121,7 @@
                 <div>
                     <x-input-label for="brevo_quote_accept_url" value="Quote accept URL" />
                     <x-text-input id="brevo_quote_accept_url" name="brevo_quote_accept_url" type="text" class="mt-1 block w-full" :value="old('brevo_quote_accept_url', $settings['brevo_quote_accept_url'] ?? '')" />
-                    <p class="mt-1 text-xs text-sh-mid">Optional. Use <code>@{{email}}</code> as a placeholder for the recipient email.</p>
+                    <p class="mt-1 text-xs text-sh-mid">Leave blank. Accept Quote uses the booking form link automatically (<code>/booking?enquiry=…&amp;token=…</code>). Only set this to override that link.</p>
                 </div>
             </div>
 
@@ -178,13 +178,14 @@
                     <x-input-label for="xero_redirect_uri" value="OAuth redirect URI" />
                     <x-text-input id="xero_redirect_uri" name="xero_redirect_uri" type="url" class="mt-1 block w-full" :value="old('xero_redirect_uri', $settings['xero_redirect_uri'] ?? $xeroRedirectUri)" />
                     <p class="mt-1 text-xs text-sh-mid">
-                        Xero only allows <code class="rounded bg-sh-surface px-1">http://localhost</code> for local
-                        development. Production must use <strong>HTTPS</strong>. Open admin on this site over https,
-                        then add this <strong>exact</strong> Redirect URI in the
-                        <a href="https://developer.xero.com/app/manage" class="underline" target="_blank" rel="noopener">Xero developer portal</a>
-                        (copy/paste — no trailing slash):
+                        This URI must be listed on the <strong>same</strong> Xero app as the Client ID above
+                        (<a href="https://developer.xero.com/app/manage" class="underline" target="_blank" rel="noopener">developer portal → Redirect URIs</a>).
+                        Copy/paste exactly — no trailing slash. Localhost alone is not enough for production.
                     </p>
                     <p class="mt-2 break-all rounded bg-sh-surface px-2 py-1.5 font-mono text-xs text-sh-ink">{{ $xeroLiveRedirectUri }}</p>
+                    @if (trim((string) ($settings['xero_client_secret'] ?? '')) === '')
+                        <p class="mt-2 text-xs font-semibold text-red-700">Client secret is empty — paste it from Xero and Save before connecting.</p>
+                    @endif
                 </div>
 
                 <div class="grid gap-4 md:grid-cols-2">

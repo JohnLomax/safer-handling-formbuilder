@@ -6,13 +6,44 @@ log() { echo "[entrypoint] $*" >&2; }
 APP_ROOT="/var/www/html"
 BACKEND="${APP_ROOT}/backend"
 DATA_DIR="${APP_ROOT}/data"
-DB_FILE="${APP_DATABASE_PATH:-${DATA_DIR}/app.sqlite}"
+DEFAULT_DB_FILE="${DATA_DIR}/app.sqlite"
+
+# Coolify often imports local .env values. Host paths (e.g. /Users/...) do not
+# exist in the container — always use the mounted data volume path instead.
+resolve_db_file() {
+  local candidate="${1:-}"
+  if [[ -z "${candidate}" ]]; then
+    echo "${DEFAULT_DB_FILE}"
+    return
+  fi
+  case "${candidate}" in
+    "${DATA_DIR}"/*|"${APP_ROOT}/data"/*)
+      echo "${candidate}"
+      ;;
+    /Users/*|/home/*|/Volumes/*|[A-Za-z]:\\*|[A-Za-z]:/*)
+      log "WARNING: ignoring host DB path '${candidate}' — using ${DEFAULT_DB_FILE}"
+      echo "${DEFAULT_DB_FILE}"
+      ;;
+    *)
+      # Any other absolute path outside the app root is unsafe in Docker
+      if [[ "${candidate}" == /* && "${candidate}" != "${APP_ROOT}"/* ]]; then
+        log "WARNING: ignoring non-container DB path '${candidate}' — using ${DEFAULT_DB_FILE}"
+        echo "${DEFAULT_DB_FILE}"
+      else
+        echo "${candidate}"
+      fi
+      ;;
+  esac
+}
+
+DB_FILE="$(resolve_db_file "${APP_DATABASE_PATH:-${DB_DATABASE:-}}")"
 
 log "starting (php $(php -r 'echo PHP_VERSION;'))"
 
 mkdir -p \
   "${DATA_DIR}" \
   "${DATA_DIR}/booking-uploads" \
+  "$(dirname "${DB_FILE}")" \
   "${BACKEND}/storage/framework/cache" \
   "${BACKEND}/storage/framework/sessions" \
   "${BACKEND}/storage/framework/views" \
@@ -25,8 +56,8 @@ if [[ ! -f "${DB_FILE}" ]]; then
 fi
 
 export DB_CONNECTION="${DB_CONNECTION:-sqlite}"
-export DB_DATABASE="${DB_DATABASE:-${DB_FILE}}"
-export APP_DATABASE_PATH="${APP_DATABASE_PATH:-${DB_FILE}}"
+export DB_DATABASE="${DB_FILE}"
+export APP_DATABASE_PATH="${DB_FILE}"
 export APP_ENV="${APP_ENV:-production}"
 export APP_DEBUG="${APP_DEBUG:-false}"
 export LOG_CHANNEL="${LOG_CHANNEL:-stderr}"
@@ -34,6 +65,7 @@ export LOG_CHANNEL="${LOG_CHANNEL:-stderr}"
 export SESSION_DRIVER="${SESSION_DRIVER:-file}"
 export CACHE_STORE="${CACHE_STORE:-file}"
 export QUEUE_CONNECTION="${QUEUE_CONNECTION:-sync}"
+log "sqlite database: ${DB_FILE}"
 
 cd "${BACKEND}"
 

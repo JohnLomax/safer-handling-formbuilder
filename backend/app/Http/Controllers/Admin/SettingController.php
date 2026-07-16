@@ -47,8 +47,7 @@ class SettingController extends Controller
     public function edit(): View
     {
         $settings = Setting::allCached();
-        // Connect always uses the current request host (see connectXero).
-        $liveRedirectUri = url('/admin/settings/xero/callback');
+        $liveRedirectUri = $this->resolveXeroRedirectUri();
         $redirectUri = trim((string) ($settings['xero_redirect_uri'] ?? ''));
         if ($redirectUri === '') {
             $redirectUri = $liveRedirectUri;
@@ -134,10 +133,18 @@ class SettingController extends Controller
                 ->withErrors(['xero' => 'Add your Xero client ID before connecting.']);
         }
 
-        // Always use the current request host so the cookie/session and Xero
-        // redirect URI stay on the same origin (localhost vs 127.0.0.1).
-        $redirectUri = url('/admin/settings/xero/callback');
+        // Xero only allows http for localhost; every other host must be https
+        // and must match a Redirect URI registered on the Xero app exactly.
+        $redirectUri = $this->resolveXeroRedirectUri();
         Setting::setValue('xero_redirect_uri', $redirectUri);
+
+        if (! $this->isAllowedXeroRedirectUri($redirectUri)) {
+            return redirect()
+                ->route('admin.settings.edit')
+                ->withErrors([
+                    'xero' => 'Xero rejected http redirect URIs on public hosts. Enable HTTPS in Coolify, open the site via https://, then register this exact Redirect URI in the Xero developer portal: '.$redirectUri,
+                ]);
+        }
 
         $state = bin2hex(random_bytes(16));
         session(['xero_oauth_state' => $state]);
@@ -276,5 +283,40 @@ class SettingController extends Controller
         Setting::setValue('xero_oauth_state_expires_at', '');
 
         return $sessionOk || $storedOk;
+    }
+
+    /**
+     * Build the OAuth redirect URI Xero will call back to.
+     * Public hosts are forced to https — Xero rejects http except localhost.
+     */
+    private function resolveXeroRedirectUri(): string
+    {
+        $configured = trim((string) (getenv('XERO_REDIRECT_URI') ?: Setting::getValue('xero_redirect_uri', '')));
+        if ($configured !== '' && $this->isAllowedXeroRedirectUri($configured)) {
+            return $configured;
+        }
+
+        $uri = url('/admin/settings/xero/callback');
+        if ($this->isLocalXeroRedirectHost($uri)) {
+            return $uri;
+        }
+
+        return (string) preg_replace('#^http://#i', 'https://', $uri);
+    }
+
+    private function isAllowedXeroRedirectUri(string $uri): bool
+    {
+        if ($this->isLocalXeroRedirectHost($uri)) {
+            return (bool) preg_match('#^https?://#i', $uri);
+        }
+
+        return str_starts_with(strtolower($uri), 'https://');
+    }
+
+    private function isLocalXeroRedirectHost(string $uri): bool
+    {
+        $host = strtolower((string) (parse_url($uri, PHP_URL_HOST) ?: ''));
+
+        return in_array($host, ['localhost', '127.0.0.1', '::1'], true);
     }
 }

@@ -149,14 +149,6 @@
                                         <x-admin.table-action :href="route('admin.enquiries.show', $enquiry)" icon="chevron">
                                             View
                                         </x-admin.table-action>
-                                        <x-admin.table-action
-                                            :href="$enquiry->formEditUrl()"
-                                            icon="edit"
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                        >
-                                            Form
-                                        </x-admin.table-action>
                                     </div>
                                 </td>
                             </tr>

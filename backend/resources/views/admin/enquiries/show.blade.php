@@ -7,14 +7,6 @@
                 <p class="mt-1 text-sm text-sh-mid">{{ $enquiry->email }}</p>
             </div>
             <div class="flex flex-wrap items-center gap-2">
-                <a
-                    href="{{ $enquiry->formEditUrl() }}"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="btn-brand text-xs"
-                >
-                    Open / edit form
-                </a>
                 @if ($enquiry->status === 'submitted')
                     <span class="status-pill status-pill-submitted">Submitted</span>
                 @elseif ($enquiry->status === 'quote_sent')
@@ -265,18 +257,6 @@
                                 @endif
 
                                 <div class="mt-3 flex flex-wrap gap-2">
-                                    <a
-                                        href="{{ $enquiry->formEditUrl() }}"
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        class="btn-brand-outline text-xs inline-flex items-center gap-1.5"
-                                        title="Open / edit enquiry form"
-                                    >
-                                        <svg class="h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                                            <path d="M2.695 14.763l-1.262 3.154a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.501a2.121 2.121 0 00-3-3L3.58 13.42a4 4 0 00-.885 1.343z" />
-                                        </svg>
-                                        Edit form
-                                    </a>
                                     @if (in_array('resume_email', $retryableActions, true))
                                         <form method="POST" action="{{ route('admin.enquiries.retry.resume-email', $enquiry) }}">
                                             @csrf
@@ -445,16 +425,6 @@
                                         <p class="text-sm font-semibold text-sh-text">{{ $event->label() }}</p>
                                         <div class="flex shrink-0 flex-wrap items-center gap-2">
                                             @php
-                                                $isEnquiryFormJourneyEvent = in_array($event->event_type, [
-                                                    'form_submitted',
-                                                    'details_updated',
-                                                    'storage_saved',
-                                                    'resume_email_sent',
-                                                    'resume_email_failed',
-                                                    'monday_item_exists',
-                                                    'monday_item_created',
-                                                    'monday_submission_updated',
-                                                ], true);
                                                 $isBookingJourneyEvent = in_array($event->event_type, [
                                                     'booking_email_sent',
                                                     'booking_email_failed',
@@ -463,8 +433,6 @@
                                                     'monday_booking_sync_failed',
                                                     'quote_email_sent',
                                                 ], true);
-                                            @endphp
-                                            @php
                                                 $isResumeEmailJourneyEvent = in_array($event->event_type, [
                                                     'resume_email_sent',
                                                     'resume_email_failed',
@@ -478,19 +446,6 @@
                                                     'booking_details_submitted',
                                                 ], true);
                                             @endphp
-                                            @if ($isEnquiryFormJourneyEvent)
-                                                <a
-                                                    href="{{ $enquiry->formEditUrl() }}"
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    class="btn-brand-outline px-2.5 py-1 text-xs inline-flex items-center gap-1"
-                                                    title="Open / edit enquiry form"
-                                                >
-                                                    <svg class="h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                                                        <path d="M2.695 14.763l-1.262 3.154a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.501a2.121 2.121 0 00-3-3L3.58 13.42a4 4 0 00-.885 1.343z" />
-                                                    </svg>
-                                                </a>
-                                            @endif
                                             @if ($isResumeEmailJourneyEvent)
                                                 @if (in_array('resume_email', $retryableActions, true))
                                                     <form method="POST" action="{{ route('admin.enquiries.retry.resume-email', $enquiry) }}">

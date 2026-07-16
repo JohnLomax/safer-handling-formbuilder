@@ -109,6 +109,11 @@ function enquiryLoggerEnsureSchema(PDO $pdo): void
 
 function enquiryLoggerEnsureColumn(PDO $pdo, string $table, string $column, string $definition): void
 {
+    // MySQL schema is owned by Laravel migrations — never run SQLite PRAGMA there.
+    if (appDatabaseDriver() !== 'sqlite') {
+        return;
+    }
+
     $stmt = $pdo->query('PRAGMA table_info(' . $table . ')');
     $columns = $stmt ? $stmt->fetchAll() : [];
 

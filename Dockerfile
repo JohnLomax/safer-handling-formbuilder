@@ -14,7 +14,7 @@ RUN npm run build
 # -----------------------------------------------------------------------------
 # Stage 2: runtime — nginx + PHP-FPM (forms + Laravel via router.php)
 # -----------------------------------------------------------------------------
-FROM php:8.3-fpm-bookworm
+FROM php:8.4-fpm-bookworm
 
 # Keep build independent of Coolify runtime env (e.g. APP_ENV=local)
 ENV APP_ENV=production \

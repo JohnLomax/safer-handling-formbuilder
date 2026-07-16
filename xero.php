@@ -108,13 +108,16 @@ function xeroPersistTokens(string $accessToken, string $refreshToken, int $expir
 
     if (class_exists(\App\Models\Setting::class)) {
         try {
-            foreach ($pairs as $key => $value) {
-                \App\Models\Setting::setValue($key, $value);
-            }
+            // Only use Eloquent when the Laravel app container is available.
+            if (function_exists('app') && app()->bound('db')) {
+                foreach ($pairs as $key => $value) {
+                    \App\Models\Setting::setValue($key, $value);
+                }
 
-            return;
+                return;
+            }
         } catch (Throwable $e) {
-            // Fall through to direct SQLite write for legacy form PHP.
+            // Fall through to direct PDO write for legacy form PHP / MySQL.
         }
     }
 
@@ -124,11 +127,21 @@ function xeroPersistTokens(string $accessToken, string $refreshToken, int $expir
 
     $pdo = appDatabasePdo();
     $now = gmdate('Y-m-d H:i:s');
-    $stmt = $pdo->prepare(
-        'INSERT INTO settings ("key", value, created_at, updated_at)
-         VALUES (:key, :value, :created_at, :updated_at)
-         ON CONFLICT("key") DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at'
-    );
+    $driver = function_exists('appDatabaseDriver') ? appDatabaseDriver() : 'sqlite';
+
+    if ($driver === 'mysql') {
+        $stmt = $pdo->prepare(
+            'INSERT INTO settings (`key`, value, created_at, updated_at)
+             VALUES (:key, :value, :created_at, :updated_at)
+             ON DUPLICATE KEY UPDATE value = VALUES(value), updated_at = VALUES(updated_at)'
+        );
+    } else {
+        $stmt = $pdo->prepare(
+            'INSERT INTO settings ("key", value, created_at, updated_at)
+             VALUES (:key, :value, :created_at, :updated_at)
+             ON CONFLICT("key") DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at'
+        );
+    }
 
     foreach ($pairs as $key => $value) {
         $stmt->execute([

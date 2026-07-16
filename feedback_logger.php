@@ -4,7 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/database_bridge.php';
 
 /**
- * Persist feedback submissions in the shared SQLite database.
+ * Persist feedback submissions in the shared application database.
  */
 
 function feedbackLoggerPdo(): PDO
@@ -15,16 +15,10 @@ function feedbackLoggerPdo(): PDO
         return $pdo;
     }
 
-    $path = appDatabasePath();
-    $dir = dirname($path);
-    if (!is_dir($dir)) {
-        @mkdir($dir, 0775, true);
+    $pdo = appDatabasePdo();
+    if (!$pdo instanceof PDO) {
+        throw new RuntimeException('Database connection is unavailable.');
     }
-
-    $pdo = new PDO('sqlite:' . $path, null, null, [
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-    ]);
 
     feedbackLoggerEnsureSchema($pdo);
 
@@ -36,6 +30,19 @@ function feedbackLoggerEnsureSchema(PDO $pdo): void
     static $ready = false;
     if ($ready) {
         return;
+    }
+
+    // MySQL schema is owned by Laravel migrations — only bootstrap SQLite locally.
+    if (appDatabaseDriver() !== 'sqlite') {
+        $ready = true;
+
+        return;
+    }
+
+    $path = appDatabasePath();
+    $dir = dirname($path);
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0775, true);
     }
 
     $pdo->exec(

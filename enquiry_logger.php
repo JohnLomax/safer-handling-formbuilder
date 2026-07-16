@@ -15,16 +15,10 @@ function enquiryLoggerPdo(): PDO
         return $pdo;
     }
 
-    $path = appDatabasePath();
-    $dir = dirname($path);
-    if (!is_dir($dir)) {
-        @mkdir($dir, 0775, true);
+    $pdo = appDatabasePdo();
+    if (!$pdo instanceof PDO) {
+        throw new RuntimeException('Database connection is unavailable.');
     }
-
-    $pdo = new PDO('sqlite:' . $path, null, null, [
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-    ]);
 
     enquiryLoggerEnsureSchema($pdo);
 
@@ -36,6 +30,19 @@ function enquiryLoggerEnsureSchema(PDO $pdo): void
     static $ready = false;
     if ($ready) {
         return;
+    }
+
+    // MySQL schema is owned by Laravel migrations — only bootstrap SQLite locally.
+    if (appDatabaseDriver() !== 'sqlite') {
+        $ready = true;
+
+        return;
+    }
+
+    $path = appDatabasePath();
+    $dir = dirname($path);
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0775, true);
     }
 
     $pdo->exec(

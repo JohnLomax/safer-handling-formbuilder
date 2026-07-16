@@ -34,6 +34,7 @@ RUN apt-get update \
         git \
         unzip \
         libsqlite3-dev \
+        default-libmysqlclient-dev \
         libzip-dev \
         libicu-dev \
         libonig-dev \
@@ -43,7 +44,9 @@ RUN apt-get update \
     && docker-php-ext-install bcmath \
     && docker-php-ext-install opcache \
     && docker-php-ext-install pcntl \
+    && docker-php-ext-install pdo_mysql \
     && php -m | grep -qi pdo_sqlite \
+    && php -m | grep -qi pdo_mysql \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer

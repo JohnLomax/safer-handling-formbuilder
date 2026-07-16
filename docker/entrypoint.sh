@@ -25,7 +25,6 @@ resolve_db_file() {
       echo "${DEFAULT_DB_FILE}"
       ;;
     *)
-      # Any other absolute path outside the app root is unsafe in Docker
       if [[ "${candidate}" == /* && "${candidate}" != "${APP_ROOT}"/* ]]; then
         log "WARNING: ignoring non-container DB path '${candidate}' — using ${DEFAULT_DB_FILE}"
         echo "${DEFAULT_DB_FILE}"
@@ -36,36 +35,86 @@ resolve_db_file() {
   esac
 }
 
-DB_FILE="$(resolve_db_file "${APP_DATABASE_PATH:-${DB_DATABASE:-}}")"
+is_mysql() {
+  local conn="${DB_CONNECTION:-}"
+  local url="${DB_URL:-}"
+  [[ "${conn}" == "mysql" || "${conn}" == "mariadb" ]] && return 0
+  [[ "${url}" == mysql://* || "${url}" == mariadb://* ]] && return 0
+  # Coolify sometimes sets host/user but leaves DB_CONNECTION unset/sqlite
+  if [[ -n "${DB_HOST:-}" && -n "${DB_USERNAME:-}" ]]; then
+    case "${DB_DATABASE:-}" in
+      *.sqlite*|*"/"*) ;;
+      *) return 0 ;;
+    esac
+    # Host set + password/user strongly implies MySQL even if DB_DATABASE is a leftover path
+    if [[ -n "${DB_PASSWORD:-}" || "${DB_HOST}" == "mysql" || "${DB_PORT:-}" == "3306" || "${DB_PORT:-}" == "2248" ]]; then
+      return 0
+    fi
+  fi
+  return 1
+}
+
+# Coolify often leaves DB_DATABASE=/.../app.sqlite while switching to MySQL.
+sanitize_mysql_database_name() {
+  local name="${1:-default}"
+  case "${name}" in
+    ""|*.sqlite*|*"/"*|*:*)
+      log "WARNING: DB_DATABASE='${name}' is not a MySQL database name — using 'default'"
+      echo "default"
+      ;;
+    *)
+      echo "${name}"
+      ;;
+  esac
+}
 
 log "starting (php $(php -r 'echo PHP_VERSION;'))"
 
 mkdir -p \
   "${DATA_DIR}" \
   "${DATA_DIR}/booking-uploads" \
-  "$(dirname "${DB_FILE}")" \
   "${BACKEND}/storage/framework/cache" \
   "${BACKEND}/storage/framework/sessions" \
   "${BACKEND}/storage/framework/views" \
   "${BACKEND}/storage/logs" \
   "${BACKEND}/bootstrap/cache"
 
-if [[ ! -f "${DB_FILE}" ]]; then
-  log "creating sqlite database at ${DB_FILE}"
-  touch "${DB_FILE}"
-fi
-
-export DB_CONNECTION="${DB_CONNECTION:-sqlite}"
-export DB_DATABASE="${DB_FILE}"
-export APP_DATABASE_PATH="${DB_FILE}"
 export APP_ENV="${APP_ENV:-production}"
 export APP_DEBUG="${APP_DEBUG:-false}"
 export LOG_CHANNEL="${LOG_CHANNEL:-stderr}"
-# Prefer file/sync in Docker so boot does not depend on migrated cache/session tables
 export SESSION_DRIVER="${SESSION_DRIVER:-file}"
 export CACHE_STORE="${CACHE_STORE:-file}"
 export QUEUE_CONNECTION="${QUEUE_CONNECTION:-sync}"
-log "sqlite database: ${DB_FILE}"
+
+if is_mysql; then
+  export DB_CONNECTION=mysql
+  export DB_HOST="${DB_HOST:-mysql}"
+  export DB_PORT="${DB_PORT:-3306}"
+  export DB_DATABASE="$(sanitize_mysql_database_name "${DB_DATABASE:-default}")"
+  export DB_USERNAME="${DB_USERNAME:-mysql}"
+  export DB_PASSWORD="${DB_PASSWORD:-}"
+  unset APP_DATABASE_PATH || true
+  # Rebuild URL from discrete vars so a leftover sqlite path cannot win
+  export DB_URL="mysql://${DB_USERNAME}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_DATABASE}"
+  if ! php -m 2>/dev/null | grep -qi pdo_mysql; then
+    log "ERROR: pdo_mysql PHP extension is missing from this image — rebuild/redeploy latest Dockerfile"
+    exit 1
+  fi
+  log "mysql database: ${DB_USERNAME}@${DB_HOST}:${DB_PORT}/${DB_DATABASE}"
+else
+  DB_FILE="$(resolve_db_file "${APP_DATABASE_PATH:-${DB_DATABASE:-}}")"
+  mkdir -p "$(dirname "${DB_FILE}")"
+  if [[ ! -f "${DB_FILE}" ]]; then
+    log "creating sqlite database at ${DB_FILE}"
+    touch "${DB_FILE}"
+  fi
+  export DB_CONNECTION=sqlite
+  export DB_DATABASE="${DB_FILE}"
+  export APP_DATABASE_PATH="${DB_FILE}"
+  unset DB_URL || true
+  unset DB_HOST DB_PORT DB_USERNAME DB_PASSWORD || true
+  log "sqlite database: ${DB_FILE}"
+fi
 
 cd "${BACKEND}"
 
@@ -78,15 +127,25 @@ cd "${BACKEND}"
   echo "APP_URL=${APP_URL:-http://localhost}"
   echo "FORM_BASE_URL=${FORM_BASE_URL:-${APP_URL:-http://localhost}}"
   echo "DB_CONNECTION=${DB_CONNECTION}"
-  echo "DB_DATABASE=${DB_DATABASE}"
-  echo "APP_DATABASE_PATH=${APP_DATABASE_PATH}"
+  if is_mysql; then
+    echo "DB_HOST=${DB_HOST}"
+    echo "DB_PORT=${DB_PORT}"
+    echo "DB_DATABASE=${DB_DATABASE}"
+    echo "DB_USERNAME=${DB_USERNAME}"
+    echo "DB_PASSWORD=\"${DB_PASSWORD//\"/\\\"}\""
+    if [[ -n "${DB_URL:-}" ]]; then
+      echo "DB_URL=\"${DB_URL//\"/\\\"}\""
+    fi
+  else
+    echo "DB_DATABASE=${DB_DATABASE}"
+    echo "APP_DATABASE_PATH=${APP_DATABASE_PATH}"
+  fi
   echo "SESSION_DRIVER=${SESSION_DRIVER}"
   echo "QUEUE_CONNECTION=${QUEUE_CONNECTION}"
   echo "CACHE_STORE=${CACHE_STORE}"
   echo "LOG_CHANNEL=${LOG_CHANNEL}"
 } > .env
 
-# Append optional secrets / integration vars when present (do not invent empties that override admin settings)
 optional_keys=(
   BREVO_API_KEY BREVO_SENDER_EMAIL BREVO_SENDER_NAME BREVO_EMAIL_ENABLED
   BREVO_CONTACT_EMAIL BREVO_LOGO_URL BREVO_QUOTE_ACCEPT_URL
@@ -101,7 +160,6 @@ optional_keys=(
 
 for key in "${optional_keys[@]}"; do
   if [[ -n "${!key:-}" ]]; then
-    # Escape double-quotes in values
     val="${!key//\"/\\\"}"
     echo "${key}=\"${val}\"" >> .env
   fi
@@ -126,10 +184,20 @@ if [[ -z "${current_key}" || "${current_key}" == "base64:" ]]; then
   log "APP_KEY=${APP_KEY}"
 fi
 
-log "running migrations on ${DB_DATABASE}"
+if is_mysql; then
+  log "running migrations on mysql ${DB_HOST}:${DB_PORT}/${DB_DATABASE}"
+else
+  log "running migrations on ${DB_DATABASE}"
+fi
+
 if ! php artisan migrate --force --no-interaction; then
   log "ERROR: migrate failed — container will not start"
-  log "Check DB path, volume mount (/var/www/html/data), and APP_KEY in Coolify"
+  if is_mysql; then
+    log "Check DB_HOST/DB_PORT/DB_DATABASE/DB_USERNAME/DB_PASSWORD (or DB_URL) in Coolify"
+    log "On the same Coolify server prefer DB_HOST=<mysql-service-name> and DB_PORT=3306"
+  else
+    log "Check DB path, volume mount (/var/www/html/data), and APP_KEY in Coolify"
+  fi
   exit 1
 fi
 
@@ -139,10 +207,11 @@ chown -R www-data:www-data \
   "${BACKEND}/bootstrap/cache" \
   "${BACKEND}/.env" || true
 
-chmod 664 "${DB_FILE}" 2>/dev/null || true
+if ! is_mysql; then
+  chmod 664 "${DB_DATABASE}" 2>/dev/null || true
+fi
 chmod 775 "${DATA_DIR}" 2>/dev/null || true
 
-# Coolify proxies to Ports Exposes / $PORT — keep nginx in sync (default 80).
 LISTEN_PORT="${PORT:-80}"
 if [[ ! "${LISTEN_PORT}" =~ ^[0-9]+$ ]]; then
   log "WARNING: invalid PORT='${LISTEN_PORT}', falling back to 80"
@@ -151,7 +220,6 @@ fi
 NGINX_SITE="/etc/nginx/sites-available/default"
 if [[ -f "${NGINX_SITE}" ]]; then
   sed -i "s/__LISTEN_PORT__/${LISTEN_PORT}/g" "${NGINX_SITE}"
-  # Also rewrite a concrete listen line if the placeholder was already replaced
   sed -i -E "s/^(\\s*listen\\s+)[0-9]+(\\s+default_server;)/\\1${LISTEN_PORT}\\2/" "${NGINX_SITE}"
 fi
 log "nginx will listen on 0.0.0.0:${LISTEN_PORT} (set Coolify Ports Exposes to ${LISTEN_PORT})"

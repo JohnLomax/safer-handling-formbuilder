@@ -747,11 +747,12 @@ if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
     exit;
 }
 
-if (!class_exists('PDO') || !in_array('sqlite', PDO::getAvailableDrivers(), true)) {
+$requiredPdoDriver = appDatabaseDriver() === 'mysql' ? 'mysql' : 'sqlite';
+if (!class_exists('PDO') || !in_array($requiredPdoDriver, PDO::getAvailableDrivers(), true)) {
     http_response_code(503);
     echo json_encode([
         'success' => false,
-        'message' => 'Enquiry storage is unavailable: the PHP PDO SQLite driver (pdo_sqlite) is not enabled. On Debian/Ubuntu install php-sqlite3 (or php7.4-sqlite3 matching your PHP version), enable the extension in php.ini if needed, then restart PHP-FPM or Apache.',
+        'message' => 'Enquiry storage is unavailable: the PHP PDO ' . $requiredPdoDriver . ' driver is not enabled.',
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     exit;
 }

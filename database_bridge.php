@@ -2,8 +2,24 @@
 declare(strict_types=1);
 
 /**
- * Shared SQLite bridge for legacy form PHP and the Laravel admin backend.
+ * Shared database bridge for legacy form PHP and the Laravel admin backend.
+ * Supports SQLite (local default) and MySQL (Coolify / production).
  */
+
+function appDatabaseDriver(): string
+{
+    $url = trim((string)(getenv('DB_URL') ?: ''));
+    if ($url !== '' && preg_match('#^(mysql|mariadb):#i', $url)) {
+        return 'mysql';
+    }
+
+    $connection = strtolower(trim((string)(getenv('DB_CONNECTION') ?: 'sqlite')));
+    if (in_array($connection, ['mysql', 'mariadb'], true)) {
+        return 'mysql';
+    }
+
+    return 'sqlite';
+}
 
 function appDatabasePath(): string
 {
@@ -12,7 +28,56 @@ function appDatabasePath(): string
         return $configured;
     }
 
+    $database = trim((string)(getenv('DB_DATABASE') ?: ''));
+    if ($database !== '' && str_starts_with($database, '/') && !str_contains($database, '://')) {
+        return $database;
+    }
+
     return __DIR__ . '/data/app.sqlite';
+}
+
+/**
+ * @return array{dsn:string,user:?string,pass:?string}
+ */
+function appDatabaseCredentials(): array
+{
+    if (appDatabaseDriver() === 'mysql') {
+        $url = trim((string)(getenv('DB_URL') ?: ''));
+        if ($url !== '') {
+            $parts = parse_url($url);
+            if (is_array($parts) && isset($parts['host'])) {
+                $host = (string)$parts['host'];
+                $port = isset($parts['port']) ? (int)$parts['port'] : 3306;
+                $db = isset($parts['path']) ? ltrim((string)$parts['path'], '/') : 'default';
+                $user = isset($parts['user']) ? rawurldecode((string)$parts['user']) : 'mysql';
+                $pass = isset($parts['pass']) ? rawurldecode((string)$parts['pass']) : '';
+
+                return [
+                    'dsn' => sprintf('mysql:host=%s;port=%d;dbname=%s;charset=utf8mb4', $host, $port, $db),
+                    'user' => $user,
+                    'pass' => $pass,
+                ];
+            }
+        }
+
+        $host = trim((string)(getenv('DB_HOST') ?: '127.0.0.1'));
+        $port = (int)(getenv('DB_PORT') ?: 3306);
+        $db = trim((string)(getenv('DB_DATABASE') ?: 'default'));
+        $user = (string)(getenv('DB_USERNAME') ?: 'mysql');
+        $pass = (string)(getenv('DB_PASSWORD') ?: '');
+
+        return [
+            'dsn' => sprintf('mysql:host=%s;port=%d;dbname=%s;charset=utf8mb4', $host, $port, $db),
+            'user' => $user,
+            'pass' => $pass,
+        ];
+    }
+
+    return [
+        'dsn' => 'sqlite:' . appDatabasePath(),
+        'user' => null,
+        'pass' => null,
+    ];
 }
 
 function appDatabasePdo(): ?PDO
@@ -25,16 +90,20 @@ function appDatabasePdo(): ?PDO
     }
 
     $attempted = true;
-    $path = appDatabasePath();
+    $creds = appDatabaseCredentials();
 
-    if (!is_file($path)) {
-        return null;
+    if (appDatabaseDriver() === 'sqlite') {
+        $path = appDatabasePath();
+        if (!is_file($path)) {
+            return null;
+        }
     }
 
     try {
-        $pdo = new PDO('sqlite:' . $path, null, null, [
+        $pdo = new PDO($creds['dsn'], $creds['user'], $creds['pass'], [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_TIMEOUT => 10,
         ]);
     } catch (Throwable $e) {
         $pdo = null;
@@ -61,7 +130,7 @@ function appSettingsAll(): array
     }
 
     try {
-        $stmt = $pdo->query('SELECT key, value FROM settings');
+        $stmt = $pdo->query('SELECT `key`, value FROM settings');
         if ($stmt === false) {
             return $cache;
         }

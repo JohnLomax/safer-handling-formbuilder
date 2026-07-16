@@ -179,10 +179,10 @@
                     <x-text-input id="xero_redirect_uri" name="xero_redirect_uri" type="url" class="mt-1 block w-full" :value="old('xero_redirect_uri', $settings['xero_redirect_uri'] ?? $xeroRedirectUri)" />
                     <p class="mt-1 text-xs text-sh-mid">
                         Xero only allows <code class="rounded bg-sh-surface px-1">http://localhost</code> for local
-                        development. On Coolify you must use <strong>HTTPS</strong>. Enable SSL in Coolify, open the
-                        admin over https, then add this <strong>exact</strong> Redirect URI in the
+                        development. Production must use <strong>HTTPS</strong>. Open admin on this site over https,
+                        then add this <strong>exact</strong> Redirect URI in the
                         <a href="https://developer.xero.com/app/manage" class="underline" target="_blank" rel="noopener">Xero developer portal</a>
-                        (no trailing slash):
+                        (copy/paste — no trailing slash):
                     </p>
                     <p class="mt-2 break-all rounded bg-sh-surface px-2 py-1.5 font-mono text-xs text-sh-ink">{{ $xeroLiveRedirectUri }}</p>
                 </div>

@@ -287,16 +287,28 @@ class SettingController extends Controller
 
     /**
      * Build the OAuth redirect URI Xero will call back to.
-     * Public hosts are forced to https — Xero rejects http except localhost.
+     * Always uses the current request host (so cookies/session match), with https
+     * forced on public hosts — Xero rejects http except localhost.
      */
     private function resolveXeroRedirectUri(): string
     {
-        $configured = trim((string) (getenv('XERO_REDIRECT_URI') ?: Setting::getValue('xero_redirect_uri', '')));
-        if ($configured !== '' && $this->isAllowedXeroRedirectUri($configured)) {
-            return $configured;
+        return $this->normalizeXeroRedirectUri(url('/admin/settings/xero/callback'));
+    }
+
+    private function normalizeXeroRedirectUri(string $uri): string
+    {
+        $uri = rtrim(trim($uri), '/');
+        // Ensure canonical callback path (no accidental /admin/xero/callback).
+        if (! str_ends_with($uri, '/admin/settings/xero/callback')) {
+            $parts = parse_url($uri);
+            $scheme = $parts['scheme'] ?? 'https';
+            $host = $parts['host'] ?? '';
+            $port = isset($parts['port']) ? ':'.$parts['port'] : '';
+            if ($host !== '') {
+                $uri = $scheme.'://'.$host.$port.'/admin/settings/xero/callback';
+            }
         }
 
-        $uri = url('/admin/settings/xero/callback');
         if ($this->isLocalXeroRedirectHost($uri)) {
             return $uri;
         }

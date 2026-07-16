@@ -541,6 +541,7 @@ class EnquiryProcessRetry
 
         $root = dirname(base_path());
         require_once $root.'/config.php';
+        require_once $root.'/enquiry_logger.php';
         require_once $root.'/monday_helpers.php';
         require_once $root.'/brevo_email.php';
         require_once $root.'/xero.php';

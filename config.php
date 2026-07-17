@@ -18,6 +18,9 @@ declare(strict_types=1);
 |   XERO_ENABLED, XERO_CLIENT_ID, XERO_CLIENT_SECRET, XERO_REDIRECT_URI
 |   XERO_TENANT_ID, XERO_DEFAULT_ITEM_CODE, XERO_VAT_RATE, XERO_BRANDING_THEME_ID
 |   APP_DATABASE_PATH
+|
+| Do NOT set XERO_ACCESS_TOKEN / XERO_REFRESH_TOKEN / XERO_TOKEN_EXPIRES_AT in env.
+| Those rotate on every API refresh and must live in the settings table only.
 */
 
 $mondayvariable = '';

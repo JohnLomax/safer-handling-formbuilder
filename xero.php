@@ -42,20 +42,125 @@ function xeroTenantId(): string
     return appConfigValue('XERO_TENANT_ID', 'xeroTenantId');
 }
 
+/**
+ * Rotating OAuth tokens must come from the DB/settings store — never from env.
+ * A stale XERO_REFRESH_TOKEN in Coolify will keep replaying a consumed token.
+ */
+function xeroStoredTokenValue(string $settingKey, string $globalKey): string
+{
+    if (function_exists('appSetting')) {
+        $fromDb = trim((string) appSetting($settingKey, ''));
+        if ($fromDb !== '') {
+            return $fromDb;
+        }
+    }
+
+    if (class_exists(\App\Models\Setting::class)) {
+        try {
+            if (function_exists('app') && app()->bound('db')) {
+                $fromEloquent = trim((string) \App\Models\Setting::getValue($settingKey, ''));
+                if ($fromEloquent !== '') {
+                    return $fromEloquent;
+                }
+            }
+        } catch (Throwable $e) {
+            // Fall through to globals.
+        }
+    }
+
+    return trim((string) ($GLOBALS[$globalKey] ?? ''));
+}
+
 function xeroAccessToken(): string
 {
-    return appConfigValue('XERO_ACCESS_TOKEN', 'xeroAccessToken');
+    return xeroStoredTokenValue('xero_access_token', 'xeroAccessToken');
 }
 
 function xeroRefreshToken(): string
 {
-    return appConfigValue('XERO_REFRESH_TOKEN', 'xeroRefreshToken');
+    return xeroStoredTokenValue('xero_refresh_token', 'xeroRefreshToken');
 }
 
 function xeroTokenExpiresAt(): int
 {
-    $raw = appConfigValue('XERO_TOKEN_EXPIRES_AT', 'xeroTokenExpiresAt');
-    return is_numeric($raw) ? (int)$raw : 0;
+    $raw = xeroStoredTokenValue('xero_token_expires_at', 'xeroTokenExpiresAt');
+
+    return is_numeric($raw) ? (int) $raw : 0;
+}
+
+/**
+ * Drop process/Laravel settings caches so we never refresh with a stale token
+ * that another worker already consumed.
+ */
+function xeroReloadTokenSettings(): void
+{
+    if (function_exists('appSettingsFlushCache')) {
+        appSettingsFlushCache();
+    }
+
+    if (class_exists(\App\Models\Setting::class)) {
+        try {
+            \App\Models\Setting::flushCache();
+        } catch (Throwable $e) {
+            // Ignore when Laravel is not fully booted.
+        }
+    }
+
+    if (function_exists('applyAppSettingsToGlobals')) {
+        applyAppSettingsToGlobals();
+    }
+}
+
+/**
+ * Serialize refresh across PHP-FPM workers / containers that share MySQL.
+ *
+ * @template T
+ * @param  callable(): T  $callback
+ * @return T
+ */
+function xeroWithRefreshLock(callable $callback): mixed
+{
+    $pdo = function_exists('appDatabasePdo') ? appDatabasePdo() : null;
+    $locked = false;
+
+    if ($pdo instanceof PDO) {
+        try {
+            $driver = strtolower((string) $pdo->getAttribute(PDO::ATTR_DRIVER_NAME));
+            if (in_array($driver, ['mysql', 'mariadb'], true)) {
+                $stmt = $pdo->query("SELECT GET_LOCK('safer_handling_xero_token_refresh', 20)");
+                $row = $stmt !== false ? $stmt->fetch(PDO::FETCH_NUM) : false;
+                $locked = is_array($row) && (string) ($row[0] ?? '') === '1';
+            }
+        } catch (Throwable $e) {
+            $locked = false;
+        }
+    }
+
+    if (! $locked) {
+        // Fallback for SQLite / local: flock is process-local but better than nothing.
+        $lockPath = rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.'safer-handling-xero-token.lock';
+        $fp = @fopen($lockPath, 'c+');
+        if (is_resource($fp) && flock($fp, LOCK_EX)) {
+            try {
+                return $callback();
+            } finally {
+                flock($fp, LOCK_UN);
+                fclose($fp);
+            }
+        }
+
+        return $callback();
+    }
+
+    try {
+        return $callback();
+    } finally {
+        try {
+            $pdo->query("SELECT RELEASE_LOCK('safer_handling_xero_token_refresh')");
+        } catch (Throwable $e) {
+            // Best-effort release.
+        }
+    }
 }
 
 function xeroDefaultItemCode(): string
@@ -113,6 +218,10 @@ function xeroPersistTokens(string $accessToken, string $refreshToken, int $expir
                 foreach ($pairs as $key => $value) {
                     \App\Models\Setting::setValue($key, $value);
                 }
+                // Keep the legacy PDO settings cache in sync with Eloquent writes.
+                if (function_exists('appSettingsFlushCache')) {
+                    appSettingsFlushCache();
+                }
 
                 return;
             }
@@ -139,71 +248,108 @@ function xeroPersistTokens(string $accessToken, string $refreshToken, int $expir
 /**
  * @return array{access_token:string,refresh_token:string,expires_at:int,tenant_id:string}
  */
+function xeroCurrentTokenBundle(): array
+{
+    return [
+        'access_token' => xeroAccessToken(),
+        'refresh_token' => xeroRefreshToken(),
+        'expires_at' => xeroTokenExpiresAt(),
+        'tenant_id' => xeroTenantId(),
+    ];
+}
+
+/**
+ * @return array{access_token:string,refresh_token:string,expires_at:int,tenant_id:string}
+ */
 function xeroEnsureAccessToken(): array
 {
-    $accessToken = xeroAccessToken();
-    $refreshToken = xeroRefreshToken();
-    $expiresAt = xeroTokenExpiresAt();
-    $tenantId = xeroTenantId();
+    // Always re-read from DB — PHP-FPM static settings cache can hold a refresh
+    // token that another worker already exchanged.
+    xeroReloadTokenSettings();
+    $tokens = xeroCurrentTokenBundle();
 
-    if ($accessToken !== '' && $expiresAt > (time() + 60)) {
+    if ($tokens['access_token'] !== '' && $tokens['expires_at'] > (time() + 60)) {
+        return $tokens;
+    }
+
+    return xeroWithRefreshLock(static function () use ($tokens): array {
+        // Another worker may have refreshed while we waited for the lock.
+        xeroReloadTokenSettings();
+        $fresh = xeroCurrentTokenBundle();
+        if ($fresh['access_token'] !== '' && $fresh['expires_at'] > (time() + 60)) {
+            return $fresh;
+        }
+
+        $refreshToken = $fresh['refresh_token'] !== '' ? $fresh['refresh_token'] : $tokens['refresh_token'];
+        $tenantId = $fresh['tenant_id'] !== '' ? $fresh['tenant_id'] : $tokens['tenant_id'];
+
+        if ($refreshToken === '' || xeroClientId() === '' || xeroClientSecret() === '') {
+            throw new RuntimeException('Xero is not connected. Connect Xero in Admin → Settings.');
+        }
+
+        $ch = curl_init('https://identity.xero.com/connect/token');
+        if ($ch === false) {
+            throw new RuntimeException('Could not initialize cURL for Xero token refresh.');
+        }
+
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_HTTPHEADER => [
+                'Authorization: Basic ' . base64_encode(xeroClientId() . ':' . xeroClientSecret()),
+                'Content-Type: application/x-www-form-urlencoded',
+            ],
+            CURLOPT_POSTFIELDS => http_build_query([
+                'grant_type' => 'refresh_token',
+                'refresh_token' => $refreshToken,
+            ]),
+        ]);
+
+        $raw = curl_exec($ch);
+        $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        if ($raw === false) {
+            $err = curl_error($ch);
+            curl_close($ch);
+            throw new RuntimeException('Xero token refresh failed: '.$err);
+        }
+        curl_close($ch);
+
+        $decoded = json_decode($raw, true);
+        if ($status >= 400 || ! is_array($decoded) || empty($decoded['access_token'])) {
+            $message = is_array($decoded)
+                ? trim((string) ($decoded['error_description'] ?? $decoded['error'] ?? ''))
+                : '';
+
+            // Another worker may have consumed this refresh token and already
+            // persisted a new pair — reload and use those if they are still valid.
+            if (stripos($message, 'consumed') !== false || stripos($message, 'invalid_grant') !== false) {
+                xeroReloadTokenSettings();
+                $recovered = xeroCurrentTokenBundle();
+                if ($recovered['access_token'] !== '' && $recovered['expires_at'] > (time() + 60)) {
+                    return $recovered;
+                }
+
+                throw new RuntimeException(
+                    'Xero refresh token is no longer valid. Disconnect and reconnect Xero in Admin → Settings, then retry.'
+                );
+            }
+
+            throw new RuntimeException($message !== '' ? $message : 'Xero token refresh failed (HTTP '.$status.').');
+        }
+
+        $accessToken = (string) $decoded['access_token'];
+        $refreshToken = (string) ($decoded['refresh_token'] ?? $refreshToken);
+        $expiresIn = (int) ($decoded['expires_in'] ?? 1800);
+        $expiresAt = time() + max(60, $expiresIn);
+        xeroPersistTokens($accessToken, $refreshToken, $expiresAt, $tenantId);
+
         return [
             'access_token' => $accessToken,
             'refresh_token' => $refreshToken,
             'expires_at' => $expiresAt,
             'tenant_id' => $tenantId,
         ];
-    }
-
-    if ($refreshToken === '' || xeroClientId() === '' || xeroClientSecret() === '') {
-        throw new RuntimeException('Xero is not connected. Connect Xero in Admin → Settings.');
-    }
-
-    $ch = curl_init('https://identity.xero.com/connect/token');
-    if ($ch === false) {
-        throw new RuntimeException('Could not initialize cURL for Xero token refresh.');
-    }
-
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_POST => true,
-        CURLOPT_HTTPHEADER => [
-            'Authorization: Basic ' . base64_encode(xeroClientId() . ':' . xeroClientSecret()),
-            'Content-Type: application/x-www-form-urlencoded',
-        ],
-        CURLOPT_POSTFIELDS => http_build_query([
-            'grant_type' => 'refresh_token',
-            'refresh_token' => $refreshToken,
-        ]),
-    ]);
-
-    $raw = curl_exec($ch);
-    $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    if ($raw === false) {
-        $err = curl_error($ch);
-        curl_close($ch);
-        throw new RuntimeException('Xero token refresh failed: ' . $err);
-    }
-    curl_close($ch);
-
-    $decoded = json_decode($raw, true);
-    if ($status >= 400 || !is_array($decoded) || empty($decoded['access_token'])) {
-        $message = is_array($decoded) ? trim((string)($decoded['error_description'] ?? $decoded['error'] ?? '')) : '';
-        throw new RuntimeException($message !== '' ? $message : 'Xero token refresh failed (HTTP ' . $status . ').');
-    }
-
-    $accessToken = (string)$decoded['access_token'];
-    $refreshToken = (string)($decoded['refresh_token'] ?? $refreshToken);
-    $expiresIn = (int)($decoded['expires_in'] ?? 1800);
-    $expiresAt = time() + max(60, $expiresIn);
-    xeroPersistTokens($accessToken, $refreshToken, $expiresAt, $tenantId);
-
-    return [
-        'access_token' => $accessToken,
-        'refresh_token' => $refreshToken,
-        'expires_at' => $expiresAt,
-        'tenant_id' => $tenantId,
-    ];
+    });
 }
 
 /**

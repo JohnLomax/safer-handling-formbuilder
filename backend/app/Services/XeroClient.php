@@ -3,7 +3,11 @@
 namespace App\Services;
 
 use App\Models\Setting;
+use Illuminate\Contracts\Cache\LockTimeoutException;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use RuntimeException;
+use Throwable;
 
 class XeroClient
 {
@@ -165,22 +169,88 @@ class XeroClient
 
     private function refreshTokenIfNeeded(): void
     {
+        Setting::flushCache();
         $expiresAt = (int) Setting::getValue('xero_token_expires_at', '0');
         if ($expiresAt > 0 && time() < ($expiresAt - 60)) {
             return;
         }
 
-        $refreshToken = trim((string) Setting::getValue('xero_refresh_token', ''));
-        if ($refreshToken === '') {
-            throw new RuntimeException('Xero refresh token is missing. Reconnect Xero in Admin → Settings.');
+        $this->withRefreshLock(function (): void {
+            Setting::flushCache();
+            $expiresAt = (int) Setting::getValue('xero_token_expires_at', '0');
+            if ($expiresAt > 0 && time() < ($expiresAt - 60)) {
+                return;
+            }
+
+            $refreshToken = trim((string) Setting::getValue('xero_refresh_token', ''));
+            if ($refreshToken === '') {
+                throw new RuntimeException('Xero refresh token is missing. Reconnect Xero in Admin → Settings.');
+            }
+
+            try {
+                $tokens = $this->requestToken([
+                    'grant_type' => 'refresh_token',
+                    'refresh_token' => $refreshToken,
+                ]);
+            } catch (RuntimeException $e) {
+                $message = $e->getMessage();
+                if (stripos($message, 'consumed') !== false || stripos($message, 'invalid_grant') !== false) {
+                    Setting::flushCache();
+                    $expiresAt = (int) Setting::getValue('xero_token_expires_at', '0');
+                    $access = trim((string) Setting::getValue('xero_access_token', ''));
+                    if ($access !== '' && $expiresAt > 0 && time() < ($expiresAt - 60)) {
+                        return;
+                    }
+
+                    throw new RuntimeException(
+                        'Xero refresh token is no longer valid. Disconnect and reconnect Xero in Admin → Settings, then retry.'
+                    );
+                }
+
+                throw $e;
+            }
+
+            $this->storeTokens($tokens);
+        });
+    }
+
+    /**
+     * @param  callable(): void  $callback
+     */
+    private function withRefreshLock(callable $callback): void
+    {
+        try {
+            Cache::lock('safer_handling_xero_token_refresh', 20)->block(20, $callback);
+
+            return;
+        } catch (LockTimeoutException $e) {
+            // Another worker held the lock too long — try MySQL GET_LOCK next.
+        } catch (RuntimeException $e) {
+            // Bubble up Xero/auth errors from the locked callback.
+            throw $e;
+        } catch (Throwable $e) {
+            // Cache lock driver unavailable — fall through to MySQL GET_LOCK.
         }
 
-        $tokens = $this->requestToken([
-            'grant_type' => 'refresh_token',
-            'refresh_token' => $refreshToken,
-        ]);
+        $locked = false;
+        try {
+            $row = DB::selectOne("SELECT GET_LOCK('safer_handling_xero_token_refresh', 20) AS acquired");
+            $locked = $row !== null && (string) ($row->acquired ?? '') === '1';
+        } catch (Throwable $e) {
+            $locked = false;
+        }
 
-        $this->storeTokens($tokens);
+        try {
+            $callback();
+        } finally {
+            if ($locked) {
+                try {
+                    DB::selectOne("SELECT RELEASE_LOCK('safer_handling_xero_token_refresh') AS released");
+                } catch (Throwable $e) {
+                    // Best-effort release.
+                }
+            }
+        }
     }
 
     /**

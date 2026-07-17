@@ -437,15 +437,16 @@ function mondayDateColumnValueFromDatetimeLocal(string $datetimeLocal): ?array
     if ($datetimeLocal === '') {
         return null;
     }
-    $datetimeLocal = str_replace(' ', 'T', $datetimeLocal);
-    $dt = \DateTimeImmutable::createFromFormat('Y-m-d', substr($datetimeLocal, 0, 10))
-        ?: \DateTimeImmutable::createFromFormat('Y-m-d\TH:i', $datetimeLocal)
-        ?: \DateTimeImmutable::createFromFormat('Y-m-d\TH:i:s', $datetimeLocal);
-    if ($dt === false) {
+    if (! preg_match('/^(\d{4}-\d{2}-\d{2})/', str_replace(' ', 'T', $datetimeLocal), $matches)) {
+        return null;
+    }
+    $dateOnly = $matches[1];
+    $dt = \DateTimeImmutable::createFromFormat('!Y-m-d', $dateOnly, new \DateTimeZone('Europe/London'));
+    if ($dt === false || $dt->format('Y-m-d') !== $dateOnly) {
         return null;
     }
 
-    return ['date' => $dt->format('Y-m-d')];
+    return ['date' => $dateOnly];
 }
 
 /**

@@ -470,19 +470,21 @@ class EnquiryProcessRetry
         $payload['matrixAttendees'] = $payload['matrixAttendees'] ?? $enquiry->matrix_attendees;
         $payload['organisationCompany'] = $payload['organisationCompany'] ?? $enquiry->organisation_company;
         $payload['attendees'] = $payload['attendees'] ?? $enquiry->attendees;
-        $payload['preferredDateTime'] = $payload['preferredDateTime'] ?? $enquiry->preferred_date_time;
         $payload['extraNotes'] = $payload['extraNotes'] ?? $enquiry->extra_notes;
         if (! isset($payload['quoteValue']) || trim((string) $payload['quoteValue']) === '') {
             // Keep any stored quote value from the original submission payload.
             $payload['quoteValue'] = $payload['quoteValue'] ?? '';
         }
 
+        // Enquiry columns are the source of truth for preferred date. Stale
+        // form_data_json (e.g. leftover dateNotSure) was causing quote emails to
+        // show a different date — or none — vs admin.
+        unset($payload['dateNotSure'], $payload['preferredDateTime'], $payload['preferredDate'], $payload['preferredTime']);
         if ($enquiry->date_not_sure) {
             $payload['dateNotSure'] = 'on';
-            unset($payload['preferredDateTime']);
-        } elseif (! isset($payload['dateNotSure']) && filled($enquiry->preferred_date_time)) {
-            unset($payload['dateNotSure']);
+        } elseif (filled($enquiry->preferred_date_time)) {
             $payload['preferredDateTime'] = $enquiry->preferred_date_time;
+            $payload['preferredDate'] = $enquiry->preferred_date_time;
         }
 
         if ($enquiry->booking_via_company && ! isset($payload['bookingViaCompany'])) {

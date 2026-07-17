@@ -113,11 +113,13 @@ class Enquiry extends Model
             return '';
         }
 
-        $raw = str_replace(' ', 'T', $raw);
-        $dt = \DateTimeImmutable::createFromFormat('Y-m-d', substr($raw, 0, 10))
-            ?: \DateTimeImmutable::createFromFormat('Y-m-d\TH:i', $raw)
-            ?: \DateTimeImmutable::createFromFormat('Y-m-d\TH:i:s', $raw);
-        if ($dt === false) {
+        if (! preg_match('/^\d{4}-\d{2}-\d{2}/', $raw)) {
+            return $raw;
+        }
+
+        $dateOnly = substr(str_replace(' ', 'T', $raw), 0, 10);
+        $dt = \DateTimeImmutable::createFromFormat('!Y-m-d', $dateOnly, new \DateTimeZone('Europe/London'));
+        if ($dt === false || $dt->format('Y-m-d') !== $dateOnly) {
             return $raw;
         }
 

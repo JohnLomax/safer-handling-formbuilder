@@ -749,11 +749,15 @@ function formatPreferredTrainingDate(string $preferredDateTime, bool $dateNotSur
         return '';
     }
 
-    $preferredDateTime = str_replace(' ', 'T', $preferredDateTime);
-    $dt = \DateTimeImmutable::createFromFormat('Y-m-d', substr($preferredDateTime, 0, 10))
-        ?: \DateTimeImmutable::createFromFormat('Y-m-d\TH:i', $preferredDateTime)
-        ?: \DateTimeImmutable::createFromFormat('Y-m-d\TH:i:s', $preferredDateTime);
-    if ($dt === false) {
+    // Already a human-readable label (e.g. from a previous format pass).
+    if (! preg_match('/^\d{4}-\d{2}-\d{2}/', $preferredDateTime)) {
+        return $preferredDateTime;
+    }
+
+    // Date-only: ignore any time/timezone suffix so emails never shift by a day.
+    $dateOnly = substr(str_replace(' ', 'T', $preferredDateTime), 0, 10);
+    $dt = \DateTimeImmutable::createFromFormat('!Y-m-d', $dateOnly, new \DateTimeZone('Europe/London'));
+    if ($dt === false || $dt->format('Y-m-d') !== $dateOnly) {
         return $preferredDateTime;
     }
 
@@ -792,7 +796,7 @@ function buildQuoteSummaryRows(array $data): string
 
     $quoteDisplay = trim((string)($data['quoteDisplay'] ?? ''));
     if ($quoteDisplay !== '') {
-        $rows[] = quoteEmailSummaryRow('Quote total (inc. VAT & travel)', $quoteDisplay, true);
+        $rows[] = quoteEmailSummaryRow('Quote total (Excluding VAT & including travel)', $quoteDisplay, true);
     }
 
     if ($rows === []) {
@@ -1051,7 +1055,7 @@ function buildQuoteEmailText(array $data): string
             'Delivery' => trim((string)($data['format'] ?? '') . ((string)($data['courseStyle'] ?? '') !== '' ? ' (' . (string)$data['courseStyle'] . ')' : '')),
             'Delegates' => (string)($data['attendees'] ?? ''),
             'Preferred date' => quoteEmailHasPreferredDate($data) ? (string)$data['preferredDate'] : '',
-            'Quote total (inc. VAT & travel)' => (string)($data['quoteDisplay'] ?? ''),
+            'Quote total (Excluding VAT & including travel)' => (string)($data['quoteDisplay'] ?? ''),
         ] as $label => $value
     ) {
         if ($value !== '') {
@@ -1217,7 +1221,7 @@ function buildNewLeadEmailHtml(array $data): string
         'Delivery' => trim($format . ($courseStyle !== '' ? ' (' . $courseStyle . ')' : '')),
         'Delegates' => $attendees,
         'Preferred date' => $preferredDate,
-        'Quote (inc. VAT & travel)' => $quoteDisplay,
+        'Quote (Excluding VAT & including travel)' => $quoteDisplay,
         'Address' => $address,
     ];
 
@@ -1322,7 +1326,7 @@ function buildNewLeadEmailText(array $data): string
         'Delivery' => trim((string)($data['format'] ?? '') . ((string)($data['courseStyle'] ?? '') !== '' ? ' (' . (string)$data['courseStyle'] . ')' : '')),
         'Delegates' => (string)($data['attendees'] ?? ''),
         'Preferred date' => (string)($data['preferredDate'] ?? ''),
-        'Quote (inc. VAT & travel)' => (string)($data['quoteDisplay'] ?? ''),
+        'Quote (Excluding VAT & including travel)' => (string)($data['quoteDisplay'] ?? ''),
         'Address' => (string)($data['address'] ?? ''),
         'Notes' => (string)($data['extraNotes'] ?? ''),
     ];
@@ -1506,8 +1510,13 @@ function buildQuoteEmailDataFromSubmission(array $post, string $name, string $em
         $courseStyle = trim((string)($post['formatSubOption'] ?? ''));
         $sector = trim((string)($post['sector'] ?? ''));
         $attendees = trim((string)($post['attendees'] ?? ($post['matrixAttendees'] ?? '')));
-        $preferredDateTime = trim((string)($post['preferredDateTime'] ?? ''));
-        $dateNotSure = isset($post['dateNotSure']);
+
+        // Prefer preferredDate / preferredDateTime via the shared normaliser so a
+        // stale dateNotSure flag or missing hidden field cannot shift the email date.
+        require_once __DIR__ . '/enquiry_logger.php';
+        $preferred = enquiryPreferredDateFromPost($post);
+        $preferredDateTime = $preferred['preferredDateTime'];
+        $dateNotSure = $preferred['dateNotSure'];
     }
 
     $quoteValue = trim((string)($post['quoteValue'] ?? ''));

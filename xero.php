@@ -629,7 +629,126 @@ function xeroContactAddressesPayload(array $address): array
 }
 
 /**
- * Update an existing Xero contact with billing address (and optional phone).
+ * Escape a value for Xero Accounting API `where` clauses.
+ */
+function xeroWhereString(string $value): string
+{
+    return str_replace(['\\', '"'], ['\\\\', '\\"'], $value);
+}
+
+/**
+ * True when a Xero contact is usable (active / not archived).
+ *
+ * @param array<string, mixed> $contact
+ */
+function xeroContactIsActive(array $contact): bool
+{
+    $status = strtoupper(trim((string) ($contact['ContactStatus'] ?? 'ACTIVE')));
+
+    return $status === '' || $status === 'ACTIVE';
+}
+
+/**
+ * Pick the best matching contact from a Xero Contacts response.
+ *
+ * Prefer exact email, then exact name (case-insensitive), among active contacts.
+ *
+ * @param  list<array<string, mixed>>|mixed  $contacts
+ * @return array<string, mixed>|null
+ */
+function xeroPickMatchingContact(mixed $contacts, string $name, string $email): ?array
+{
+    if (! is_array($contacts) || $contacts === []) {
+        return null;
+    }
+
+    $name = trim($name);
+    $email = strtolower(trim($email));
+    $nameKey = strtolower($name);
+
+    $byEmail = null;
+    $byName = null;
+
+    foreach ($contacts as $contact) {
+        if (! is_array($contact) || empty($contact['ContactID']) || ! xeroContactIsActive($contact)) {
+            continue;
+        }
+
+        $contactEmail = strtolower(trim((string) ($contact['EmailAddress'] ?? '')));
+        $contactName = strtolower(trim((string) ($contact['Name'] ?? '')));
+
+        if ($email !== '' && $contactEmail === $email) {
+            $byEmail = $contact;
+            break;
+        }
+
+        if ($byName === null && $nameKey !== '' && $contactName === $nameKey) {
+            $byName = $contact;
+        }
+    }
+
+    return $byEmail ?? $byName;
+}
+
+/**
+ * Look up an existing Xero contact by email, then by name.
+ *
+ * @return array<string, mixed>|null
+ */
+function xeroFindExistingContact(string $name, string $email): ?array
+{
+    $name = trim($name);
+    $email = trim($email);
+
+    if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $where = 'EmailAddress!=null&&EmailAddress=="'.xeroWhereString($email).'"';
+        $existing = xeroApiRequest('GET', 'Contacts', null, [
+            'where' => $where,
+            'page' => 1,
+            'includeArchived' => 'false',
+        ]);
+        if ($existing['status'] < 400) {
+            $match = xeroPickMatchingContact($existing['body']['Contacts'] ?? [], $name, $email);
+            if ($match !== null) {
+                return $match;
+            }
+        }
+    }
+
+    if ($name !== '') {
+        $where = 'Name=="'.xeroWhereString($name).'"&&ContactStatus=="ACTIVE"';
+        $existing = xeroApiRequest('GET', 'Contacts', null, [
+            'where' => $where,
+            'page' => 1,
+            'includeArchived' => 'false',
+        ]);
+        if ($existing['status'] < 400) {
+            $match = xeroPickMatchingContact($existing['body']['Contacts'] ?? [], $name, $email);
+            if ($match !== null) {
+                return $match;
+            }
+        }
+
+        // Case / partial mismatches: searchTerm then exact name/email filter locally.
+        $search = xeroApiRequest('GET', 'Contacts', null, [
+            'searchTerm' => $name,
+            'page' => 1,
+            'includeArchived' => 'false',
+        ]);
+        if ($search['status'] < 400) {
+            $match = xeroPickMatchingContact($search['body']['Contacts'] ?? [], $name, $email);
+            if ($match !== null) {
+                return $match;
+            }
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Update an existing Xero contact with billing address (and optional phone/email).
+ * Does not rename the contact — Xero requires unique Names across active contacts.
  *
  * @param array<string, mixed> $address
  */
@@ -646,23 +765,25 @@ function xeroEnsureContactAddress(
     }
 
     $addresses = xeroContactAddressesPayload($address);
-    if ($addresses === []) {
+    $email = trim($email);
+    $phone = trim($phone);
+
+    // Name is intentionally ignored: renaming can collide with another active contact.
+    unset($name);
+
+    if ($addresses === [] && ($email === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) && $phone === '') {
         return;
     }
 
     $contact = [
         'ContactID' => $contactId,
-        'Addresses' => $addresses,
     ];
-    $name = trim($name);
-    if ($name !== '') {
-        $contact['Name'] = $name;
+    if ($addresses !== []) {
+        $contact['Addresses'] = $addresses;
     }
-    $email = trim($email);
     if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $contact['EmailAddress'] = $email;
     }
-    $phone = trim($phone);
     if ($phone !== '') {
         $contact['Phones'] = [[
             'PhoneType' => 'DEFAULT',
@@ -674,7 +795,9 @@ function xeroEnsureContactAddress(
         'Contacts' => [$contact],
     ]);
     if ($resp['status'] >= 400) {
-        throw new RuntimeException(xeroApiErrorMessage($resp['body'], 'Could not update Xero contact address.'));
+        // Address/email updates are best-effort once we have a ContactID to bill.
+        // Do not fail quote/invoice creation because Xero rejected a non-critical update.
+        return;
     }
 }
 
@@ -686,38 +809,37 @@ function xeroFindOrCreateContact(string $name, string $email, array $address = [
 {
     $name = trim($name);
     $email = trim($email);
-    if ($name === '' || $email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    if ($name === '' || $email === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
         throw new RuntimeException('A valid contact name and email are required for Xero.');
     }
 
-    $addresses = xeroContactAddressesPayload($address);
-    $where = 'EmailAddress!=null&&EmailAddress=="' . str_replace('"', '', $email) . '"';
-    $existing = xeroApiRequest('GET', 'Contacts', null, [
-        'where' => $where,
-        'page' => 1,
-    ]);
+    $existing = xeroFindExistingContact($name, $email);
+    if ($existing !== null) {
+        $contactId = (string) $existing['ContactID'];
+        xeroEnsureContactAddress($contactId, $address, $name, $email);
 
-    if ($existing['status'] < 400) {
-        $contacts = $existing['body']['Contacts'] ?? [];
-        if (is_array($contacts) && isset($contacts[0]['ContactID'])) {
-            $contactId = (string)$contacts[0]['ContactID'];
-            if ($addresses !== []) {
-                xeroEnsureContactAddress($contactId, $address, $name, $email);
-            }
-
-            return [
-                'ContactID' => $contactId,
-                'Name' => (string)($contacts[0]['Name'] ?? $name),
-            ];
-        }
+        return [
+            'ContactID' => $contactId,
+            'Name' => (string) ($existing['Name'] ?? $name),
+        ];
     }
 
     $contactPayload = [
         'Name' => $name,
         'EmailAddress' => $email,
-        'FirstName' => $name,
         'IsCustomer' => true,
     ];
+    // Prefer given/family split when the display name has a space; avoid stuffing
+    // the full name into FirstName (which also surfaces oddly in Xero).
+    $parts = preg_split('/\s+/', $name) ?: [];
+    if (count($parts) >= 2) {
+        $contactPayload['FirstName'] = array_shift($parts);
+        $contactPayload['LastName'] = implode(' ', $parts);
+    } else {
+        $contactPayload['FirstName'] = $name;
+    }
+
+    $addresses = xeroContactAddressesPayload($address);
     if ($addresses !== []) {
         $contactPayload['Addresses'] = $addresses;
     }
@@ -725,16 +847,37 @@ function xeroFindOrCreateContact(string $name, string $email, array $address = [
     $created = xeroApiRequest('POST', 'Contacts', [
         'Contacts' => [$contactPayload],
     ]);
-    if ($created['status'] >= 400 || empty($created['body']['Contacts'][0]['ContactID'])) {
-        throw new RuntimeException(xeroApiErrorMessage($created['body'], 'Could not create Xero contact.'));
+
+    if ($created['status'] < 400 && ! empty($created['body']['Contacts'][0]['ContactID'])) {
+        $contact = $created['body']['Contacts'][0];
+
+        return [
+            'ContactID' => (string) $contact['ContactID'],
+            'Name' => (string) ($contact['Name'] ?? $name),
+        ];
     }
 
-    $contact = $created['body']['Contacts'][0];
+    $error = xeroApiErrorMessage($created['body'], 'Could not create Xero contact.');
 
-    return [
-        'ContactID' => (string)$contact['ContactID'],
-        'Name' => (string)($contact['Name'] ?? $name),
-    ];
+    // Name already taken (or create raced) — reuse the existing active contact.
+    if (
+        stripos($error, 'already assigned') !== false
+        || stripos($error, 'must be unique') !== false
+        || stripos($error, 'already exists') !== false
+    ) {
+        $fallback = xeroFindExistingContact($name, $email);
+        if ($fallback !== null) {
+            $contactId = (string) $fallback['ContactID'];
+            xeroEnsureContactAddress($contactId, $address, $name, $email);
+
+            return [
+                'ContactID' => $contactId,
+                'Name' => (string) ($fallback['Name'] ?? $name),
+            ];
+        }
+    }
+
+    throw new RuntimeException($error);
 }
 
 /**

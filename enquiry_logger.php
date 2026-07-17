@@ -458,12 +458,13 @@ function enquiryPreferredDateFromPost(array $post): array
 
     $dateOnly = '';
     if ($preferredDate !== '') {
-        $preferredDate = str_replace(' ', 'T', $preferredDate);
-        $dt = \DateTimeImmutable::createFromFormat('Y-m-d', substr($preferredDate, 0, 10))
-            ?: \DateTimeImmutable::createFromFormat('Y-m-d\TH:i', $preferredDate)
-            ?: \DateTimeImmutable::createFromFormat('Y-m-d\TH:i:s', $preferredDate);
-        if ($dt !== false) {
-            $dateOnly = $dt->format('Y-m-d');
+        // Keep calendar date only — never let a time/timezone suffix shift the day.
+        if (preg_match('/^(\d{4}-\d{2}-\d{2})/', str_replace(' ', 'T', $preferredDate), $matches)) {
+            $candidate = $matches[1];
+            $dt = \DateTimeImmutable::createFromFormat('!Y-m-d', $candidate, new \DateTimeZone('Europe/London'));
+            if ($dt !== false && $dt->format('Y-m-d') === $candidate) {
+                $dateOnly = $candidate;
+            }
         }
     }
 

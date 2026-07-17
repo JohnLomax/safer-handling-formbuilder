@@ -121,35 +121,18 @@ function xeroPersistTokens(string $accessToken, string $refreshToken, int $expir
         }
     }
 
-    if (!function_exists('appDatabasePdo') || appDatabasePdo() === null) {
+    if (!function_exists('appSettingSet')) {
+        require_once __DIR__ . '/database_bridge.php';
+    }
+
+    if (!function_exists('appSettingSet')) {
         return;
     }
 
-    $pdo = appDatabasePdo();
-    $now = gmdate('Y-m-d H:i:s');
-    $driver = function_exists('appDatabaseDriver') ? appDatabaseDriver() : 'sqlite';
-
-    if ($driver === 'mysql') {
-        $stmt = $pdo->prepare(
-            'INSERT INTO settings (`key`, value, created_at, updated_at)
-             VALUES (:key, :value, :created_at, :updated_at)
-             ON DUPLICATE KEY UPDATE value = VALUES(value), updated_at = VALUES(updated_at)'
-        );
-    } else {
-        $stmt = $pdo->prepare(
-            'INSERT INTO settings ("key", value, created_at, updated_at)
-             VALUES (:key, :value, :created_at, :updated_at)
-             ON CONFLICT("key") DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at'
-        );
-    }
-
+    // Use live PDO driver name (not env) — Coolify can leave DB_CONNECTION=sqlite
+    // while the actual connection is MySQL.
     foreach ($pairs as $key => $value) {
-        $stmt->execute([
-            ':key' => $key,
-            ':value' => $value,
-            ':created_at' => $now,
-            ':updated_at' => $now,
-        ]);
+        appSettingSet($key, $value);
     }
 }
 

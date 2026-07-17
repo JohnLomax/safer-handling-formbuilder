@@ -6,16 +6,57 @@ declare(strict_types=1);
  * Supports SQLite (local default) and MySQL (Coolify / production).
  */
 
+/**
+ * Read an env value from getenv / $_ENV / $_SERVER (Coolify is inconsistent).
+ */
+function appEnvValue(string $key, string $default = ''): string
+{
+    $fromGetenv = getenv($key);
+    if ($fromGetenv !== false && trim((string)$fromGetenv) !== '') {
+        return trim((string)$fromGetenv);
+    }
+
+    if (isset($_ENV[$key]) && trim((string)$_ENV[$key]) !== '') {
+        return trim((string)$_ENV[$key]);
+    }
+
+    if (isset($_SERVER[$key]) && trim((string)$_SERVER[$key]) !== '') {
+        return trim((string)$_SERVER[$key]);
+    }
+
+    return $default;
+}
+
 function appDatabaseDriver(): string
 {
-    $url = trim((string)(getenv('DB_URL') ?: ''));
+    $url = appEnvValue('DB_URL');
     if ($url !== '' && preg_match('#^(mysql|mariadb):#i', $url)) {
         return 'mysql';
     }
 
-    $connection = strtolower(trim((string)(getenv('DB_CONNECTION') ?: 'sqlite')));
+    $connection = strtolower(appEnvValue('DB_CONNECTION', 'sqlite'));
     if (in_array($connection, ['mysql', 'mariadb'], true)) {
         return 'mysql';
+    }
+
+    // Coolify sometimes leaves DB_CONNECTION=sqlite while MySQL host/user are set.
+    $host = appEnvValue('DB_HOST');
+    $user = appEnvValue('DB_USERNAME');
+    $database = appEnvValue('DB_DATABASE');
+    if ($host !== '' && $user !== '') {
+        $looksLikeSqlitePath = str_contains($database, '/')
+            || str_ends_with(strtolower($database), '.sqlite')
+            || str_ends_with(strtolower($database), '.sqlite3');
+        if (!$looksLikeSqlitePath) {
+            return 'mysql';
+        }
+        if (
+            appEnvValue('DB_PASSWORD') !== ''
+            || $host === 'mysql'
+            || in_array(appEnvValue('DB_PORT'), ['3306', '2248'], true)
+        ) {
+            return 'mysql';
+        }
     }
 
     return 'sqlite';
@@ -23,12 +64,12 @@ function appDatabaseDriver(): string
 
 function appDatabasePath(): string
 {
-    $configured = trim((string)(getenv('APP_DATABASE_PATH') ?: ''));
+    $configured = appEnvValue('APP_DATABASE_PATH');
     if ($configured !== '') {
         return $configured;
     }
 
-    $database = trim((string)(getenv('DB_DATABASE') ?: ''));
+    $database = appEnvValue('DB_DATABASE');
     if ($database !== '' && str_starts_with($database, '/') && !str_contains($database, '://')) {
         return $database;
     }
@@ -42,7 +83,7 @@ function appDatabasePath(): string
 function appDatabaseCredentials(): array
 {
     if (appDatabaseDriver() === 'mysql') {
-        $url = trim((string)(getenv('DB_URL') ?: ''));
+        $url = appEnvValue('DB_URL');
         if ($url !== '') {
             $parts = parse_url($url);
             if (is_array($parts) && isset($parts['host'])) {
@@ -51,6 +92,9 @@ function appDatabaseCredentials(): array
                 $db = isset($parts['path']) ? ltrim((string)$parts['path'], '/') : 'default';
                 $user = isset($parts['user']) ? rawurldecode((string)$parts['user']) : 'mysql';
                 $pass = isset($parts['pass']) ? rawurldecode((string)$parts['pass']) : '';
+                if (str_contains($db, '/') || str_ends_with(strtolower($db), '.sqlite')) {
+                    $db = 'default';
+                }
 
                 return [
                     'dsn' => sprintf('mysql:host=%s;port=%d;dbname=%s;charset=utf8mb4', $host, $port, $db),
@@ -60,11 +104,14 @@ function appDatabaseCredentials(): array
             }
         }
 
-        $host = trim((string)(getenv('DB_HOST') ?: '127.0.0.1'));
-        $port = (int)(getenv('DB_PORT') ?: 3306);
-        $db = trim((string)(getenv('DB_DATABASE') ?: 'default'));
-        $user = (string)(getenv('DB_USERNAME') ?: 'mysql');
-        $pass = (string)(getenv('DB_PASSWORD') ?: '');
+        $host = appEnvValue('DB_HOST', '127.0.0.1');
+        $port = (int)(appEnvValue('DB_PORT', '3306') ?: '3306');
+        $db = appEnvValue('DB_DATABASE', 'default');
+        if ($db === '' || str_contains($db, '/') || str_ends_with(strtolower($db), '.sqlite')) {
+            $db = 'default';
+        }
+        $user = appEnvValue('DB_USERNAME', 'mysql');
+        $pass = appEnvValue('DB_PASSWORD');
 
         return [
             'dsn' => sprintf('mysql:host=%s;port=%d;dbname=%s;charset=utf8mb4', $host, $port, $db),
@@ -115,9 +162,21 @@ function appDatabasePdo(): ?PDO
 /**
  * @return array<string, string>
  */
-function appSettingsAll(): array
+function appSettingsFlushCache(): void
+{
+    appSettingsAll(true);
+}
+
+/**
+ * @return array<string, string>
+ */
+function appSettingsAll(bool $flush = false): array
 {
     static $cache = null;
+
+    if ($flush) {
+        $cache = null;
+    }
 
     if (is_array($cache)) {
         return $cache;
@@ -157,6 +216,43 @@ function appSettingBool(string $key, bool $default = false): bool
     $value = appSetting($key, $default ? '1' : '0');
 
     return filter_var($value, FILTER_VALIDATE_BOOLEAN);
+}
+
+/**
+ * Upsert a settings row using the live PDO driver (MySQL or SQLite).
+ */
+function appSettingSet(string $key, string $value): void
+{
+    $pdo = appDatabasePdo();
+    if ($pdo === null) {
+        return;
+    }
+
+    $now = gmdate('Y-m-d H:i:s');
+    $driver = strtolower((string)$pdo->getAttribute(PDO::ATTR_DRIVER_NAME));
+
+    if (in_array($driver, ['mysql', 'mariadb'], true)) {
+        $stmt = $pdo->prepare(
+            'INSERT INTO settings (`key`, value, created_at, updated_at)
+             VALUES (:key, :value, :created_at, :updated_at)
+             ON DUPLICATE KEY UPDATE value = VALUES(value), updated_at = VALUES(updated_at)'
+        );
+    } else {
+        $stmt = $pdo->prepare(
+            'INSERT INTO settings ("key", value, created_at, updated_at)
+             VALUES (:key, :value, :created_at, :updated_at)
+             ON CONFLICT("key") DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at'
+        );
+    }
+
+    $stmt->execute([
+        ':key' => $key,
+        ':value' => $value,
+        ':created_at' => $now,
+        ':updated_at' => $now,
+    ]);
+
+    appSettingsFlushCache();
 }
 
 /**

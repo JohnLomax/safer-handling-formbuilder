@@ -890,7 +890,7 @@
             </div>
 
             <div class="actions">
-              <button id="submitBtn" type="submit" class="btn-primary">Submit Enquiry and Get Quote</button>
+              <button id="submitBtn" type="submit" class="btn-primary">Submit enquiry and generate my quote</button>
             </div>
           </div>
         </section>
@@ -1781,7 +1781,7 @@
           ? "View Online Courses"
           : isTrainer
             ? (bookingViaCompany ? "Send Quote" : "Book Now")
-            : "Submit Enquiry and Get Quote";
+            : "Submit enquiry and generate my quote";
         attendeesInput.required = false;
       }
 
@@ -1789,7 +1789,7 @@
         trainingSection.classList.add("hidden");
         finalDetailsBlock.classList.add("hidden");
         extraNotesBlock.classList.remove("hidden");
-        submitBtn.textContent = "Submit Enquiry and Get Quote";
+        submitBtn.textContent = "Submit enquiry and generate my quote";
         attendeesInput.required = false;
         attendeesInput.min = "1";
         attendeesInput.max = String(MATRIX_MAX_ATTENDEES);
@@ -2788,7 +2788,7 @@
           })
           .finally(function () {
             submitBtn.disabled = false;
-            submitBtn.textContent = "Submit Enquiry and Get Quote";
+            submitBtn.textContent = "Submit enquiry and generate my quote";
           });
       });
 

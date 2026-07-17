@@ -75,6 +75,7 @@ try {
             'email' => (string)$row['email'],
             'enquiryType' => (string)$row['enquiry_type'],
             'status' => (string)$row['status'],
+            'resumeToken' => (string)$row['resume_token'],
             'formData' => $formData,
         ],
     ]);

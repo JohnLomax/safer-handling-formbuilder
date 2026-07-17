@@ -19,12 +19,12 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-$enquiryId = enquiryLoggerPostId($_POST);
+$enquiryId = enquiryLoggerResolveAuthenticatedEnquiryId($_POST);
 if ($enquiryId === null) {
     http_response_code(422);
     echo json_encode([
         'success' => false,
-        'message' => 'A valid enquiry ID is required.',
+        'message' => 'A valid enquiry ID and resume token are required.',
     ]);
     exit;
 }

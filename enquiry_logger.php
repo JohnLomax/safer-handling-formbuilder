@@ -208,49 +208,62 @@ function enquiryLoggerCreateInitial(array $post): int
     return $id;
 }
 
+function enquiryLoggerPostResumeToken(array $post): string
+{
+    return trim((string)($post['resumeToken'] ?? $post['token'] ?? ''));
+}
+
 /**
- * Reuse an in-progress enquiry for the same email when possible.
- * Brand-new sessions without an enquiryId create a fresh row.
- *
- * @param array<string, mixed> $post
+ * Authenticated enquiry reuse for Edit Enquiry / same-session continue.
+ * Requires enquiryId + matching resume token. Without a valid token a new
+ * enquiry flow is always started (even if the email already exists).
  */
+function enquiryLoggerResolveAuthenticatedEnquiryId(array $post): ?int
+{
+    $enquiryId = enquiryLoggerPostId($post);
+    $token = enquiryLoggerPostResumeToken($post);
+    if ($enquiryId === null || $token === '') {
+        return null;
+    }
+
+    $row = enquiryLoggerGetForResume($enquiryId, $token);
+    if ($row === null) {
+        return null;
+    }
+
+    if (!enquiryLoggerIsEligibleForSubmitReuse($enquiryId)) {
+        return null;
+    }
+
+    return $enquiryId;
+}
+
 function enquiryLoggerFindOrCreateInitial(array $post): int
 {
-    $existingId = enquiryLoggerPostId($post);
-    if ($existingId !== null && enquiryLoggerIsEligibleForSubmitReuse($existingId)) {
+    $existingId = enquiryLoggerResolveAuthenticatedEnquiryId($post);
+    if ($existingId !== null) {
         enquiryLoggerUpdateFromPost($existingId, $post, 'in_progress');
         enquiryLoggerEnsureResumeToken($existingId);
 
         return $existingId;
     }
 
-    $email = trim((string)($post['email'] ?? ''));
-    if ($email !== '') {
-        $pdo = enquiryLoggerPdo();
-        $stmt = $pdo->prepare(
-            'SELECT id FROM enquiries
-             WHERE email = :email AND status = :status
-             ORDER BY id DESC
-             LIMIT 1'
-        );
-        $stmt->execute([
-            ':email' => $email,
-            ':status' => 'in_progress',
-        ]);
-        $row = $stmt->fetch();
-        if ($row) {
-            $id = (int)$row['id'];
-            if (enquiryLoggerIsEligibleForSubmitReuse($id)) {
-                enquiryLoggerUpdateFromPost($id, $post, 'in_progress');
-                enquiryLoggerEnsureResumeToken($id);
-                enquiryLoggerEvent($id, 'details_updated', 'Enquiry details updated on the form.');
+    return enquiryLoggerCreateInitial($post);
+}
 
-                return $id;
-            }
-        }
+function enquiryLoggerGetMondayItemId(int $enquiryId): ?string
+{
+    if ($enquiryId <= 0) {
+        return null;
     }
 
-    return enquiryLoggerCreateInitial($post);
+    $pdo = enquiryLoggerPdo();
+    $stmt = $pdo->prepare('SELECT monday_item_id FROM enquiries WHERE id = :id LIMIT 1');
+    $stmt->execute([':id' => $enquiryId]);
+    $row = $stmt->fetch();
+    $itemId = trim((string)($row['monday_item_id'] ?? ''));
+
+    return $itemId !== '' ? $itemId : null;
 }
 
 function enquiryLoggerEnsureResumeToken(int $enquiryId): string
@@ -867,10 +880,7 @@ function enquiryLoggerSafe(callable $callback): void
  */
 function enquiryLoggerMondayFieldsUpdated(array $post, string $message, ?string $mondayItemId = null): void
 {
-    $enquiryId = enquiryLoggerPostId($post);
-    if ($enquiryId === null) {
-        $enquiryId = enquiryLoggerResolveId(null, trim((string)($post['email'] ?? '')));
-    }
+    $enquiryId = enquiryLoggerResolveAuthenticatedEnquiryId($post);
     if ($enquiryId === null) {
         return;
     }

@@ -460,6 +460,9 @@ GQL;
         return null;
     }
 
+    // Prefer the newest matching item when the same email appears more than once.
+    $bestId = null;
+    $bestNumeric = null;
     foreach ($items as $item) {
         if (!is_array($item)) {
             continue;
@@ -476,12 +479,43 @@ GQL;
                 isset($columns[0]['value']) ? (string)$columns[0]['value'] : null
             );
         }
-        if ($itemEmail === $email) {
-            return $itemId;
+        if ($itemEmail !== $email) {
+            continue;
+        }
+        $numeric = ctype_digit($itemId) ? (int)$itemId : null;
+        if ($bestId === null) {
+            $bestId = $itemId;
+            $bestNumeric = $numeric;
+            continue;
+        }
+        if ($numeric !== null && ($bestNumeric === null || $numeric > $bestNumeric)) {
+            $bestId = $itemId;
+            $bestNumeric = $numeric;
         }
     }
 
-    return null;
+    return $bestId;
+}
+
+/**
+ * Resolve the Monday item for the current form journey.
+ * Prefers enquiries.monday_item_id; falls back to newest email match.
+ */
+function mondayResolveItemIdForEnquiryJourney(
+    string $token,
+    int $boardId,
+    string $emailColumnId,
+    string $email,
+    ?int $enquiryId = null
+): ?string {
+    if ($enquiryId !== null && $enquiryId > 0 && function_exists('enquiryLoggerGetMondayItemId')) {
+        $stored = enquiryLoggerGetMondayItemId($enquiryId);
+        if ($stored !== null) {
+            return $stored;
+        }
+    }
+
+    return mondayFindItemIdByEmailExact($token, $boardId, $emailColumnId, $email);
 }
 
 /**

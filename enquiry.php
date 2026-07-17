@@ -622,6 +622,7 @@
 
       <form id="enquiryForm" action="submit_enquiry.php" method="post" novalidate>
         <input type="hidden" id="enquiryId" name="enquiryId" value="" />
+        <input type="hidden" id="resumeToken" name="resumeToken" value="" />
         <section class="section" id="section1">
           <h2>Start by filling in the form</h2>
           <p class="section-intro">Use the steps below to choose the course that fits you and build your personalised quote.</p>
@@ -989,6 +990,8 @@
       var TRAINING_MATRIX = [];
       var trainingMatrixLoaded = false;
       var currentEnquiryId = "";
+      var currentResumeToken = "";
+      var isEditResumeFlow = false;
 
       function setEnquiryId(id) {
         currentEnquiryId = id ? String(id) : "";
@@ -998,11 +1001,30 @@
         }
       }
 
+      function setResumeToken(token) {
+        currentResumeToken = token ? String(token) : "";
+        var resumeTokenInput = document.getElementById("resumeToken");
+        if (resumeTokenInput) {
+          resumeTokenInput.value = currentResumeToken;
+        }
+      }
+
+      function setEnquirySession(id, token, editResume) {
+        setEnquiryId(id);
+        setResumeToken(token);
+        if (editResume === true) {
+          isEditResumeFlow = true;
+        }
+      }
+
       function appendEnquiryIdToFormData(fd) {
         if (!fd || !currentEnquiryId) {
           return;
         }
         fd.append("enquiryId", currentEnquiryId);
+        if (currentResumeToken) {
+          fd.append("resumeToken", currentResumeToken);
+        }
       }
 
       function normalizePreferredDateValue(value) {
@@ -1213,7 +1235,8 @@
               });
           })
           .then(function (enquiry) {
-            setEnquiryId(enquiry.id);
+            // Edit Enquiry link: keep this enquiry + Monday item; do not start a new flow.
+            setEnquirySession(enquiry.id, token, true);
             nameInput.value = enquiry.name || "";
             emailInput.value = enquiry.email || "";
             applySavedFormData(enquiry.formData || {});
@@ -2486,7 +2509,11 @@
             }
 
             if (result.enquiryId) {
-              setEnquiryId(result.enquiryId);
+              setEnquirySession(
+                result.enquiryId,
+                result.resumeToken || currentResumeToken,
+                isEditResumeFlow
+              );
             }
 
             continueBtn.style.display = "none";

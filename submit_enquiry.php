@@ -172,7 +172,9 @@ function mondayAttendeesColumnFromBoard(array $columns): array
 }
 
 /**
- * Resolve Monday item for updates: stored ID (exact email match), email search, or create.
+ * Resolve Monday item for this submission journey only.
+ * Uses the item created on Continue for this enquiryId. Never reuses another
+ * board item just because the email already exists — creates a new one instead.
  *
  * @param array<int, array<string, mixed>> $columns
  */
@@ -186,35 +188,13 @@ function mondayResolveOrCreateItemForSubmission(
     array $columns,
     ?int $enquiryId = null
 ): string {
-    $preferredItemId = null;
+    require_once __DIR__ . '/enquiry_logger.php';
+
     if ($enquiryId !== null) {
-        require_once __DIR__ . '/enquiry_logger.php';
-        $pdo = enquiryLoggerPdo();
-        $stmt = $pdo->prepare('SELECT monday_item_id FROM enquiries WHERE id = :id LIMIT 1');
-        $stmt->execute([':id' => $enquiryId]);
-        $row = $stmt->fetch();
-        $preferredItemId = trim((string)($row['monday_item_id'] ?? ''));
-        if ($preferredItemId === '') {
-            $preferredItemId = null;
+        $preferredItemId = enquiryLoggerGetMondayItemId($enquiryId);
+        if ($preferredItemId !== null) {
+            return $preferredItemId;
         }
-    }
-
-    $resolved = mondayResolveItemIdForEmail(
-        $token,
-        $boardId,
-        $emailColumnId,
-        $email,
-        $preferredItemId
-    );
-    if (($resolved['itemId'] ?? null) !== null) {
-        $itemId = (string)$resolved['itemId'];
-        if ($enquiryId !== null) {
-            enquiryLoggerSafe(function () use ($enquiryId, $itemId): void {
-                enquiryLoggerMarkMondaySynced($enquiryId, $itemId);
-            });
-        }
-
-        return $itemId;
     }
 
     $monday = mondayAppConfig();
@@ -241,7 +221,7 @@ function mondayResolveOrCreateItemForSubmission(
             enquiryLoggerEvent(
                 $enquiryId,
                 'monday_item_created',
-                'Monday item created during final submission because none existed for this email.',
+                'Monday item created during final submission for this enquiry journey.',
                 ['monday_item_id' => $itemId]
             );
         });
@@ -334,7 +314,7 @@ GQL;
         throw new RuntimeException('Email column not found on Monday board.');
     }
 
-    $enquiryId = enquiryLoggerPostId($_POST) ?? enquiryLoggerResolveId(null, $email);
+    $enquiryId = enquiryLoggerResolveAuthenticatedEnquiryId($_POST);
     $itemId = mondayResolveOrCreateItemForSubmission(
         $mondayToken,
         $boardId,
@@ -610,7 +590,7 @@ GQL;
         throw new RuntimeException('Email column not found on Monday board.');
     }
 
-    $enquiryId = enquiryLoggerPostId($_POST) ?? enquiryLoggerResolveId(null, $email);
+    $enquiryId = enquiryLoggerResolveAuthenticatedEnquiryId($_POST);
     $itemId = mondayResolveOrCreateItemForSubmission(
         $mondayToken,
         $boardId,
@@ -809,11 +789,10 @@ if (!class_exists('PDO') || !in_array($requiredPdoDriver, PDO::getAvailableDrive
  */
 function persistEnquiryRecord(array $post, string $name, string $email, string $enquiryType): int
 {
-    // Reuse the posted enquiryId when present (Edit Enquiry resume link).
-    // Never fall back to "latest enquiry for this email" — a brand-new form
-    // session without an id always creates a fresh row so emails still send.
-    $enquiryId = enquiryLoggerPostId($post);
-    $reusingExisting = $enquiryId !== null && enquiryLoggerIsEligibleForSubmitReuse($enquiryId);
+    // Edit flow: enquiryId + resumeToken must match an existing enquiry.
+    // New flow: no valid token → always create a fresh enquiry row.
+    $enquiryId = enquiryLoggerResolveAuthenticatedEnquiryId($post);
+    $reusingExisting = $enquiryId !== null;
     $alreadyHadQuote = $reusingExisting && enquiryLoggerQuoteEmailAlreadySent($enquiryId);
     $alreadySubmitted = $reusingExisting && enquiryLoggerHasEvent($enquiryId, 'form_submitted');
 

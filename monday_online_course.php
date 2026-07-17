@@ -167,50 +167,43 @@ GQL;
         throw new RuntimeException('Delivery Preference column not found on board.');
     }
 
-    $findQuery = <<<'GQL'
-query ($boardId: ID!, $columnId: String!, $columnValues: [String!]!, $notesColumnId: [String!]) {
-  items_page_by_column_values(
-    board_id: $boardId,
-    columns: [{column_id: $columnId, column_values: $columnValues}],
-    limit: 1
-  ) {
-    items {
-      id
-      column_values(ids: $notesColumnId) {
-        id
-        text
-      }
-    }
-  }
-}
-GQL;
-
-    $findResp = mondayGraphql($mondayvariable, $apiUrl, $findQuery, [
-        'boardId' => (string)$boardId,
-        'columnId' => $emailColumnId,
-        'columnValues' => [$email],
-        'notesColumnId' => $notesColumnId !== null ? [$notesColumnId] : [],
-    ]);
-    if ($findResp['status'] >= 400 || !empty($findResp['body']['errors'])) {
-        throw new RuntimeException(mondayErrorMessage($findResp['body'], 'Could not find enquiry by email.'));
-    }
-
-    $items = $findResp['body']['data']['items_page_by_column_values']['items'] ?? [];
-    if (!is_array($items) || count($items) === 0) {
-        throw new RuntimeException('No existing enquiry found for that email.');
-    }
-
-    $item = $items[0];
-    $itemId = (string)($item['id'] ?? '');
-    if ($itemId === '') {
-        throw new RuntimeException('Could not resolve item id for update.');
+    $enquiryId = enquiryLoggerResolveAuthenticatedEnquiryId($_POST);
+    $itemId = mondayResolveItemIdForEnquiryJourney(
+        $mondayvariable,
+        $boardId,
+        $emailColumnId,
+        $email,
+        $enquiryId
+    );
+    if ($itemId === null || $itemId === '') {
+        throw new RuntimeException('No Monday item found for this enquiry journey.');
     }
 
     $existingNotes = '';
     if ($notesColumnId !== null) {
-        $noteValues = $item['column_values'] ?? [];
-        if (is_array($noteValues) && count($noteValues) > 0) {
-            $existingNotes = trim((string)($noteValues[0]['text'] ?? ''));
+        $notesQuery = <<<'GQL'
+query ($itemIds: [ID!]!, $notesColumnId: [String!]) {
+  items (ids: $itemIds) {
+    id
+    column_values(ids: $notesColumnId) {
+      id
+      text
+    }
+  }
+}
+GQL;
+        $notesResp = mondayGraphql($mondayvariable, $apiUrl, $notesQuery, [
+            'itemIds' => [(string)$itemId],
+            'notesColumnId' => [$notesColumnId],
+        ]);
+        if ($notesResp['status'] < 400 && empty($notesResp['body']['errors'])) {
+            $noteItems = $notesResp['body']['data']['items'] ?? [];
+            if (is_array($noteItems) && count($noteItems) > 0) {
+                $noteValues = $noteItems[0]['column_values'] ?? [];
+                if (is_array($noteValues) && count($noteValues) > 0) {
+                    $existingNotes = trim((string)($noteValues[0]['text'] ?? ''));
+                }
+            }
         }
     }
 

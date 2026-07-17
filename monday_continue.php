@@ -229,37 +229,6 @@ GQL;
 
     $notesLine = 'I am looking to make an enquiry about: (' . strtoupper($enquiryType) . ')';
 
-    $existingItemId = mondayFindItemIdByEmailExact(
-        $mondayvariable,
-        $boardId,
-        $emailColumnId,
-        $email
-    );
-
-    if ($existingItemId !== null) {
-        enquiryLoggerSafe(function () use ($enquiryId, $existingItemId): void {
-            if ($enquiryId !== null) {
-                enquiryLoggerMarkMondaySynced($enquiryId, $existingItemId);
-                enquiryLoggerEvent(
-                    $enquiryId,
-                    'monday_item_exists',
-                    'Email already exists on the Monday board.',
-                    ['monday_item_id' => $existingItemId]
-                );
-            }
-        });
-
-        echo json_encode([
-            'success' => true,
-            'exists' => true,
-            'created' => false,
-            'enquiryId' => $enquiryId,
-            'resumeEmailSent' => false,
-            'message' => 'Email already exists in Monday board.',
-        ]);
-        exit;
-    }
-
     $buildColumnValues = static function (string $notesPayload) use (
         $emailColumnId,
         $email,
@@ -319,10 +288,90 @@ GQL;
     };
 
     $columnValues = $buildColumnValues($notesLine);
-
     $columnValues = mondayAppendAddressColumn($columns, $columnValues, mondayAddressFromPost($_POST));
-
     $columnValues = mondayAppendCreatedDate($columns, $columnValues);
+
+    $resumeToken = '';
+    if ($enquiryId !== null) {
+        enquiryLoggerSafe(function () use ($enquiryId, &$resumeToken): void {
+            $resumeToken = enquiryLoggerEnsureResumeToken($enquiryId);
+        });
+    }
+
+    // Edit / same-session continue: update the Monday item already linked to
+    // this enquiry. New enquiry (no linked item): always create a new item,
+    // even if the email already exists elsewhere on the board.
+    $existingMondayItemId = null;
+    if ($enquiryId !== null) {
+        enquiryLoggerSafe(function () use ($enquiryId, &$existingMondayItemId): void {
+            $existingMondayItemId = enquiryLoggerGetMondayItemId($enquiryId);
+        });
+    }
+
+    if ($existingMondayItemId !== null && $existingMondayItemId !== '') {
+        $updateQuery = <<<'GQL'
+mutation ($boardId: ID!, $itemId: ID!, $columnValues: JSON!) {
+  change_multiple_column_values(
+    board_id: $boardId,
+    item_id: $itemId,
+    column_values: $columnValues
+  ) {
+    id
+  }
+}
+GQL;
+        $updateResp = mondayGraphql($mondayvariable, $apiUrl, $updateQuery, [
+            'boardId' => (string)$boardId,
+            'itemId' => $existingMondayItemId,
+            'columnValues' => json_encode($columnValues, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        ]);
+        if ($updateResp['status'] >= 400 || !empty($updateResp['body']['errors'])) {
+            throw new RuntimeException(mondayErrorMessage($updateResp['body'], 'Could not update Monday enquiry item.'));
+        }
+
+        $nameMutation = <<<'GQL'
+mutation ($boardId: ID!, $itemId: ID!, $itemName: String!) {
+  change_simple_column_value(
+    board_id: $boardId,
+    item_id: $itemId,
+    column_id: "name",
+    value: $itemName
+  ) {
+    id
+  }
+}
+GQL;
+        // Best-effort item rename; column updates above are the source of truth.
+        mondayGraphql($mondayvariable, $apiUrl, $nameMutation, [
+            'boardId' => (string)$boardId,
+            'itemId' => $existingMondayItemId,
+            'itemName' => $name,
+        ]);
+
+        enquiryLoggerSafe(function () use ($enquiryId, $existingMondayItemId): void {
+            if ($enquiryId !== null) {
+                enquiryLoggerMarkMondaySynced($enquiryId, $existingMondayItemId);
+                enquiryLoggerEvent(
+                    $enquiryId,
+                    'monday_item_updated',
+                    'Existing Monday enquiry item updated for this edit/resume flow.',
+                    ['monday_item_id' => $existingMondayItemId]
+                );
+            }
+        });
+
+        echo json_encode([
+            'success' => true,
+            'exists' => false,
+            'created' => false,
+            'updated' => true,
+            'enquiryId' => $enquiryId,
+            'resumeToken' => $resumeToken,
+            'resumeEmailSent' => false,
+            'message' => 'Existing enquiry updated in Monday.',
+        ]);
+        exit;
+    }
 
     $createQueryWithGroup = <<<'GQL'
 mutation ($boardId: ID!, $groupId: String!, $itemName: String!, $columnValues: JSON!) {
@@ -385,7 +434,9 @@ GQL;
         'success' => true,
         'exists' => false,
         'created' => true,
+        'updated' => false,
         'enquiryId' => $enquiryId,
+        'resumeToken' => $resumeToken,
         'resumeEmailSent' => false,
         'message' => 'New enquiry created in Monday.',
     ]);

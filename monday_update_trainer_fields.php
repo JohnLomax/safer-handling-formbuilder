@@ -215,37 +215,16 @@ GQL;
         throw new RuntimeException('Email column not found on Monday board.');
     }
 
-    $findQuery = <<<'GQL'
-query ($boardId: ID!, $columnId: String!, $columnValues: [String!]!) {
-  items_page_by_column_values(
-    board_id: $boardId,
-    columns: [{column_id: $columnId, column_values: $columnValues}],
-    limit: 1
-  ) {
-    items {
-      id
-    }
-  }
-}
-GQL;
-
-    $findResp = mondayGraphql($mondayvariable, $apiUrl, $findQuery, [
-        'boardId' => (string)$boardId,
-        'columnId' => $emailColumnId,
-        'columnValues' => [$email],
-    ]);
-    if ($findResp['status'] >= 400 || !empty($findResp['body']['errors'])) {
-        throw new RuntimeException(mondayErrorMessage($findResp['body'], 'Could not find Monday item by email.'));
-    }
-
-    $items = $findResp['body']['data']['items_page_by_column_values']['items'] ?? [];
-    if (!is_array($items) || count($items) === 0) {
-        throw new RuntimeException('No Monday item found for this email.');
-    }
-
-    $itemId = trim((string)($items[0]['id'] ?? ''));
-    if ($itemId === '') {
-        throw new RuntimeException('Could not resolve Monday item id.');
+    $enquiryId = enquiryLoggerResolveAuthenticatedEnquiryId($_POST);
+    $itemId = mondayResolveItemIdForEnquiryJourney(
+        $mondayvariable,
+        $boardId,
+        $emailColumnId,
+        $email,
+        $enquiryId
+    );
+    if ($itemId === null || $itemId === '') {
+        throw new RuntimeException('No Monday item found for this enquiry journey.');
     }
 
     $columnValues = [];

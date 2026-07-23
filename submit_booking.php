@@ -306,12 +306,20 @@ try {
         $xeroWarning = 'Draft Xero invoice could not be created: ' . $xeroError->getMessage();
     }
 
+    $forgeWarning = '';
+    try {
+        require_once __DIR__ . '/forge_webhook.php';
+        forgeMaybeSyncBooking($enquiryId, $details);
+    } catch (Throwable $forgeError) {
+        $forgeWarning = 'Forge booking sync failed: ' . $forgeError->getMessage();
+    }
+
     $payload = [
         'success' => true,
         'message' => 'Booking details submitted successfully.',
         'enquiryId' => $enquiryId,
     ];
-    $warnings = array_values(array_filter([$mondayWarning, $xeroWarning]));
+    $warnings = array_values(array_filter([$mondayWarning, $xeroWarning, $forgeWarning]));
     if ($warnings !== []) {
         $payload['warning'] = implode(' ', $warnings);
     }

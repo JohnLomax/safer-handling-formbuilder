@@ -16,6 +16,7 @@ class SettingsSeeder extends Seeder
             'monday_group_name' => 'New Enquiries',
             'monday_booking_group_name' => 'Quote Accepted',
             'ideal_postcodes_api_key' => '',
+            'kajabi_courses_url' => 'https://safer-handling.mykajabi.com/store',
             'brevo_api_key' => '',
             'brevo_email_enabled' => '0',
             'brevo_sender_email' => 'training@safer-handling.co.uk',
@@ -39,6 +40,10 @@ class SettingsSeeder extends Seeder
             'xero_sales_account_code' => '200',
             'xero_vat_rate' => '20',
             'xero_branding_theme_id' => '',
+            'xero_webhook_key' => '',
+            'forge_enabled' => '0',
+            'forge_webhook_url' => 'https://saferhandling.forgecrm.co.uk/safer_production/webhooks/bookings/',
+            'forge_webhook_token' => '',
         ];
 
         foreach ($defaults as $key => $value) {

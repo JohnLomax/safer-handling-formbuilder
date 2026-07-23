@@ -22,6 +22,7 @@ class SettingController extends Controller
         'monday_group_name',
         'monday_booking_group_name',
         'ideal_postcodes_api_key',
+        'kajabi_courses_url',
         'brevo_api_key',
         'brevo_email_enabled',
         'brevo_sender_email',
@@ -42,6 +43,10 @@ class SettingController extends Controller
         'xero_sales_account_code',
         'xero_vat_rate',
         'xero_branding_theme_id',
+        'xero_webhook_key',
+        'forge_enabled',
+        'forge_webhook_url',
+        'forge_webhook_token',
     ];
 
     public function edit(): View
@@ -72,6 +77,7 @@ class SettingController extends Controller
             'monday_group_name' => ['nullable', 'string', 'max:255'],
             'monday_booking_group_name' => ['nullable', 'string', 'max:255'],
             'ideal_postcodes_api_key' => ['nullable', 'string'],
+            'kajabi_courses_url' => ['nullable', 'url', 'max:500'],
             'brevo_api_key' => ['nullable', 'string'],
             'brevo_email_enabled' => ['nullable', 'boolean'],
             'brevo_sender_email' => ['nullable', 'email', 'max:255'],
@@ -92,6 +98,10 @@ class SettingController extends Controller
             'xero_sales_account_code' => ['nullable', 'string', 'max:50'],
             'xero_vat_rate' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'xero_branding_theme_id' => ['nullable', 'string', 'max:100'],
+            'xero_webhook_key' => ['nullable', 'string', 'max:500'],
+            'forge_enabled' => ['nullable', 'boolean'],
+            'forge_webhook_url' => ['nullable', 'url', 'max:500'],
+            'forge_webhook_token' => ['nullable', 'string', 'max:255'],
         ]);
 
         foreach ($this->keys as $key) {
@@ -100,6 +110,7 @@ class SettingController extends Controller
                 'brevo_resume_email_enabled',
                 'brevo_lead_notification_enabled',
                 'xero_enabled',
+                'forge_enabled',
             ], true)) {
                 Setting::setValue($key, $request->boolean($key));
 
@@ -113,6 +124,8 @@ class SettingController extends Controller
                 'ideal_postcodes_api_key',
                 'brevo_api_key',
                 'xero_client_secret',
+                'xero_webhook_key',
+                'forge_webhook_token',
             ], true)) {
                 continue;
             }

@@ -208,8 +208,10 @@
                                         <x-xero-badge compact />
                                         <span class="text-sm font-semibold text-sh-text">Xero invoice</span>
                                     </div>
-                                    @if ($enquiry->xero_invoice_id)
-                                        <span class="status-pill status-pill-success">Draft</span>
+                                    @if ($enquiry->xero_invoice_sent_at)
+                                        <span class="status-pill status-pill-success">Sent</span>
+                                    @elseif ($enquiry->xero_invoice_id)
+                                        <span class="status-pill status-pill-muted">Draft</span>
                                     @elseif ($enquiry->events->contains(fn ($event) => $event->event_type === 'xero_invoice_failed'))
                                         <span class="status-pill status-pill-progress">Failed</span>
                                     @elseif ($enquiry->xero_quote_id && ($enquiry->booking_submitted_at || $enquiry->status === 'quote_accepted'))
@@ -218,7 +220,12 @@
                                         <span class="status-pill status-pill-muted">—</span>
                                     @endif
                                 </div>
-                                @if ($enquiry->xero_invoice_number)
+                                @if ($enquiry->xero_invoice_sent_at)
+                                    <p class="mt-3 text-xs text-sh-mid">
+                                        @if ($enquiry->xero_invoice_number){{ $enquiry->xero_invoice_number }} · @endif
+                                        Sent {{ $enquiry->xero_invoice_sent_at->format('d M Y · H:i') }}
+                                    </p>
+                                @elseif ($enquiry->xero_invoice_number)
                                     <p class="mt-3 text-xs text-sh-mid">{{ $enquiry->xero_invoice_number }} · not sent</p>
                                 @elseif ($enquiry->xero_invoice_created_at)
                                     <p class="mt-3 text-xs text-sh-mid">Created {{ $enquiry->xero_invoice_created_at->format('d M Y · H:i') }} · not sent</p>
@@ -230,6 +237,15 @@
                                             Create draft invoice
                                         </button>
                                     </form>
+                                @endif
+                                @if (in_array('xero_invoice_sent', $retryableActions, true))
+                                    <form method="POST" action="{{ route('admin.enquiries.sync.xero-invoice-sent', $enquiry) }}" class="mt-3">
+                                        @csrf
+                                        <button type="submit" class="btn-brand-outline text-xs">
+                                            Check if invoice sent
+                                        </button>
+                                    </form>
+                                    <p class="mt-2 text-xs text-sh-mid">When the invoice is emailed/marked sent in Xero, this moves Monday to Quote Won and creates the Client Booking Form record.</p>
                                 @endif
                             </div>
 

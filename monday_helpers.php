@@ -1613,3 +1613,510 @@ GQL;
         'groupName' => $groupName,
     ];
 }
+
+/**
+ * Preferred Monday group after a Xero invoice is sent (Quote Won).
+ */
+function mondayQuoteWonGroupName(): string
+{
+    $configured = trim((string)(getenv('MONDAY_QUOTE_WON_GROUP_NAME') ?: ($GLOBALS['mondayQuoteWonGroupName'] ?? '')));
+    if ($configured !== '') {
+        return $configured;
+    }
+
+    return 'Quote Won';
+}
+
+/**
+ * @return list<string>
+ */
+function mondayQuoteWonGroupNameCandidates(): array
+{
+    $candidates = [
+        mondayQuoteWonGroupName(),
+        'Quote Won',
+        'Won - Ready for Booking',
+    ];
+
+    $unique = [];
+    foreach ($candidates as $name) {
+        $name = trim($name);
+        if ($name === '') {
+            continue;
+        }
+        $key = strtolower($name);
+        if (isset($unique[$key])) {
+            continue;
+        }
+        $unique[$key] = $name;
+    }
+
+    return array_values($unique);
+}
+
+/**
+ * @return array{groupId:string,groupName:string,created:bool}
+ */
+function mondayResolveQuoteWonGroup(string $token, int $boardId): array
+{
+    foreach (mondayQuoteWonGroupNameCandidates() as $candidate) {
+        $groupId = mondayFindGroupIdByName($token, $boardId, $candidate);
+        if ($groupId !== null) {
+            return [
+                'groupId' => $groupId,
+                'groupName' => $candidate,
+                'created' => false,
+            ];
+        }
+    }
+
+    $preferred = mondayQuoteWonGroupName();
+    $groupId = mondayCreateGroup($token, $boardId, $preferred);
+
+    return [
+        'groupId' => $groupId,
+        'groupName' => $preferred,
+        'created' => true,
+    ];
+}
+
+function mondayCoursesOngoingGroupName(): string
+{
+    $configured = trim((string)(getenv('MONDAY_COURSES_ONGOING_GROUP_NAME') ?: ($GLOBALS['mondayCoursesOngoingGroupName'] ?? '')));
+    if ($configured !== '') {
+        return $configured;
+    }
+
+    return 'Client Booking Form (Courses Ongoing)';
+}
+
+/**
+ * @return list<string>
+ */
+function mondayCoursesOngoingGroupNameCandidates(): array
+{
+    $candidates = [
+        mondayCoursesOngoingGroupName(),
+        'Client Booking Form (Courses Ongoing)',
+        'Courses Ongoing',
+        'Client Booking Form',
+    ];
+
+    $unique = [];
+    foreach ($candidates as $name) {
+        $name = trim($name);
+        if ($name === '') {
+            continue;
+        }
+        $key = strtolower($name);
+        if (isset($unique[$key])) {
+            continue;
+        }
+        $unique[$key] = $name;
+    }
+
+    return array_values($unique);
+}
+
+/**
+ * @return array{groupId:string,groupName:string,created:bool}
+ */
+function mondayResolveCoursesOngoingGroup(string $token, int $boardId): array
+{
+    foreach (mondayCoursesOngoingGroupNameCandidates() as $candidate) {
+        $groupId = mondayFindGroupIdByName($token, $boardId, $candidate);
+        if ($groupId !== null) {
+            return [
+                'groupId' => $groupId,
+                'groupName' => $candidate,
+                'created' => false,
+            ];
+        }
+    }
+
+    $preferred = mondayCoursesOngoingGroupName();
+    $groupId = mondayCreateGroup($token, $boardId, $preferred);
+
+    return [
+        'groupId' => $groupId,
+        'groupName' => $preferred,
+        'created' => true,
+    ];
+}
+
+/**
+ * Move the enquiry pipeline item to Quote Won after the Xero invoice is sent.
+ *
+ * @return array{moved:bool,groupId:string,groupName:string,itemId:string}
+ */
+function mondayMoveEnquiryToQuoteWonAfterInvoiceSent(int $enquiryId): array
+{
+    require_once __DIR__ . '/enquiry_logger.php';
+
+    $pdo = enquiryLoggerPdo();
+    $stmt = $pdo->prepare('SELECT monday_item_id FROM enquiries WHERE id = :id LIMIT 1');
+    $stmt->execute([':id' => $enquiryId]);
+    $row = $stmt->fetch();
+    $itemId = trim((string)($row['monday_item_id'] ?? ''));
+    if ($itemId === '') {
+        enquiryLoggerEvent(
+            $enquiryId,
+            'monday_move_skipped',
+            'Xero invoice sent, but Monday item could not be moved to Quote Won because no Monday item ID is stored.'
+        );
+
+        return [
+            'moved' => false,
+            'groupId' => '',
+            'groupName' => '',
+            'itemId' => '',
+        ];
+    }
+
+    $monday = mondayAppConfig();
+    $token = $monday['token'];
+    $boardIdRaw = $monday['boardId'];
+    if ($token === '' || $boardIdRaw === '' || !is_numeric($boardIdRaw)) {
+        throw new RuntimeException(mondayConfigMissingMessage());
+    }
+
+    $boardId = (int)$boardIdRaw;
+    $group = mondayResolveQuoteWonGroup($token, $boardId);
+    if (!empty($group['created'])) {
+        enquiryLoggerEvent(
+            $enquiryId,
+            'monday_quote_won_group_created',
+            'Created Monday group "' . $group['groupName'] . '" for Quote Won.',
+            [
+                'monday_group_id' => $group['groupId'],
+                'monday_group_name' => $group['groupName'],
+            ]
+        );
+    }
+
+    $result = mondayMoveItemToGroupByName($itemId, $group['groupName']);
+    enquiryLoggerMarkQuoteWon($enquiryId);
+    enquiryLoggerEvent(
+        $enquiryId,
+        'monday_moved_quote_won',
+        'Enquiry moved to Monday group "' . $result['groupName'] . '" (Quote Won) after Xero invoice was sent.',
+        [
+            'monday_item_id' => $itemId,
+            'monday_group_id' => $result['groupId'],
+            'monday_group_name' => $result['groupName'],
+            'status' => 'quote_won',
+            'trigger' => 'xero_invoice_sent',
+        ]
+    );
+
+    return [
+        'moved' => true,
+        'groupId' => $result['groupId'],
+        'groupName' => $result['groupName'],
+        'itemId' => $itemId,
+    ];
+}
+
+/**
+ * Build Monday column values from booking details (shared by Quote Accepted + Courses Ongoing).
+ *
+ * @param array<int, array<string, mixed>> $columns
+ * @param array<string, mixed> $details
+ * @return array<string, mixed>
+ */
+function mondayBookingDetailsColumnValues(array $columns, array $details, string $token, string $itemId): array
+{
+    $columnValues = [];
+    $mappings = [
+        ['titles' => ['phone', 'phone number', 'mobile'], 'value' => $details['phone'] ?? ''],
+        ['titles' => ['company/organisation', 'company / organisation', 'company', 'organisation', 'organization', 'company name', 'organisation name'], 'value' => $details['organisation'] ?? ''],
+        ['titles' => ['venue address', 'venue', 'training venue', 'training venue address'], 'value' => $details['venueAddress'] ?? ''],
+        ['titles' => ['address'], 'value' => $details['venueAddress'] ?? ''],
+        ['titles' => ['invoice name'], 'value' => $details['invoiceName'] ?? ''],
+        ['titles' => ['invoice email'], 'value' => $details['invoiceEmail'] ?? ''],
+        ['titles' => ['invoice address'], 'value' => $details['invoiceAddress'] ?? ''],
+        ['titles' => ['invoice phone'], 'value' => $details['invoicePhone'] ?? ''],
+        ['titles' => ['po number', 'purchase order', 'purchase order number', 'po'], 'value' => $details['purchaseOrderNumber'] ?? ''],
+        ['titles' => ['special requests', 'special request'], 'value' => $details['specialRequests'] ?? ''],
+        ['titles' => ['booker name', 'contact name'], 'value' => $details['bookerName'] ?? ''],
+    ];
+
+    foreach ($mappings as $mapping) {
+        $value = trim((string)($mapping['value'] ?? ''));
+        if ($value === '') {
+            continue;
+        }
+        [$columnId, $columnType] = mondayFindColumnByTitles($columns, $mapping['titles']);
+        if ($columnId === null || isset($columnValues[$columnId])) {
+            continue;
+        }
+        $columnValues[$columnId] = mondayColumnValueForType($columnType, $value);
+    }
+
+    [$termsColumnId, $termsColumnType] = mondayFindColumnByTitles($columns, [
+        'terms accepted',
+        'terms & conditions',
+        'terms and conditions',
+        't&cs accepted',
+    ]);
+    if ($termsColumnId !== null && !empty($details['termsAccepted'])) {
+        $columnValues[$termsColumnId] = mondayColumnValueForType($termsColumnType, true);
+    }
+
+    [$venueReqColumnId, $venueReqColumnType] = mondayFindColumnByTitles($columns, [
+        'venue requirements',
+        'venue confirmed',
+        'venue requirements confirmed',
+    ]);
+    if ($venueReqColumnId !== null && !empty($details['venueRequirementsConfirmed'])) {
+        $columnValues[$venueReqColumnId] = mondayColumnValueForType($venueReqColumnType, true);
+    }
+
+    $delegateCount = is_array($details['delegates'] ?? null) ? count($details['delegates']) : 0;
+    if ($delegateCount > 0) {
+        [$attendeesColumnId, $attendeesColumnType] = mondayFindColumnByTitles($columns, [
+            'number of attendees',
+            'attendees',
+            'delegates',
+            'number of delegates',
+        ]);
+        if ($attendeesColumnId !== null) {
+            $columnValues[$attendeesColumnId] = mondayColumnValueForType($attendeesColumnType, (string)$delegateCount);
+        }
+    }
+
+    [$notesColumnId, $notesColumnType] = mondayFindColumnByTitles($columns, ['notes']);
+    if ($notesColumnId !== null && $itemId !== '') {
+        $existingNotes = '';
+        $notesFetchQuery = <<<'GQL'
+query ($itemIds: [ID!], $noteIds: [String!]) {
+  items(ids: $itemIds) {
+    column_values(ids: $noteIds) {
+      id
+      text
+    }
+  }
+}
+GQL;
+        $notesFetchResp = mondayGraphqlRequest($token, $notesFetchQuery, [
+            'itemIds' => [$itemId],
+            'noteIds' => [$notesColumnId],
+        ]);
+        if ($notesFetchResp['status'] < 400 && empty($notesFetchResp['body']['errors'])) {
+            $cvItems = $notesFetchResp['body']['data']['items'] ?? [];
+            if (is_array($cvItems) && count($cvItems) > 0) {
+                $cv = $cvItems[0]['column_values'] ?? [];
+                if (is_array($cv) && count($cv) > 0) {
+                    $existingNotes = trim((string)($cv[0]['text'] ?? ''));
+                }
+            }
+        }
+
+        $appendBlock = mondayBookingDetailsNotesBlock($details);
+        if ($existingNotes !== '' && str_contains($existingNotes, '--- Booking details ---')) {
+            $notesText = $existingNotes;
+        } else {
+            $notesText = $existingNotes === '' ? $appendBlock : $existingNotes . "\n\n" . $appendBlock;
+        }
+        $columnValues[$notesColumnId] = mondayColumnValueForType($notesColumnType, $notesText);
+    } elseif ($notesColumnId !== null) {
+        $columnValues[$notesColumnId] = mondayColumnValueForType($notesColumnType, mondayBookingDetailsNotesBlock($details));
+    }
+
+    return $columnValues;
+}
+
+/**
+ * Create or update a Monday item in Client Booking Form (Courses Ongoing).
+ * Uses monday_booking_item_id so the enquiry pipeline item stays in Quote Won.
+ *
+ * @param array<string, mixed> $details
+ * @return array{itemId:string,created:bool,groupName:string}
+ */
+function mondaySyncCoursesOngoingBookingItem(int $enquiryId, array $details = []): array
+{
+    require_once __DIR__ . '/enquiry_logger.php';
+
+    $monday = mondayAppConfig();
+    $token = $monday['token'];
+    $boardIdRaw = $monday['boardId'];
+    if ($token === '' || $boardIdRaw === '' || !is_numeric($boardIdRaw)) {
+        throw new RuntimeException(mondayConfigMissingMessage());
+    }
+
+    $boardId = (int)$boardIdRaw;
+    $pdo = enquiryLoggerPdo();
+    enquiryLoggerEnsureColumn($pdo, 'enquiries', 'monday_booking_item_id', 'TEXT');
+    enquiryLoggerEnsureColumn($pdo, 'enquiries', 'booking_details_json', 'TEXT');
+
+    $stmt = $pdo->prepare(
+        'SELECT name, email, monday_booking_item_id, booking_details_json
+         FROM enquiries WHERE id = :id LIMIT 1'
+    );
+    $stmt->execute([':id' => $enquiryId]);
+    $row = $stmt->fetch();
+    if (!$row) {
+        throw new RuntimeException('Enquiry not found for Courses Ongoing sync.');
+    }
+
+    if ($details === []) {
+        $raw = trim((string)($row['booking_details_json'] ?? ''));
+        if ($raw !== '') {
+            $decoded = json_decode($raw, true);
+            if (is_array($decoded)) {
+                $details = $decoded;
+            }
+        }
+    }
+
+    $email = trim((string)($details['email'] ?? $row['email'] ?? ''));
+    $bookerName = trim((string)($details['bookerName'] ?? $row['name'] ?? ''));
+    if ($email === '') {
+        throw new RuntimeException('Booking email is required for Courses Ongoing sync.');
+    }
+
+    $columnsQuery = <<<'GQL'
+query ($boardId: [ID!]) {
+  boards(ids: $boardId) {
+    columns {
+      id
+      title
+      type
+    }
+  }
+}
+GQL;
+    $columnsResp = mondayGraphqlRequest($token, $columnsQuery, ['boardId' => [$boardId]]);
+    if ($columnsResp['status'] >= 400 || !empty($columnsResp['body']['errors'])) {
+        throw new RuntimeException('Could not read Monday columns for Courses Ongoing sync.');
+    }
+    $boards = $columnsResp['body']['data']['boards'] ?? [];
+    if (!is_array($boards) || count($boards) === 0) {
+        throw new RuntimeException('Monday board not found.');
+    }
+    $columns = is_array($boards[0]['columns'] ?? null) ? $boards[0]['columns'] : [];
+
+    $emailColumnId = null;
+    foreach ($columns as $column) {
+        $title = strtolower(trim((string)($column['title'] ?? '')));
+        $type = strtolower(trim((string)($column['type'] ?? '')));
+        $id = trim((string)($column['id'] ?? ''));
+        if ($id !== '' && ($type === 'email' || $title === 'email')) {
+            $emailColumnId = $id;
+            break;
+        }
+    }
+    if ($emailColumnId === null) {
+        throw new RuntimeException('Email column not found on Monday board.');
+    }
+
+    $group = mondayResolveCoursesOngoingGroup($token, $boardId);
+    if (!empty($group['created'])) {
+        enquiryLoggerEvent(
+            $enquiryId,
+            'monday_courses_ongoing_group_created',
+            'Created Monday group "' . $group['groupName'] . '" for Client Booking Form.',
+            [
+                'monday_group_id' => $group['groupId'],
+                'monday_group_name' => $group['groupName'],
+            ]
+        );
+    }
+
+    $existingBookingItemId = trim((string)($row['monday_booking_item_id'] ?? ''));
+    $created = false;
+    $itemId = $existingBookingItemId;
+
+    if ($itemId === '') {
+        $itemId = mondayCreateEnquiryItem(
+            $token,
+            $boardId,
+            $emailColumnId,
+            $bookerName !== '' ? $bookerName : $email,
+            $email,
+            'training',
+            $group['groupId'],
+            $columns,
+            []
+        );
+        $created = true;
+        enquiryLoggerMarkMondayBookingItemId($enquiryId, $itemId);
+    } else {
+        // Ensure existing booking item sits in the Courses Ongoing group.
+        try {
+            mondayMoveItemToGroupByName($itemId, $group['groupName']);
+        } catch (Throwable $moveError) {
+            // Item may have been deleted — recreate.
+            $itemId = mondayCreateEnquiryItem(
+                $token,
+                $boardId,
+                $emailColumnId,
+                $bookerName !== '' ? $bookerName : $email,
+                $email,
+                'training',
+                $group['groupId'],
+                $columns,
+                []
+            );
+            $created = true;
+            enquiryLoggerMarkMondayBookingItemId($enquiryId, $itemId);
+            enquiryLoggerEvent(
+                $enquiryId,
+                'monday_courses_ongoing_recreated',
+                'Previous Client Booking Form item was missing; created a new record.',
+                [
+                    'monday_item_id' => $itemId,
+                    'previous_error' => $moveError->getMessage(),
+                ]
+            );
+        }
+    }
+
+    $columnValues = mondayBookingDetailsColumnValues($columns, $details, $token, $itemId);
+    if ($columnValues !== []) {
+        $updateQuery = <<<'GQL'
+mutation ($boardId: ID!, $itemId: ID!, $columnValues: JSON!) {
+  change_multiple_column_values(
+    board_id: $boardId,
+    item_id: $itemId,
+    column_values: $columnValues
+  ) {
+    id
+  }
+}
+GQL;
+        $updateResp = mondayGraphqlRequest($token, $updateQuery, [
+            'boardId' => (string)$boardId,
+            'itemId' => $itemId,
+            'columnValues' => json_encode($columnValues, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        ]);
+        if ($updateResp['status'] >= 400 || !empty($updateResp['body']['errors'])) {
+            $message = '';
+            if (!empty($updateResp['body']['errors'][0]['message'])) {
+                $message = (string)$updateResp['body']['errors'][0]['message'];
+            }
+            throw new RuntimeException($message !== '' ? $message : 'Could not update Courses Ongoing booking details.');
+        }
+    }
+
+    enquiryLoggerEvent(
+        $enquiryId,
+        $created ? 'monday_courses_ongoing_created' : 'monday_courses_ongoing_synced',
+        $created
+            ? 'Created Client Booking Form (Courses Ongoing) record after Xero invoice was sent.'
+            : 'Updated Client Booking Form (Courses Ongoing) record after Xero invoice was sent.',
+        [
+            'monday_item_id' => $itemId,
+            'monday_group_id' => $group['groupId'],
+            'monday_group_name' => $group['groupName'],
+            'created' => $created,
+            'trigger' => 'xero_invoice_sent',
+        ]
+    );
+
+    return [
+        'itemId' => $itemId,
+        'created' => $created,
+        'groupName' => $group['groupName'],
+    ];
+}

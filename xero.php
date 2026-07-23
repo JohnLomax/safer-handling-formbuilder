@@ -295,6 +295,8 @@ function xeroEnsureAccessToken(): array
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_POST => true,
+            CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_TIMEOUT => 30,
             CURLOPT_HTTPHEADER => [
                 'Authorization: Basic ' . base64_encode(xeroClientId() . ':' . xeroClientSecret()),
                 'Content-Type: application/x-www-form-urlencoded',
@@ -396,6 +398,8 @@ function xeroApiRequest(
         CURLOPT_CUSTOMREQUEST => strtoupper($method),
         CURLOPT_HTTPHEADER => $headers,
         CURLOPT_HEADER => true,
+        CURLOPT_CONNECTTIMEOUT => 10,
+        CURLOPT_TIMEOUT => 45,
     ];
 
     if ($body !== null) {
@@ -1637,4 +1641,263 @@ function xeroMaybeCreateDraftInvoiceAfterQuoteAccepted(int $enquiryId, array $bo
 
         throw $e;
     }
+}
+
+/**
+ * @return array<string, mixed>
+ */
+function xeroGetInvoice(string $invoiceId): array
+{
+    $invoiceId = trim($invoiceId);
+    if ($invoiceId === '') {
+        throw new RuntimeException('Xero invoice ID is missing.');
+    }
+
+    $resp = xeroApiRequest('GET', 'Invoices/' . rawurlencode($invoiceId));
+    if ($resp['status'] >= 400 || empty($resp['body']['Invoices'][0])) {
+        throw new RuntimeException(xeroApiErrorMessage($resp['body'], 'Could not load Xero invoice.'));
+    }
+
+    return $resp['body']['Invoices'][0];
+}
+
+/**
+ * Xero marks an invoice as sent when SentToContact is true (email / mark as sent in Xero).
+ *
+ * @param array<string, mixed> $invoice
+ */
+function xeroInvoiceIsSent(array $invoice): bool
+{
+    $sent = $invoice['SentToContact'] ?? false;
+    if ($sent === true || $sent === 1 || $sent === '1' || strtolower((string)$sent) === 'true') {
+        return true;
+    }
+
+    // Paid invoices that were emailed still count as sent even if the flag is absent.
+    $status = strtoupper(trim((string)($invoice['Status'] ?? '')));
+
+    return $status === 'PAID' && !empty($invoice['FullyPaidOnDate']);
+}
+
+/**
+ * When a linked Xero invoice has been sent, move Monday → Quote Won
+ * and create/update the Client Booking Form (Courses Ongoing) record.
+ *
+ * @return array{
+ *   processed:bool,
+ *   sent:bool,
+ *   already_sent:bool,
+ *   invoice_status:?string,
+ *   monday_quote_won:?array,
+ *   monday_courses_ongoing:?array
+ * }|null
+ */
+function xeroMaybeProcessInvoiceSent(int $enquiryId): ?array
+{
+    require_once __DIR__ . '/enquiry_logger.php';
+    require_once __DIR__ . '/monday_helpers.php';
+
+    if (!xeroEnabled()) {
+        return null;
+    }
+
+    enquiryLoggerEnsureColumn(enquiryLoggerPdo(), 'enquiries', 'xero_invoice_id', 'TEXT');
+    enquiryLoggerEnsureColumn(enquiryLoggerPdo(), 'enquiries', 'xero_invoice_sent_at', 'TEXT');
+
+    $pdo = enquiryLoggerPdo();
+    $stmt = $pdo->prepare(
+        'SELECT xero_invoice_id, xero_invoice_number, xero_invoice_sent_at, booking_details_json
+         FROM enquiries WHERE id = :id LIMIT 1'
+    );
+    $stmt->execute([':id' => $enquiryId]);
+    $row = $stmt->fetch();
+    if (!$row) {
+        return null;
+    }
+
+    $invoiceId = trim((string)($row['xero_invoice_id'] ?? ''));
+    if ($invoiceId === '') {
+        return null;
+    }
+
+    if (trim((string)($row['xero_invoice_sent_at'] ?? '')) !== '') {
+        return [
+            'processed' => false,
+            'sent' => true,
+            'already_sent' => true,
+            'invoice_status' => null,
+            'monday_quote_won' => null,
+            'monday_courses_ongoing' => null,
+        ];
+    }
+
+    $invoice = xeroGetInvoice($invoiceId);
+    $invoiceStatus = strtoupper(trim((string)($invoice['Status'] ?? '')));
+    $invoiceNumber = trim((string)($invoice['InvoiceNumber'] ?? $row['xero_invoice_number'] ?? ''));
+
+    if (!xeroInvoiceIsSent($invoice)) {
+        return [
+            'processed' => false,
+            'sent' => false,
+            'already_sent' => false,
+            'invoice_status' => $invoiceStatus !== '' ? $invoiceStatus : null,
+            'monday_quote_won' => null,
+            'monday_courses_ongoing' => null,
+        ];
+    }
+
+    enquiryLoggerMarkXeroInvoiceSent($enquiryId, $invoiceNumber);
+    enquiryLoggerEvent(
+        $enquiryId,
+        'xero_invoice_sent',
+        'Xero invoice marked as sent — progressing Monday to Quote Won and Client Booking Form.',
+        [
+            'channel' => 'xero',
+            'xero_invoice_id' => $invoiceId,
+            'xero_invoice_number' => $invoiceNumber !== '' ? $invoiceNumber : null,
+            'xero_invoice_status' => $invoiceStatus !== '' ? $invoiceStatus : null,
+            'sent_to_contact' => true,
+        ]
+    );
+
+    $bookingDetails = [];
+    $rawBooking = trim((string)($row['booking_details_json'] ?? ''));
+    if ($rawBooking !== '') {
+        $decoded = json_decode($rawBooking, true);
+        if (is_array($decoded)) {
+            $bookingDetails = $decoded;
+        }
+    }
+
+    $mondayQuoteWon = null;
+    $mondayCoursesOngoing = null;
+
+    try {
+        $mondayQuoteWon = mondayMoveEnquiryToQuoteWonAfterInvoiceSent($enquiryId);
+    } catch (Throwable $e) {
+        enquiryLoggerEvent(
+            $enquiryId,
+            'monday_move_failed',
+            'Xero invoice was sent, but the Monday item could not be moved to Quote Won.',
+            [
+                'error' => $e->getMessage(),
+                'xero_invoice_id' => $invoiceId,
+            ]
+        );
+    }
+
+    try {
+        $mondayCoursesOngoing = mondaySyncCoursesOngoingBookingItem($enquiryId, $bookingDetails);
+    } catch (Throwable $e) {
+        enquiryLoggerEvent(
+            $enquiryId,
+            'monday_courses_ongoing_failed',
+            'Xero invoice was sent, but the Client Booking Form (Courses Ongoing) record could not be created.',
+            [
+                'error' => $e->getMessage(),
+                'xero_invoice_id' => $invoiceId,
+            ]
+        );
+    }
+
+    try {
+        require_once __DIR__ . '/forge_webhook.php';
+        forgeMaybeMarkInvoiceSent($enquiryId, $bookingDetails);
+    } catch (Throwable $e) {
+        enquiryLoggerEvent(
+            $enquiryId,
+            'forge_booking_sync_failed',
+            'Xero invoice was sent, but Forge status could not be updated to Invoice Sent.',
+            [
+                'error' => $e->getMessage(),
+                'xero_invoice_id' => $invoiceId,
+            ]
+        );
+    }
+
+    return [
+        'processed' => true,
+        'sent' => true,
+        'already_sent' => false,
+        'invoice_status' => $invoiceStatus !== '' ? $invoiceStatus : null,
+        'monday_quote_won' => $mondayQuoteWon,
+        'monday_courses_ongoing' => $mondayCoursesOngoing,
+    ];
+}
+
+/**
+ * Poll Xero for draft invoices that have since been sent, and run Monday progression.
+ *
+ * @return array{checked:int,processed:int,already_sent:int,still_draft:int,failed:int}
+ */
+function xeroSyncSentInvoices(?int $onlyEnquiryId = null): array
+{
+    require_once __DIR__ . '/enquiry_logger.php';
+
+    $stats = [
+        'checked' => 0,
+        'processed' => 0,
+        'already_sent' => 0,
+        'still_draft' => 0,
+        'failed' => 0,
+    ];
+
+    if (!xeroEnabled()) {
+        return $stats;
+    }
+
+    $pdo = enquiryLoggerPdo();
+    enquiryLoggerEnsureColumn($pdo, 'enquiries', 'xero_invoice_id', 'TEXT');
+    enquiryLoggerEnsureColumn($pdo, 'enquiries', 'xero_invoice_sent_at', 'TEXT');
+
+    if ($onlyEnquiryId !== null) {
+        $stmt = $pdo->prepare(
+            'SELECT id FROM enquiries
+             WHERE id = :id
+               AND xero_invoice_id IS NOT NULL
+               AND TRIM(xero_invoice_id) != \'\''
+        );
+        $stmt->execute([':id' => $onlyEnquiryId]);
+    } else {
+        $stmt = $pdo->query(
+            'SELECT id FROM enquiries
+             WHERE xero_invoice_id IS NOT NULL
+               AND TRIM(xero_invoice_id) != \'\'
+               AND (xero_invoice_sent_at IS NULL OR TRIM(xero_invoice_sent_at) = \'\')
+             ORDER BY id ASC
+             LIMIT 100'
+        );
+    }
+
+    $ids = $stmt ? $stmt->fetchAll(PDO::FETCH_COLUMN) : [];
+    foreach ($ids as $id) {
+        $enquiryId = (int)$id;
+        if ($enquiryId < 1) {
+            continue;
+        }
+        $stats['checked']++;
+        try {
+            $result = xeroMaybeProcessInvoiceSent($enquiryId);
+            if ($result === null) {
+                continue;
+            }
+            if (!empty($result['already_sent'])) {
+                $stats['already_sent']++;
+            } elseif (!empty($result['processed'])) {
+                $stats['processed']++;
+            } elseif (empty($result['sent'])) {
+                $stats['still_draft']++;
+            }
+        } catch (Throwable $e) {
+            $stats['failed']++;
+            enquiryLoggerEvent(
+                $enquiryId,
+                'xero_invoice_sent_check_failed',
+                'Could not check whether the Xero invoice has been sent.',
+                ['error' => $e->getMessage()]
+            );
+        }
+    }
+
+    return $stats;
 }

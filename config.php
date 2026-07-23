@@ -11,12 +11,15 @@ declare(strict_types=1);
 | Optional env overrides (take priority over DB when set):
 |   MONDAY_API_TOKEN, MONDAY_BOARD_ID, MONDAY_GROUP_ID, MONDAY_GROUP_NAME
 |   IDEAL_POSTCODES_API_KEY
+|   KAJABI_COURSES_URL
 |   BREVO_API_KEY, BREVO_EMAIL_ENABLED, BREVO_RESUME_EMAIL_ENABLED
 |   BREVO_LEAD_NOTIFICATION_ENABLED, BREVO_OFFICE_EMAIL
 |   BREVO_SENDER_EMAIL, BREVO_SENDER_NAME, BREVO_CONTACT_EMAIL
 |   BREVO_LOGO_URL, BREVO_QUOTE_ACCEPT_URL, FORM_BASE_URL
 |   XERO_ENABLED, XERO_CLIENT_ID, XERO_CLIENT_SECRET, XERO_REDIRECT_URI
 |   XERO_TENANT_ID, XERO_DEFAULT_ITEM_CODE, XERO_VAT_RATE, XERO_BRANDING_THEME_ID
+|   XERO_WEBHOOK_KEY
+|   FORGE_WEBHOOK_ENABLED, FORGE_WEBHOOK_URL, FORGE_WEBHOOK_TOKEN
 |   APP_DATABASE_PATH
 |
 | Do NOT set XERO_ACCESS_TOKEN / XERO_REFRESH_TOKEN / XERO_TOKEN_EXPIRES_AT in env.
@@ -29,6 +32,7 @@ $mondayGroupId = '';
 $mondayGroupName = 'New Enquiries';
 
 $idealPostcodesApiKey = '';
+$kajabiCoursesUrl = 'https://safer-handling.mykajabi.com/store';
 
 $brevoApiKey = '';
 
@@ -57,6 +61,10 @@ $xeroSalesAccountCode = '200';
 $xeroVatRate = '20';
 $xeroBrandingThemeId = '';
 
+$forgeEnabled = false;
+$forgeWebhookUrl = 'https://saferhandling.forgecrm.co.uk/safer_production/webhooks/bookings/';
+$forgeWebhookToken = '';
+
 require_once __DIR__ . '/database_bridge.php';
 applyAppSettingsToGlobals();
 
@@ -66,6 +74,7 @@ $mondayBoardId = (string)($GLOBALS['mondayBoardId'] ?? $mondayBoardId);
 $mondayGroupId = (string)($GLOBALS['mondayGroupId'] ?? $mondayGroupId);
 $mondayGroupName = (string)($GLOBALS['mondayGroupName'] ?? $mondayGroupName);
 $idealPostcodesApiKey = (string)($GLOBALS['idealPostcodesApiKey'] ?? $idealPostcodesApiKey);
+$kajabiCoursesUrl = (string)($GLOBALS['kajabiCoursesUrl'] ?? $kajabiCoursesUrl);
 $brevoApiKey = (string)($GLOBALS['brevoApiKey'] ?? $brevoApiKey);
 $brevoEmailEnabled = (bool)($GLOBALS['brevoEmailEnabled'] ?? $brevoEmailEnabled);
 $brevoSenderEmail = (string)($GLOBALS['brevoSenderEmail'] ?? $brevoSenderEmail);
@@ -89,3 +98,6 @@ $xeroDefaultItemCode = (string)($GLOBALS['xeroDefaultItemCode'] ?? $xeroDefaultI
 $xeroSalesAccountCode = (string)($GLOBALS['xeroSalesAccountCode'] ?? $xeroSalesAccountCode);
 $xeroVatRate = (string)($GLOBALS['xeroVatRate'] ?? $xeroVatRate);
 $xeroBrandingThemeId = (string)($GLOBALS['xeroBrandingThemeId'] ?? $xeroBrandingThemeId);
+$forgeEnabled = (bool)($GLOBALS['forgeEnabled'] ?? $forgeEnabled);
+$forgeWebhookUrl = (string)($GLOBALS['forgeWebhookUrl'] ?? $forgeWebhookUrl);
+$forgeWebhookToken = (string)($GLOBALS['forgeWebhookToken'] ?? $forgeWebhookToken);

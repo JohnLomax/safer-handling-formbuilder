@@ -1,3 +1,20 @@
+<?php
+declare(strict_types=1);
+
+$configPath = __DIR__ . '/config.php';
+if (file_exists($configPath)) {
+    require_once $configPath;
+}
+
+$kajabiCoursesUrl = trim((string) appConfigValue(
+    'KAJABI_COURSES_URL',
+    'kajabiCoursesUrl',
+    'https://safer-handling.mykajabi.com/store'
+));
+if ($kajabiCoursesUrl === '') {
+    $kajabiCoursesUrl = 'https://safer-handling.mykajabi.com/store';
+}
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -913,7 +930,7 @@
     (function () {
       var SHOP_URL = "https://www.safer-handling.co.uk/shop";
       var RESOURCES_URL = "https://www.safer-handling.co.uk/resources";
-      var KAJABI_COURSES_URL = "https://safer-handling.mykajabi.com/store";
+      var KAJABI_COURSES_URL = <?= json_encode($kajabiCoursesUrl, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
       var MONDAY_CONTINUE_ENDPOINT = new URL("monday_continue.php", window.location.href).toString();
       var RESUME_ENQUIRY_ENDPOINT = new URL("resume_enquiry.php", window.location.href).toString();
       var SAVE_ENQUIRY_PROGRESS_ENDPOINT = new URL("save_enquiry_progress.php", window.location.href).toString();

@@ -102,6 +102,12 @@ function enquiryLoggerEnsureSchema(PDO $pdo): void
     enquiryLoggerEnsureColumn($pdo, 'enquiries', 'xero_invoice_id', 'TEXT');
     enquiryLoggerEnsureColumn($pdo, 'enquiries', 'xero_invoice_number', 'TEXT');
     enquiryLoggerEnsureColumn($pdo, 'enquiries', 'xero_invoice_created_at', 'TEXT');
+    enquiryLoggerEnsureColumn($pdo, 'enquiries', 'xero_invoice_sent_at', 'TEXT');
+    enquiryLoggerEnsureColumn($pdo, 'enquiries', 'monday_booking_item_id', 'TEXT');
+    enquiryLoggerEnsureColumn($pdo, 'enquiries', 'forge_synced_at', 'TEXT');
+    enquiryLoggerEnsureColumn($pdo, 'enquiries', 'forge_event_id', 'TEXT');
+    enquiryLoggerEnsureColumn($pdo, 'enquiries', 'forge_last_action', 'TEXT');
+    enquiryLoggerEnsureColumn($pdo, 'enquiries', 'forge_booking_status', 'TEXT');
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_enquiries_resume_token ON enquiries(resume_token)');
 
     $ready = true;
@@ -381,6 +387,7 @@ function enquiryLoggerStatusRank(string $status): int
         'contacted' => 4,
         'quote_sent' => 5,
         'quote_accepted' => 6,
+        'quote_won' => 7,
         default => 0,
     };
 }
@@ -634,6 +641,14 @@ function enquiryLoggerSetStatusIfNotPast(int $enquiryId, string $status, array $
         return;
     }
 
+    // Never move an enquiry backwards (e.g. quote_won → quote_accepted).
+    if (
+        $current !== ''
+        && enquiryLoggerStatusRank($current) > enquiryLoggerStatusRank($status)
+    ) {
+        return;
+    }
+
     $update = $pdo->prepare(
         'UPDATE enquiries SET status = :status, updated_at = :updated_at WHERE id = :id'
     );
@@ -719,11 +734,15 @@ function enquiryLoggerSaveBookingDetails(int $enquiryId, array $details): void
     $now = enquiryLoggerNow();
     $termsAccepted = !empty($details['termsAccepted']);
 
+    // Preserve first-submit timestamps on later admin/customer edits.
     $stmt = $pdo->prepare(
         'UPDATE enquiries SET
             booking_details_json = :booking_details_json,
-            booking_submitted_at = :booking_submitted_at,
-            terms_accepted_at = :terms_accepted_at,
+            booking_submitted_at = COALESCE(booking_submitted_at, :booking_submitted_at),
+            terms_accepted_at = CASE
+                WHEN :terms_accepted = 1 THEN COALESCE(terms_accepted_at, :terms_accepted_at)
+                ELSE terms_accepted_at
+            END,
             updated_at = :updated_at
          WHERE id = :id'
     );
@@ -731,6 +750,7 @@ function enquiryLoggerSaveBookingDetails(int $enquiryId, array $details): void
         ':id' => $enquiryId,
         ':booking_details_json' => json_encode($details, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
         ':booking_submitted_at' => $now,
+        ':terms_accepted' => $termsAccepted ? 1 : 0,
         ':terms_accepted_at' => $termsAccepted ? $now : null,
         ':updated_at' => $now,
     ]);
@@ -835,6 +855,81 @@ function enquiryLoggerMarkXeroInvoiceCreated(
         ':xero_invoice_id' => $invoiceId !== '' ? $invoiceId : null,
         ':xero_invoice_number' => $invoiceNumber !== '' ? $invoiceNumber : null,
         ':xero_invoice_created_at' => $now,
+        ':updated_at' => $now,
+    ]);
+}
+
+function enquiryLoggerXeroInvoiceAlreadySent(int $enquiryId): bool
+{
+    enquiryLoggerEnsureColumn(enquiryLoggerPdo(), 'enquiries', 'xero_invoice_sent_at', 'TEXT');
+
+    $pdo = enquiryLoggerPdo();
+    $stmt = $pdo->prepare('SELECT xero_invoice_sent_at FROM enquiries WHERE id = :id LIMIT 1');
+    $stmt->execute([':id' => $enquiryId]);
+    $row = $stmt->fetch();
+
+    return trim((string)($row['xero_invoice_sent_at'] ?? '')) !== '';
+}
+
+function enquiryLoggerMarkXeroInvoiceSent(int $enquiryId, ?string $invoiceNumber = null): void
+{
+    enquiryLoggerEnsureColumn(enquiryLoggerPdo(), 'enquiries', 'xero_invoice_sent_at', 'TEXT');
+    enquiryLoggerEnsureColumn(enquiryLoggerPdo(), 'enquiries', 'xero_invoice_number', 'TEXT');
+
+    $pdo = enquiryLoggerPdo();
+    $now = enquiryLoggerNow();
+    $invoiceNumber = trim((string)$invoiceNumber);
+
+    if ($invoiceNumber !== '') {
+        $stmt = $pdo->prepare(
+            'UPDATE enquiries SET
+                xero_invoice_sent_at = COALESCE(xero_invoice_sent_at, :xero_invoice_sent_at),
+                xero_invoice_number = COALESCE(NULLIF(xero_invoice_number, \'\'), :xero_invoice_number),
+                updated_at = :updated_at
+             WHERE id = :id'
+        );
+        $stmt->execute([
+            ':id' => $enquiryId,
+            ':xero_invoice_sent_at' => $now,
+            ':xero_invoice_number' => $invoiceNumber,
+            ':updated_at' => $now,
+        ]);
+    } else {
+        $stmt = $pdo->prepare(
+            'UPDATE enquiries SET
+                xero_invoice_sent_at = COALESCE(xero_invoice_sent_at, :xero_invoice_sent_at),
+                updated_at = :updated_at
+             WHERE id = :id'
+        );
+        $stmt->execute([
+            ':id' => $enquiryId,
+            ':xero_invoice_sent_at' => $now,
+            ':updated_at' => $now,
+        ]);
+    }
+
+    enquiryLoggerSetStatusIfNotPast($enquiryId, 'quote_won', []);
+}
+
+function enquiryLoggerMarkQuoteWon(int $enquiryId): void
+{
+    enquiryLoggerSetStatusIfNotPast($enquiryId, 'quote_won', []);
+}
+
+function enquiryLoggerMarkMondayBookingItemId(int $enquiryId, string $itemId): void
+{
+    enquiryLoggerEnsureColumn(enquiryLoggerPdo(), 'enquiries', 'monday_booking_item_id', 'TEXT');
+    $pdo = enquiryLoggerPdo();
+    $now = enquiryLoggerNow();
+    $stmt = $pdo->prepare(
+        'UPDATE enquiries SET
+            monday_booking_item_id = :monday_booking_item_id,
+            updated_at = :updated_at
+         WHERE id = :id'
+    );
+    $stmt->execute([
+        ':id' => $enquiryId,
+        ':monday_booking_item_id' => trim($itemId) !== '' ? trim($itemId) : null,
         ':updated_at' => $now,
     ]);
 }

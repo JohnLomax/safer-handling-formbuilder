@@ -30,6 +30,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/enquiries/{enquiry}/resend/resume-email', [EnquiryController::class, 'resendResumeEmail'])->name('enquiries.resend.resume-email');
     Route::post('/enquiries/{enquiry}/resend/booking-email', [EnquiryController::class, 'resendBookingEmail'])->name('enquiries.resend.booking-email');
     Route::post('/enquiries/{enquiry}/retry/xero-invoice', [EnquiryController::class, 'retryXeroInvoice'])->name('enquiries.retry.xero-invoice');
+    Route::post('/enquiries/{enquiry}/sync/xero-invoice-sent', [EnquiryController::class, 'syncXeroInvoiceSent'])->name('enquiries.sync.xero-invoice-sent');
     Route::post('/enquiries/{enquiry}/events/{event}/retry', [EnquiryController::class, 'retryEvent'])->name('enquiries.retry.event');
 
     Route::get('/feedback', [FeedbackController::class, 'index'])->name('feedback.index');

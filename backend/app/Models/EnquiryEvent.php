@@ -38,6 +38,13 @@ class EnquiryEvent extends Model
         'monday_moved_being_contacted' => 'Moved to Being Contacted on Monday',
         'monday_moved_quote_sent' => 'Moved to Quote Sent on Monday',
         'monday_moved_quote_accepted' => 'Moved to Quote Accepted on Monday',
+        'monday_moved_quote_won' => 'Moved to Quote Won on Monday',
+        'monday_quote_won_group_created' => 'Monday Quote Won group created',
+        'monday_courses_ongoing_created' => 'Client Booking Form record created',
+        'monday_courses_ongoing_synced' => 'Client Booking Form record updated',
+        'monday_courses_ongoing_failed' => 'Client Booking Form sync failed',
+        'monday_courses_ongoing_group_created' => 'Monday Courses Ongoing group created',
+        'monday_courses_ongoing_recreated' => 'Client Booking Form record recreated',
         'monday_move_failed' => 'Monday move failed',
         'monday_move_skipped' => 'Monday move skipped',
         'form_submitted' => 'Enquiry form submitted',
@@ -53,8 +60,14 @@ class EnquiryEvent extends Model
         'monday_booking_synced' => 'Booking synced to Monday',
         'monday_booking_sync_failed' => 'Monday booking sync failed',
         'xero_invoice_created' => 'Draft Xero invoice created',
+        'xero_invoice_sent' => 'Xero invoice sent',
         'xero_invoice_failed' => 'Xero invoice creation failed',
         'xero_invoice_skipped' => 'Xero invoice skipped',
+        'xero_invoice_sent_check_failed' => 'Xero invoice sent check failed',
+        'forge_booking_synced' => 'Forge booking snapshot sent',
+        'forge_booking_sync_failed' => 'Forge booking sync failed',
+        'forge_booking_sync_skipped' => 'Forge booking sync skipped',
+        'forge_status_updated' => 'Forge booking status updated',
         'lead_notification_sent' => 'New lead email sent to office',
         'lead_notification_failed' => 'New lead email failed',
         'storage_saved' => 'Enquiry saved locally',
@@ -120,7 +133,10 @@ class EnquiryEvent extends Model
     public function isSuccessful(): bool
     {
         return str_ends_with($this->event_type, '_sent')
-            || $this->event_type === 'xero_invoice_created';
+            || $this->event_type === 'xero_invoice_created'
+            || $this->event_type === 'monday_moved_quote_won'
+            || $this->event_type === 'monday_courses_ongoing_created'
+            || $this->event_type === 'monday_courses_ongoing_synced';
     }
 
     public function isManualRetrySuccess(): bool

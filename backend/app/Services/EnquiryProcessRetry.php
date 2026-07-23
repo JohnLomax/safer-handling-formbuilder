@@ -41,6 +41,10 @@ class EnquiryProcessRetry
             $actions[] = 'xero_invoice';
         }
 
+        if ($this->canSyncXeroInvoiceSent($enquiry)) {
+            $actions[] = 'xero_invoice_sent';
+        }
+
         return $actions;
     }
 
@@ -97,6 +101,13 @@ class EnquiryProcessRetry
                 || $enquiry->status === 'quote_accepted'
                 || $enquiry->hasBookingDetails()
             );
+    }
+
+    public function canSyncXeroInvoiceSent(Enquiry $enquiry): bool
+    {
+        return xeroEnabled()
+            && trim((string) $enquiry->xero_invoice_id) !== ''
+            && $enquiry->xero_invoice_sent_at === null;
     }
 
     public function retryQuoteEmail(Enquiry $enquiry): void
@@ -402,6 +413,26 @@ class EnquiryProcessRetry
         if ($invoice === null && trim((string) $enquiry->xero_invoice_id) === '') {
             throw new RuntimeException('Xero draft invoice was not created.');
         }
+    }
+
+    /**
+     * @return array{processed:bool,sent:bool,already_sent:bool,invoice_status:?string,monday_quote_won:?array,monday_courses_ongoing:?array}
+     */
+    public function syncXeroInvoiceSent(Enquiry $enquiry): array
+    {
+        if (! $this->canSyncXeroInvoiceSent($enquiry) && $enquiry->xero_invoice_sent_at === null) {
+            throw new RuntimeException('This enquiry has no Xero invoice to check.');
+        }
+
+        $result = xeroMaybeProcessInvoiceSent((int) $enquiry->id);
+        $enquiry->unsetRelation('events');
+        $enquiry->refresh();
+
+        if ($result === null) {
+            throw new RuntimeException('Could not check Xero invoice status for this enquiry.');
+        }
+
+        return $result;
     }
 
     public function retryFromFailedEvent(Enquiry $enquiry, EnquiryEvent $event): string

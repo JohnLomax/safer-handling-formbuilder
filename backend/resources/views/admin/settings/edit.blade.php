@@ -6,7 +6,12 @@
     <div class="admin-shell">
         @include('admin.partials.alerts')
 
-        <form method="POST" action="{{ route('admin.settings.update') }}" class="space-y-6">
+        {{-- Outside the settings form so Disconnect does not nest <form> tags and break panel spacing --}}
+        <form id="xero-disconnect-form" method="POST" action="{{ route('admin.settings.xero.disconnect') }}" class="hidden">
+            @csrf
+        </form>
+
+        <form method="POST" action="{{ route('admin.settings.update') }}" class="flex flex-col gap-6">
             @csrf
             @method('PUT')
 
@@ -55,6 +60,19 @@
                     <x-input-label for="ideal_postcodes_api_key" value="Ideal Postcodes API key" />
                     <x-text-input id="ideal_postcodes_api_key" name="ideal_postcodes_api_key" type="password" class="mt-1 block w-full font-mono text-sm" :value="old('ideal_postcodes_api_key', $settings['ideal_postcodes_api_key'] ?? '')" autocomplete="off" />
                     <p class="mt-1 text-xs text-sh-mid">Leave blank when saving to keep the existing key.</p>
+                </div>
+            </div>
+
+            <div class="brand-panel space-y-4">
+                <div>
+                    <h3 class="text-base font-semibold text-brand-header">Kajabi</h3>
+                    <p class="mt-1 text-sm text-sh-mid">Online courses store link used when a customer chooses “I want to complete an online course” on the enquiry form.</p>
+                </div>
+
+                <div>
+                    <x-input-label for="kajabi_courses_url" value="Online courses URL" />
+                    <x-text-input id="kajabi_courses_url" name="kajabi_courses_url" type="url" class="mt-1 block w-full font-mono text-sm" :value="old('kajabi_courses_url', $settings['kajabi_courses_url'] ?? 'https://safer-handling.mykajabi.com/store')" placeholder="https://safer-handling.mykajabi.com/store" />
+                    <p class="mt-1 text-xs text-sh-mid">Customers are redirected here after Monday is updated for an online-course enquiry.</p>
                 </div>
             </div>
 
@@ -156,10 +174,7 @@
                                 {{ $xeroConnected ? 'Reconnect Xero' : 'Connect Xero' }}
                             </a>
                             @if ($xeroConnected)
-                                <form method="POST" action="{{ route('admin.settings.xero.disconnect') }}">
-                                    @csrf
-                                    <button type="submit" class="btn-brand-outline text-xs">Disconnect</button>
-                                </form>
+                                <button type="submit" form="xero-disconnect-form" class="btn-brand-outline text-xs">Disconnect</button>
                             @endif
                         </div>
                     </div>
@@ -218,6 +233,39 @@
                         <x-input-label for="xero_branding_theme_id" value="Branding theme ID (optional)" />
                         <x-text-input id="xero_branding_theme_id" name="xero_branding_theme_id" type="text" class="mt-1 block w-full font-mono text-sm" :value="old('xero_branding_theme_id', $settings['xero_branding_theme_id'] ?? '')" />
                     </div>
+                </div>
+
+                <div>
+                    <x-input-label for="xero_webhook_key" value="Webhook key" />
+                    <x-text-input id="xero_webhook_key" name="xero_webhook_key" type="password" class="mt-1 block w-full font-mono text-sm" :value="old('xero_webhook_key', $settings['xero_webhook_key'] ?? '')" autocomplete="off" />
+                    <p class="mt-1 text-xs text-sh-mid">
+                        From the Xero developer portal → Webhooks. Delivery URL:
+                        <code class="break-all">{{ rtrim(config('app.url'), '/') }}/api/xero/webhooks</code>
+                        Leave blank when saving to keep the existing key.
+                    </p>
+                </div>
+            </div>
+
+            <div class="brand-panel space-y-4">
+                <div>
+                    <h3 class="text-base font-semibold text-brand-header">Forge booking intake</h3>
+                    <p class="mt-1 text-sm text-sh-mid">When the accept form and venue details are saved, send a full booking snapshot to Forge for admin review. Existing enquiry data is never deleted.</p>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <input id="forge_enabled" name="forge_enabled" type="checkbox" value="1" class="rounded border-[#b9d4ef] text-brand shadow-sm focus:ring-brand" @checked(old('forge_enabled', filter_var($settings['forge_enabled'] ?? '0', FILTER_VALIDATE_BOOLEAN)))>
+                    <label for="forge_enabled" class="text-sm text-sh-mid">Send booking create/edit snapshots to Forge</label>
+                </div>
+
+                <div>
+                    <x-input-label for="forge_webhook_url" value="Webhook URL" />
+                    <x-text-input id="forge_webhook_url" name="forge_webhook_url" type="url" class="mt-1 block w-full font-mono text-sm" :value="old('forge_webhook_url', $settings['forge_webhook_url'] ?? 'https://saferhandling.forgecrm.co.uk/safer_production/webhooks/bookings/')" />
+                </div>
+
+                <div>
+                    <x-input-label for="forge_webhook_token" value="Webhook token" />
+                    <x-text-input id="forge_webhook_token" name="forge_webhook_token" type="password" class="mt-1 block w-full font-mono text-sm" :value="old('forge_webhook_token', $settings['forge_webhook_token'] ?? '')" autocomplete="off" />
+                    <p class="mt-1 text-xs text-sh-mid">Sent as <code>X-Webhook-Token</code>. Leave blank when saving to keep the existing token.</p>
                 </div>
             </div>
 

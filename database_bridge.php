@@ -132,6 +132,21 @@ function appDatabasePdo(): ?PDO
     static $pdo = null;
     static $attempted = false;
 
+    // Prefer Laravel's live connection when the admin app is bootstrapped.
+    // A second SQLite PDO to the same file can deadlock artisan/HTTP workers.
+    if (function_exists('app')) {
+        try {
+            if (app()->bound('db')) {
+                $laravelPdo = app('db')->connection()->getPdo();
+                if ($laravelPdo instanceof PDO) {
+                    return $laravelPdo;
+                }
+            }
+        } catch (Throwable $e) {
+            // Fall through to a direct PDO connection for standalone form PHP.
+        }
+    }
+
     if ($attempted) {
         return $pdo;
     }
@@ -152,6 +167,9 @@ function appDatabasePdo(): ?PDO
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::ATTR_TIMEOUT => 10,
         ]);
+        if (appDatabaseDriver() === 'sqlite') {
+            $pdo->exec('PRAGMA busy_timeout = 10000');
+        }
     } catch (Throwable $e) {
         $pdo = null;
     }
@@ -326,6 +344,10 @@ function applyAppSettingsToGlobals(): void
     $GLOBALS['mondayBookingGroupName'] = appSetting('monday_booking_group_name', (string)($GLOBALS['mondayBookingGroupName'] ?? 'Quote Accepted'));
     $GLOBALS['mondayQuoteAcceptedGroupName'] = appSetting('monday_quote_accepted_group_name', (string)($GLOBALS['mondayQuoteAcceptedGroupName'] ?? $GLOBALS['mondayBookingGroupName']));
     $GLOBALS['idealPostcodesApiKey'] = appSetting('ideal_postcodes_api_key', (string)($GLOBALS['idealPostcodesApiKey'] ?? ''));
+    $GLOBALS['kajabiCoursesUrl'] = appSetting(
+        'kajabi_courses_url',
+        (string)($GLOBALS['kajabiCoursesUrl'] ?? 'https://safer-handling.mykajabi.com/store')
+    );
     $GLOBALS['brevoApiKey'] = appSetting('brevo_api_key', (string)($GLOBALS['brevoApiKey'] ?? ''));
     $GLOBALS['brevoEmailEnabled'] = appSettingBool('brevo_email_enabled', (bool)($GLOBALS['brevoEmailEnabled'] ?? false));
     $GLOBALS['brevoSenderEmail'] = appSetting('brevo_sender_email', (string)($GLOBALS['brevoSenderEmail'] ?? ''));
@@ -349,6 +371,12 @@ function applyAppSettingsToGlobals(): void
     $GLOBALS['xeroSalesAccountCode'] = appSetting('xero_sales_account_code', (string)($GLOBALS['xeroSalesAccountCode'] ?? '200'));
     $GLOBALS['xeroVatRate'] = appSetting('xero_vat_rate', (string)($GLOBALS['xeroVatRate'] ?? '20'));
     $GLOBALS['xeroBrandingThemeId'] = appSetting('xero_branding_theme_id', (string)($GLOBALS['xeroBrandingThemeId'] ?? ''));
+    $GLOBALS['forgeEnabled'] = appSettingBool('forge_enabled', (bool)($GLOBALS['forgeEnabled'] ?? false));
+    $GLOBALS['forgeWebhookUrl'] = appSetting(
+        'forge_webhook_url',
+        (string)($GLOBALS['forgeWebhookUrl'] ?? 'https://saferhandling.forgecrm.co.uk/safer_production/webhooks/bookings/')
+    );
+    $GLOBALS['forgeWebhookToken'] = appSetting('forge_webhook_token', (string)($GLOBALS['forgeWebhookToken'] ?? ''));
 }
 
 /**

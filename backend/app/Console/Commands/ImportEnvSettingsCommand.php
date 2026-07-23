@@ -25,6 +25,7 @@ class ImportEnvSettingsCommand extends Command
         'MONDAY_GROUP_NAME' => 'monday_group_name',
         'MONDAY_BOOKING_GROUP_NAME' => 'monday_booking_group_name',
         'IDEAL_POSTCODES_API_KEY' => 'ideal_postcodes_api_key',
+        'KAJABI_COURSES_URL' => 'kajabi_courses_url',
         'BREVO_API_KEY' => 'brevo_api_key',
         'BREVO_EMAIL_ENABLED' => 'brevo_email_enabled',
         'BREVO_RESUME_EMAIL_ENABLED' => 'brevo_resume_email_enabled',
@@ -45,6 +46,10 @@ class ImportEnvSettingsCommand extends Command
         'XERO_SALES_ACCOUNT_CODE' => 'xero_sales_account_code',
         'XERO_VAT_RATE' => 'xero_vat_rate',
         'XERO_BRANDING_THEME_ID' => 'xero_branding_theme_id',
+        'XERO_WEBHOOK_KEY' => 'xero_webhook_key',
+        'FORGE_WEBHOOK_ENABLED' => 'forge_enabled',
+        'FORGE_WEBHOOK_URL' => 'forge_webhook_url',
+        'FORGE_WEBHOOK_TOKEN' => 'forge_webhook_token',
     ];
 
     /**
@@ -55,6 +60,7 @@ class ImportEnvSettingsCommand extends Command
         'brevo_resume_email_enabled',
         'brevo_lead_notification_enabled',
         'xero_enabled',
+        'forge_enabled',
     ];
 
     public function handle(): int

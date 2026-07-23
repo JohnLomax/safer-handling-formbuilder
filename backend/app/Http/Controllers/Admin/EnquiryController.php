@@ -22,7 +22,7 @@ class EnquiryController extends Controller
             $perPage = 25;
         }
 
-        $allowedStatuses = ['all', 'in_progress', 'contacted', 'quote_sent', 'quote_accepted', 'submitted', 'failed'];
+        $allowedStatuses = ['all', 'in_progress', 'contacted', 'quote_sent', 'quote_accepted', 'quote_won', 'submitted', 'failed'];
         if (! in_array($status, $allowedStatuses, true)) {
             $status = 'all';
         }
@@ -248,6 +248,13 @@ class EnquiryController extends Controller
                 $warnings[] = 'Draft Xero invoice could not be created: '.$xeroError->getMessage();
             }
 
+            try {
+                require_once $root.'/forge_webhook.php';
+                forgeMaybeSyncBooking((int) $enquiry->id, $details);
+            } catch (Throwable $forgeError) {
+                $warnings[] = 'Forge booking sync failed: '.$forgeError->getMessage();
+            }
+
             $enquiry->refresh();
 
             if ($warnings !== []) {
@@ -259,6 +266,9 @@ class EnquiryController extends Controller
             $status = 'Booking details saved and synced to Monday (Quote Accepted).';
             if (trim((string) $enquiry->xero_invoice_id) !== '') {
                 $status .= ' Draft Xero invoice created (not sent).';
+            }
+            if (trim((string) ($enquiry->forge_synced_at ?? '')) !== '') {
+                $status .= ' Forge booking snapshot queued for review.';
             }
 
             return redirect()
@@ -321,6 +331,45 @@ class EnquiryController extends Controller
             fn () => $retry->retryXeroInvoice($enquiry),
             'Created draft Xero invoice successfully (not sent).'
         );
+    }
+
+    public function syncXeroInvoiceSent(Enquiry $enquiry, EnquiryProcessRetry $retry): RedirectResponse
+    {
+        try {
+            $result = $retry->syncXeroInvoiceSent($enquiry);
+            $enquiry->refresh();
+
+            if (! empty($result['already_sent']) || (! empty($result['sent']) && empty($result['processed']))) {
+                return redirect()
+                    ->route('admin.enquiries.show', $enquiry)
+                    ->with('status', 'Xero invoice was already marked as sent for this enquiry.');
+            }
+
+            if (! empty($result['processed'])) {
+                $parts = ['Xero invoice marked as sent.'];
+                if (! empty($result['monday_quote_won']['moved'])) {
+                    $parts[] = 'Moved to Monday "'.($result['monday_quote_won']['groupName'] ?? 'Quote Won').'".';
+                }
+                if (! empty($result['monday_courses_ongoing']['itemId'])) {
+                    $parts[] = (! empty($result['monday_courses_ongoing']['created']) ? 'Created' : 'Updated')
+                        .' Client Booking Form (Courses Ongoing) record.';
+                }
+
+                return redirect()
+                    ->route('admin.enquiries.show', $enquiry)
+                    ->with('status', implode(' ', $parts));
+            }
+
+            $status = $result['invoice_status'] ?? 'DRAFT';
+
+            return redirect()
+                ->route('admin.enquiries.show', $enquiry)
+                ->with('status', 'Xero invoice is not marked as sent yet (status: '.$status.'). Send/email it in Xero, then check again.');
+        } catch (Throwable $e) {
+            return redirect()
+                ->route('admin.enquiries.show', $enquiry)
+                ->withErrors(['xero_invoice_sent' => 'Could not sync Xero invoice sent status: '.$e->getMessage()]);
+        }
     }
 
     public function retryEvent(Enquiry $enquiry, EnquiryEvent $event, EnquiryProcessRetry $retry): RedirectResponse

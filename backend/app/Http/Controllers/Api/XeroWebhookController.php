@@ -15,41 +15,106 @@ class XeroWebhookController extends Controller
     /**
      * Xero webhook receiver.
      *
-     * URL to register in the Xero developer portal:
+     * Delivery URL (Xero developer portal → Webhooks):
      *   {APP_URL}/api/xero/webhooks
      *
-     * Handles the signed “intent to receive” challenge and invoice create/update
-     * events. Invoice payloads only identify the resource — we then load the
-     * invoice from Xero and run the existing sent-invoice progression.
+     * Intent to receive: return 200 for a correctly signed payload and 401 for
+     * an incorrectly signed one. Body must be empty. Never return other statuses.
      */
     public function __invoke(Request $request): Response
     {
-        $rawBody = $request->getContent();
-        $signature = trim((string) $request->header('x-xero-signature', ''));
-        $webhookKey = $this->webhookKey();
+        try {
+            // Prefer php://input — Laravel getContent() is usually fine, but Xero
+            // HMAC must match the exact bytes delivered on the wire.
+            $rawBody = file_get_contents('php://input');
+            if ($rawBody === false || $rawBody === '') {
+                $rawBody = $request->getContent();
+            }
 
-        if ($webhookKey === '') {
-            Log::warning('Xero webhook received but XERO_WEBHOOK_KEY is not configured.');
+            $signature = (string) $request->header('x-xero-signature', '');
+            $webhookKey = $this->webhookKey();
 
-            return response('', 401);
+            if ($webhookKey === '') {
+                Log::warning('Xero webhook: signing key is not configured.');
+
+                return $this->emptyStatus(401);
+            }
+
+            if ($signature === '' || ! $this->signatureIsValid($rawBody, $signature, $webhookKey)) {
+                return $this->emptyStatus(401);
+            }
+
+            $payload = json_decode($rawBody, true);
+            $events = is_array($payload) && isset($payload['events']) && is_array($payload['events'])
+                ? $payload['events']
+                : [];
+
+            // Intent-to-receive uses an empty events array — acknowledge immediately.
+            if ($events === []) {
+                return $this->emptyStatus(200);
+            }
+
+            $this->processEvents($events);
+
+            return $this->emptyStatus(200);
+        } catch (Throwable $e) {
+            // Xero ITR fails on any non-2xx/401. Never leak a 500 to the challenge.
+            Log::error('Xero webhook handler error', ['error' => $e->getMessage()]);
+
+            return $this->emptyStatus(401);
+        }
+    }
+
+    private function emptyStatus(int $status): Response
+    {
+        return response('', $status, [
+            'Content-Type' => 'text/plain',
+            'Cache-Control' => 'no-store',
+        ]);
+    }
+
+    private function webhookKey(): string
+    {
+        $candidates = [
+            (string) env('XERO_WEBHOOK_KEY', ''),
+            (string) (getenv('XERO_WEBHOOK_KEY') ?: ''),
+            (string) Setting::getValue('xero_webhook_key', ''),
+        ];
+
+        foreach ($candidates as $key) {
+            $key = trim($key);
+            // Accidental leading slash from copy/paste — base64 keys do not start with '/'.
+            $key = ltrim($key, '/');
+            if ($key !== '') {
+                return $key;
+            }
         }
 
-        if (! $this->signatureIsValid($rawBody, $signature, $webhookKey)) {
-            return response('', 401);
+        return '';
+    }
+
+    private function signatureIsValid(string $payload, string $signature, string $webhookKey): bool
+    {
+        if ($payload === '' || $signature === '' || $webhookKey === '') {
+            return false;
         }
 
-        // Intent-to-receive / empty payload: signature OK → 200 empty body.
-        $payload = json_decode($rawBody, true);
-        if (! is_array($payload) || empty($payload['events']) || ! is_array($payload['events'])) {
-            return response('', 200);
-        }
+        $computed = base64_encode(hash_hmac('sha256', $payload, $webhookKey, true));
 
+        return hash_equals($computed, $signature);
+    }
+
+    /**
+     * @param  list<mixed>  $events
+     */
+    private function processEvents(array $events): void
+    {
         $root = dirname(base_path());
         require_once $root.'/config.php';
         require_once $root.'/xero.php';
         require_once $root.'/enquiry_logger.php';
 
-        foreach ($payload['events'] as $event) {
+        foreach ($events as $event) {
             if (! is_array($event)) {
                 continue;
             }
@@ -62,7 +127,6 @@ class XeroWebhookController extends Controller
                 continue;
             }
 
-            // CREATE can matter if a draft was authorised+sent quickly; UPDATE covers mark-as-sent.
             if (! in_array($type, ['UPDATE', 'CREATE'], true)) {
                 continue;
             }
@@ -77,29 +141,6 @@ class XeroWebhookController extends Controller
                 ]);
             }
         }
-
-        return response('', 200);
-    }
-
-    private function webhookKey(): string
-    {
-        $fromEnv = trim((string) (getenv('XERO_WEBHOOK_KEY') ?: ''));
-        if ($fromEnv !== '') {
-            return ltrim($fromEnv, '/');
-        }
-
-        return ltrim(trim((string) Setting::getValue('xero_webhook_key', '')), '/');
-    }
-
-    private function signatureIsValid(string $payload, string $signature, string $webhookKey): bool
-    {
-        if ($payload === '' || $signature === '' || $webhookKey === '') {
-            return false;
-        }
-
-        $computed = base64_encode(hash_hmac('sha256', $payload, $webhookKey, true));
-
-        return hash_equals($computed, $signature);
     }
 
     private function processInvoiceEvent(string $invoiceId): void
@@ -109,12 +150,7 @@ class XeroWebhookController extends Controller
             ->orderByDesc('id')
             ->first();
 
-        if ($enquiry === null) {
-            return;
-        }
-
-        // Already processed — ignore further invoice noise (edits, payments, etc.).
-        if ($enquiry->xero_invoice_sent_at !== null) {
+        if ($enquiry === null || $enquiry->xero_invoice_sent_at !== null) {
             return;
         }
 

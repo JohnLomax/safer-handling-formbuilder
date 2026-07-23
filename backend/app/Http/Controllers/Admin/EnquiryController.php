@@ -80,6 +80,8 @@ class EnquiryController extends Controller
         return view('admin.enquiries.show', [
             'enquiry' => $enquiry,
             'retryableActions' => $retry->retryableActions($enquiry),
+            'canResendBookingEmail' => $retry->canResendBookingEmail($enquiry),
+            'acceptVenueEmailBlockedReason' => $retry->acceptVenueEmailBlockedReason($enquiry),
             'openBookingViewModal' => request()->boolean('view_booking'),
             'openBookingEditModal' => request()->boolean('edit_booking') || session('open_booking_edit', false),
         ]);
@@ -93,6 +95,7 @@ class EnquiryController extends Controller
             'email' => ['required', 'email', 'max:200'],
             'phone' => ['required', 'string', 'max:40'],
             'venueAddress' => ['required', 'string', 'max:1000'],
+            'preferredDate' => ['required', 'date_format:Y-m-d'],
             'studentNames' => ['nullable', 'string', 'max:5000'],
             'studentEmails' => ['nullable', 'string', 'max:5000'],
             'specialRequests' => ['nullable', 'string', 'max:2000'],
@@ -105,6 +108,19 @@ class EnquiryController extends Controller
             'termsAccepted' => ['accepted'],
             'studentNamesFile' => ['nullable', 'file', 'max:8192'],
         ]);
+
+        $root = dirname(base_path());
+        require_once $root.'/enquiry_logger.php';
+        require_once $root.'/monday_helpers.php';
+
+        $preferredDate = enquiryPreferredDateOnly((string) $validated['preferredDate']);
+        if ($preferredDate === '') {
+            return redirect()
+                ->route('admin.enquiries.show', ['enquiry' => $enquiry, 'edit_booking' => 1])
+                ->withErrors(['preferredDate' => 'Preferred date is invalid.'])
+                ->withInput()
+                ->with('open_booking_edit', true);
+        }
 
         $studentNames = trim((string) ($validated['studentNames'] ?? ''));
         $studentEmails = trim((string) ($validated['studentEmails'] ?? ''));
@@ -191,6 +207,7 @@ class EnquiryController extends Controller
             'organisation' => trim((string) ($validated['organisation'] ?? '')),
             'email' => trim($validated['email']),
             'phone' => trim($validated['phone']),
+            'preferredDate' => $preferredDate,
             'venueAddress' => trim($validated['venueAddress']),
             'studentNames' => $studentNames,
             'studentEmails' => $studentEmails,
@@ -207,11 +224,8 @@ class EnquiryController extends Controller
             'source' => $enquiry->hasBookingDetails() ? 'admin_edit' : 'admin_manual',
         ];
 
-        $root = dirname(base_path());
-        require_once $root.'/enquiry_logger.php';
-        require_once $root.'/monday_helpers.php';
-
         try {
+            enquiryLoggerUpdatePreferredDate((int) $enquiry->id, $preferredDate);
             enquiryLoggerSaveBookingDetails((int) $enquiry->id, $details);
             enquiryLoggerMarkQuoteAccepted((int) $enquiry->id);
             enquiryLoggerEvent(
@@ -317,9 +331,9 @@ class EnquiryController extends Controller
     {
         return $this->runRetry(
             $enquiry,
-            'accept terms email',
+            'Accept Quote / venue details email',
             fn () => $retry->resendBookingEmail($enquiry),
-            'Resent accept terms email successfully.'
+            'Resent Accept Quote / venue details email successfully.'
         );
     }
 
@@ -382,7 +396,7 @@ class EnquiryController extends Controller
             'quote_email' => 'quote email',
             'lead_notification' => 'lead notification',
             'resume_email' => 'Edit Enquiry Email',
-            'booking_email' => 'booking details email',
+            'booking_email' => 'Accept Quote / venue details email',
             'xero_invoice' => 'Xero draft invoice',
         ];
 

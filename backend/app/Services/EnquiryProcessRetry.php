@@ -73,8 +73,9 @@ class EnquiryProcessRetry
 
     public function canRetryBookingEmail(Enquiry $enquiry): bool
     {
-        // Booking-details email is disabled (quote email already links to the booking form).
-        return false;
+        return $this->canSendAcceptVenueEmail($enquiry)
+            && $enquiry->booking_email_sent_at === null
+            && ! $this->hasSuccessfulEvent($enquiry, 'booking_email_sent');
     }
 
     public function canResendResumeEmail(Enquiry $enquiry): bool
@@ -86,8 +87,76 @@ class EnquiryProcessRetry
 
     public function canResendBookingEmail(Enquiry $enquiry): bool
     {
-        // Booking-details email is disabled (quote email already links to the booking form).
-        return false;
+        // Resend while booking is incomplete and more than 1 day before preferred date.
+        return $this->canSendAcceptVenueEmail($enquiry)
+            && (
+                $enquiry->booking_email_sent_at !== null
+                || $this->hasSuccessfulEvent($enquiry, 'booking_email_sent')
+                || $enquiry->quote_email_sent_at !== null
+                || $enquiry->xero_quote_sent_at !== null
+                || in_array($enquiry->status, ['quote_sent', 'quote_accepted'], true)
+            );
+    }
+
+    /**
+     * Shared gates for first-send and resend of the Accept Quote / venue details email.
+     */
+    public function canSendAcceptVenueEmail(Enquiry $enquiry): bool
+    {
+        if (brevoApiKey() === '') {
+            return false;
+        }
+
+        if (trim((string) $enquiry->email) === '' || trim((string) $enquiry->name) === '') {
+            return false;
+        }
+
+        if ($enquiry->booking_submitted_at !== null || $enquiry->hasBookingDetails()) {
+            return false;
+        }
+
+        return $this->acceptVenueEmailWithinPreferredDateWindow($enquiry);
+    }
+
+    /**
+     * Allowed until 1 day before the preferred date (days until preferred > 1).
+     * If no preferred date is set, resend remains available.
+     */
+    public function acceptVenueEmailWithinPreferredDateWindow(Enquiry $enquiry): bool
+    {
+        if ($enquiry->date_not_sure) {
+            return true;
+        }
+
+        $preferredDate = enquiryPreferredDateOnly((string) $enquiry->preferred_date_time);
+        if ($preferredDate === '') {
+            return true;
+        }
+
+        $daysUntil = enquiryPreferredDateDaysUntil($preferredDate);
+
+        return $daysUntil === null || $daysUntil > 1;
+    }
+
+    public function acceptVenueEmailBlockedReason(Enquiry $enquiry): ?string
+    {
+        if ($enquiry->booking_submitted_at !== null || $enquiry->hasBookingDetails()) {
+            return 'Booking details have already been completed.';
+        }
+
+        if (! $this->acceptVenueEmailWithinPreferredDateWindow($enquiry)) {
+            return 'Cannot send within 1 day of the preferred date — contact the client directly.';
+        }
+
+        if (brevoApiKey() === '') {
+            return 'Brevo API key is not configured.';
+        }
+
+        if (trim((string) $enquiry->email) === '' || trim((string) $enquiry->name) === '') {
+            return 'Customer name and email are required.';
+        }
+
+        return null;
     }
 
     public function canRetryXeroInvoice(Enquiry $enquiry): bool
@@ -161,20 +230,6 @@ class EnquiryProcessRetry
                         'monday_move_failed',
                         'Could not move enquiry to Monday group "Quote Sent" after Xero quote was emailed.',
                         ['retried' => true, 'error' => $moveError->getMessage()]
-                    );
-                }
-
-                try {
-                    maybeSendBookingDetailsEmail((int) $enquiry->id, (string) $enquiry->name, (string) $enquiry->email);
-                    $enquiry->forceFill(['booking_email_sent_at' => now()])->save();
-                    $enquiry->unsetRelation('events');
-                    $enquiry->refresh();
-                } catch (Throwable $bookingEmailError) {
-                    $this->logEvent(
-                        $enquiry,
-                        'booking_email_failed',
-                        'Booking details / terms acceptance email could not be sent.',
-                        ['retried' => true, 'error' => $bookingEmailError->getMessage()]
                     );
                 }
             } else {
@@ -308,17 +363,21 @@ class EnquiryProcessRetry
     public function retryBookingEmail(Enquiry $enquiry): void
     {
         if (! $this->canRetryBookingEmail($enquiry)) {
-            throw new RuntimeException('Booking details email has already been sent, or cannot be sent for this enquiry.');
+            throw new RuntimeException(
+                $this->acceptVenueEmailBlockedReason($enquiry)
+                    ?? 'Accept Quote / venue details email has already been sent, or cannot be sent for this enquiry.'
+            );
         }
 
         try {
             $sent = maybeSendBookingDetailsEmail(
                 (int) $enquiry->id,
                 (string) $enquiry->name,
-                (string) $enquiry->email
+                (string) $enquiry->email,
+                true
             );
             if (! $sent) {
-                throw new RuntimeException('Booking details email could not be sent.');
+                throw new RuntimeException('Accept Quote / venue details email could not be sent.');
             }
             $enquiry->forceFill(['booking_email_sent_at' => now()])->save();
             $enquiry->unsetRelation('events');
@@ -327,7 +386,7 @@ class EnquiryProcessRetry
             $this->logEvent(
                 $enquiry,
                 'booking_email_failed',
-                'Booking details / terms acceptance email could not be resent.',
+                'Accept Quote / venue details email could not be sent.',
                 ['retried' => true, 'error' => $e->getMessage()]
             );
 
@@ -370,7 +429,10 @@ class EnquiryProcessRetry
     public function resendBookingEmail(Enquiry $enquiry): void
     {
         if (! $this->canResendBookingEmail($enquiry)) {
-            throw new RuntimeException('Accept terms email cannot be resent for this enquiry.');
+            throw new RuntimeException(
+                $this->acceptVenueEmailBlockedReason($enquiry)
+                    ?? 'Accept Quote / venue details email cannot be resent for this enquiry.'
+            );
         }
 
         try {
@@ -381,7 +443,7 @@ class EnquiryProcessRetry
                 true
             );
             if (! $sent) {
-                throw new RuntimeException('Accept terms email could not be resent.');
+                throw new RuntimeException('Accept Quote / venue details email could not be resent.');
             }
             $enquiry->forceFill(['booking_email_sent_at' => now()])->save();
             $enquiry->unsetRelation('events');
@@ -390,7 +452,7 @@ class EnquiryProcessRetry
             $this->logEvent(
                 $enquiry,
                 'booking_email_failed',
-                'Booking details / terms acceptance email could not be resent.',
+                'Accept Quote / venue details email could not be resent.',
                 ['resent' => true, 'error' => $e->getMessage()]
             );
 

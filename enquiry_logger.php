@@ -486,6 +486,81 @@ function enquiryPreferredDateFromPost(array $post): array
 }
 
 /**
+ * Extract a valid YYYY-MM-DD preferred date, or empty string.
+ */
+function enquiryPreferredDateOnly(?string $value): string
+{
+    $value = trim((string) $value);
+    if ($value === '') {
+        return '';
+    }
+
+    if (preg_match('/^(\d{4}-\d{2}-\d{2})/', str_replace(' ', 'T', $value), $matches)) {
+        $candidate = $matches[1];
+        $dt = \DateTimeImmutable::createFromFormat('!Y-m-d', $candidate, new \DateTimeZone('Europe/London'));
+        if ($dt !== false && $dt->format('Y-m-d') === $candidate) {
+            return $candidate;
+        }
+    }
+
+    return '';
+}
+
+/**
+ * Whole days from today (Europe/London) until the preferred date.
+ * Negative when the preferred date is in the past. Null when missing/invalid.
+ */
+function enquiryPreferredDateDaysUntil(?string $preferredDateTime, ?\DateTimeImmutable $now = null): ?int
+{
+    $dateOnly = enquiryPreferredDateOnly($preferredDateTime);
+    if ($dateOnly === '') {
+        return null;
+    }
+
+    $tz = new \DateTimeZone('Europe/London');
+    $today = ($now ?? new \DateTimeImmutable('now', $tz))->setTimezone($tz)->setTime(0, 0, 0);
+    $preferred = \DateTimeImmutable::createFromFormat('!Y-m-d', $dateOnly, $tz);
+    if ($preferred === false) {
+        return null;
+    }
+
+    return (int) $today->diff($preferred)->format('%r%a');
+}
+
+/**
+ * True when the preferred date is within 2 days (inclusive) — customers cannot change it online.
+ */
+function enquiryPreferredDateIsLocked(?string $preferredDateTime, ?\DateTimeImmutable $now = null): bool
+{
+    $days = enquiryPreferredDateDaysUntil($preferredDateTime, $now);
+
+    return $days !== null && $days <= 2;
+}
+
+function enquiryLoggerUpdatePreferredDate(int $enquiryId, string $preferredDateOnly): void
+{
+    $dateOnly = enquiryPreferredDateOnly($preferredDateOnly);
+    if ($dateOnly === '') {
+        throw new RuntimeException('Preferred date is invalid.');
+    }
+
+    $pdo = enquiryLoggerPdo();
+    $now = enquiryLoggerNow();
+    $stmt = $pdo->prepare(
+        'UPDATE enquiries SET
+            preferred_date_time = :preferred_date_time,
+            date_not_sure = 0,
+            updated_at = :updated_at
+         WHERE id = :id'
+    );
+    $stmt->execute([
+        ':id' => $enquiryId,
+        ':preferred_date_time' => $dateOnly,
+        ':updated_at' => $now,
+    ]);
+}
+
+/**
  * Apply normalised preferred-date fields onto a POST/form-data array for storage.
  *
  * @param array<string, mixed> $post

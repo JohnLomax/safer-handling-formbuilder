@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/includes/brand_engage.php';
+
 const BREVO_DEFAULT_LOGO_URL = 'https://img.mailinblue.com/8246699/images/content_library/original/6a02cfcf9d7025c9e500ab4b.jpg';
 
 /**
@@ -271,8 +273,6 @@ function buildBookingDetailsEmailHtml(array $data): string
     $name = htmlspecialchars((string)($data['name'] ?? ''), ENT_QUOTES, 'UTF-8');
     $bookingUrl = htmlspecialchars((string)($data['bookingUrl'] ?? ''), ENT_QUOTES, 'UTF-8');
     $contactEmail = htmlspecialchars(brevoContactEmail(), ENT_QUOTES, 'UTF-8');
-    $logoSrc = htmlspecialchars(brevoLogoUrl(), ENT_QUOTES, 'UTF-8');
-    $whatsappBlock = brevoWhatsAppButtonHtml();
     $joiningUrl = trim((string)($data['joiningInstructionsUrl'] ?? ''));
     $joiningBlock = '';
     if ($joiningUrl !== '') {
@@ -288,34 +288,17 @@ function buildBookingDetailsEmailHtml(array $data): string
 HTML;
     }
 
-    return <<<HTML
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml">
-<head>
-  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Complete Your Safer Handling Booking Details</title>
-</head>
-<body bgcolor="#ffffff" style="margin:0; padding:0; background-color:#ffffff; color:#414141;">
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#ffffff; width:100%;">
-    <tr>
-      <td align="center" style="padding:20px 10px;">
-        <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="width:600px; max-width:600px; background-color:#ffffff;">
-          <tr>
-            <td align="center" style="padding:10px 15px 20px;">
-              <img src="{$logoSrc}" alt="Safer Handling" width="200" border="0" style="display:block; width:200px; max-width:200px; height:auto;" />
-            </td>
-          </tr>
+    $body = <<<HTML
           <tr>
             <td align="center" style="padding:0 20px 10px; font-family:Arial,Helvetica,sans-serif; font-size:16px; line-height:1.6; color:#414141; text-align:center;">
               <p style="margin:0 0 12px;">Hello {$name},</p>
-              <p style="margin:0 0 12px;">Thank you for accepting your Safer Handling training quote.</p>
-              <p style="margin:0;">To finalise your booking, please provide your venue details, delegate names, invoice information, and accept our terms and conditions.</p>
+              <p style="margin:0 0 12px;">Thank you for your Safer Handling training quote.</p>
+              <p style="margin:0;">If you are happy to proceed, please accept the quote and add your venue details, delegate names, invoice information, and confirm our terms and conditions.</p>
             </td>
           </tr>
           <tr>
             <td align="center" style="padding:24px 20px 8px; font-family:Arial,Helvetica,sans-serif; text-align:center;">
-              <h1 style="margin:0; font-size:24px; font-weight:700; color:#0255a4; line-height:1.3;">Complete your booking details</h1>
+              <h1 style="margin:0; font-size:24px; font-weight:700; color:#0255a4; line-height:1.3;">Accept Quote and add venue details</h1>
             </td>
           </tr>
 {$joiningBlock}
@@ -324,7 +307,7 @@ HTML;
               <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="320" style="width:320px; background-color:#0255a4; border-radius:4px;">
                 <tr>
                   <td align="center" style="padding:14px 20px; border-radius:4px;">
-                    <a href="{$bookingUrl}" target="_blank" style="display:block; font-family:Arial,Helvetica,sans-serif; font-size:16px; font-weight:700; color:#ffffff; text-decoration:none; line-height:1.2;">Accept terms &amp; add venue details</a>
+                    <a href="{$bookingUrl}" target="_blank" style="display:block; font-family:Arial,Helvetica,sans-serif; font-size:16px; font-weight:700; color:#ffffff; text-decoration:none; line-height:1.2;">Accept Quote and add venue details</a>
                   </td>
                 </tr>
               </table>
@@ -336,20 +319,9 @@ HTML;
               <p style="margin:0;">Questions? <a href="mailto:{$contactEmail}" style="color:#0255a4; font-weight:700; text-decoration:underline;">Contact our team</a>.</p>
             </td>
           </tr>
-{$whatsappBlock}
-          <tr>
-            <td align="center" style="padding:20px; border-top:1px solid #e8eef5; font-family:Arial,Helvetica,sans-serif; font-size:13px; line-height:1.5; color:#666666; text-align:center;">
-              <strong style="color:#0255a4;">Safer Handling</strong><br />
-              <a href="https://www.safer-handling.co.uk" style="color:#0255a4; text-decoration:underline;">www.safer-handling.co.uk</a>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>
 HTML;
+
+    return brevoCustomerEmailHtml('Accept Quote and add venue details — Safer Handling', $body);
 }
 
 /**
@@ -360,8 +332,8 @@ function buildBookingDetailsEmailText(array $data): string
     $lines = [
         'Hello ' . (string)($data['name'] ?? '') . ',',
         '',
-        'Thank you for accepting your Safer Handling training quote.',
-        'To finalise your booking, please provide your venue details, delegate names, invoice information, and accept our terms and conditions.',
+        'Thank you for your Safer Handling training quote.',
+        'If you are happy to proceed, please accept the quote and add your venue details, delegate names, invoice information, and confirm our terms and conditions.',
         '',
     ];
 
@@ -372,7 +344,7 @@ function buildBookingDetailsEmailText(array $data): string
         $lines[] = '';
     }
 
-    $lines[] = 'Complete your booking details here:';
+    $lines[] = 'Accept Quote and add venue details here:';
     $lines[] = (string)($data['bookingUrl'] ?? '');
     $lines[] = '';
     $lines[] = 'Questions? Contact us at ' . brevoContactEmail() . '.';
@@ -412,7 +384,7 @@ function sendBookingDetailsEmailViaBrevo(string $toEmail, string $toName, array 
             'email' => brevoContactEmail(),
             'name' => $sender['name'],
         ],
-        'subject' => 'Complete your Safer Handling booking details',
+        'subject' => 'Accept Quote and add venue details — Safer Handling',
         'htmlContent' => buildBookingDetailsEmailHtml($data),
         'textContent' => buildBookingDetailsEmailText($data),
     ];
@@ -453,14 +425,73 @@ function sendBookingDetailsEmailViaBrevo(string $toEmail, string $toName, array 
 }
 
 /**
- * Send the booking details / terms acceptance email after a Xero quote is sent.
+ * Send (or resend) the Accept Quote / add venue details email.
  *
- * Disabled: the Xero quote email “Accept Quote and add venue details” button
- * already opens the same booking / venue details form, so this second email is redundant.
+ * Automatic post-quote sends stay off ($force=false) because the quote email
+ * already includes the Accept CTA. Admin Send/Resend passes $force=true.
+ * Resend is allowed until 1 day before the preferred date, and only while
+ * booking details have not been submitted.
  */
 function maybeSendBookingDetailsEmail(int $enquiryId, string $name, string $email, bool $force = false): bool
 {
-    return false;
+    if (! $force) {
+        return false;
+    }
+
+    if (brevoApiKey() === '') {
+        return false;
+    }
+
+    $bookingMeta = enquiryLoggerGetBookingDetails($enquiryId);
+    if (is_array($bookingMeta) && trim((string)($bookingMeta['booking_submitted_at'] ?? '')) !== '') {
+        throw new RuntimeException('Booking details have already been submitted for this enquiry.');
+    }
+
+    $pdo = enquiryLoggerPdo();
+    $stmt = $pdo->prepare('SELECT preferred_date_time, date_not_sure FROM enquiries WHERE id = :id LIMIT 1');
+    $stmt->execute([':id' => $enquiryId]);
+    $row = $stmt->fetch();
+    $preferredDate = '';
+    if (is_array($row) && empty($row['date_not_sure'])) {
+        $preferredDate = enquiryPreferredDateOnly((string)($row['preferred_date_time'] ?? ''));
+    }
+    if ($preferredDate !== '') {
+        $daysUntil = enquiryPreferredDateDaysUntil($preferredDate);
+        if ($daysUntil !== null && $daysUntil <= 1) {
+            throw new RuntimeException(
+                'Accept Quote / venue details email cannot be sent within 1 day of the preferred date. Please contact the client directly.'
+            );
+        }
+    }
+
+    $token = enquiryLoggerEnsureResumeToken($enquiryId);
+    $bookingUrl = buildBookingDetailsUrl($enquiryId, $token);
+    if ($bookingUrl === '') {
+        throw new RuntimeException('Form base URL is not configured.');
+    }
+
+    sendBookingDetailsEmailViaBrevo($email, $name, [
+        'name' => $name,
+        'email' => $email,
+        'bookingUrl' => $bookingUrl,
+        'joiningInstructionsUrl' => bookingJoiningInstructionsUrl(),
+    ]);
+
+    enquiryLoggerMarkBookingEmailSent($enquiryId);
+    enquiryLoggerEvent(
+        $enquiryId,
+        'booking_email_sent',
+        $force
+            ? 'Accept Quote / add venue details email resent to the customer via Brevo.'
+            : 'Accept Quote / add venue details email sent to the customer via Brevo.',
+        [
+            'booking_url' => $bookingUrl,
+            'preferred_date' => $preferredDate !== '' ? $preferredDate : null,
+            'resent' => $force,
+        ]
+    );
+
+    return true;
 }
 
 /**
@@ -472,27 +503,8 @@ function buildResumeEnquiryEmailHtml(array $data): string
     $email = htmlspecialchars((string)($data['email'] ?? ''), ENT_QUOTES, 'UTF-8');
     $resumeUrl = htmlspecialchars((string)($data['resumeUrl'] ?? ''), ENT_QUOTES, 'UTF-8');
     $contactEmail = htmlspecialchars(brevoContactEmail(), ENT_QUOTES, 'UTF-8');
-    $logoSrc = htmlspecialchars(brevoLogoUrl(), ENT_QUOTES, 'UTF-8');
-    $whatsappBlock = brevoWhatsAppButtonHtml();
 
-    return <<<HTML
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml">
-<head>
-  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Continue Your Safer Handling Enquiry</title>
-</head>
-<body bgcolor="#ffffff" style="margin:0; padding:0; background-color:#ffffff; color:#414141;">
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#ffffff; width:100%;">
-    <tr>
-      <td align="center" style="padding:20px 10px;">
-        <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="width:600px; max-width:600px; background-color:#ffffff;">
-          <tr>
-            <td align="center" style="padding:10px 15px 20px;">
-              <img src="{$logoSrc}" alt="Safer Handling" width="200" border="0" style="display:block; width:200px; max-width:200px; height:auto;" />
-            </td>
-          </tr>
+    $body = <<<HTML
           <tr>
             <td align="center" style="padding:0 20px 10px; font-family:Arial,Helvetica,sans-serif; font-size:16px; line-height:1.6; color:#414141; text-align:center;">
               <p style="margin:0 0 12px;">Hello {$name},</p>
@@ -522,20 +534,9 @@ function buildResumeEnquiryEmailHtml(array $data): string
               <p style="margin:0;">Questions? <a href="mailto:{$contactEmail}" style="color:#0255a4; font-weight:700; text-decoration:underline;">Contact our team</a>.</p>
             </td>
           </tr>
-{$whatsappBlock}
-          <tr>
-            <td align="center" style="padding:20px; border-top:1px solid #e8eef5; font-family:Arial,Helvetica,sans-serif; font-size:13px; line-height:1.5; color:#666666; text-align:center;">
-              <strong style="color:#0255a4;">Safer Handling</strong><br />
-              <a href="https://www.safer-handling.co.uk" style="color:#0255a4; text-decoration:underline;">www.safer-handling.co.uk</a>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>
 HTML;
+
+    return brevoCustomerEmailHtml('Continue Your Safer Handling Enquiry', $body);
 }
 
 /**
@@ -696,7 +697,8 @@ function brevoWhatsAppNumber(): string
 
 function brevoWhatsAppUrl(): string
 {
-    return 'https://wa.me/' . brevoWhatsAppNumber();
+    // Prefer the branded WhatsApp business message link from email.html.
+    return saferHandlingWhatsAppMessageUrl();
 }
 
 /**
@@ -723,9 +725,17 @@ HTML;
 
 function brevoLogoUrl(): string
 {
-    $url = trim((string)(getenv('BREVO_LOGO_URL') ?: ($GLOBALS['brevoLogoUrl'] ?? '')));
+    return saferHandlingEmailLogoUrl();
+}
 
-    return $url !== '' ? $url : BREVO_DEFAULT_LOGO_URL;
+/**
+ * Customer emails use email.html as the visual template (logo + body + Inform section).
+ *
+ * @param string $bodyRowsHtml One or more <tr>...</tr> content rows (no logo/footer).
+ */
+function brevoCustomerEmailHtml(string $title, string $bodyRowsHtml): string
+{
+    return saferHandlingEmailTemplate($title, $bodyRowsHtml);
 }
 
 function formatQuoteCurrency(string $value): string
@@ -895,11 +905,9 @@ function buildQuoteEmailHtml(array $data): string
 {
     $name = htmlspecialchars((string)($data['name'] ?? ''), ENT_QUOTES, 'UTF-8');
     $contactEmail = htmlspecialchars(brevoContactEmail(), ENT_QUOTES, 'UTF-8');
-    $logoSrc = htmlspecialchars(brevoLogoUrl(), ENT_QUOTES, 'UTF-8');
     $quoteRows = buildQuoteSummaryRows($data);
     $trainingDateBlock = buildTrainingDateBlock($data);
     $delegatesBlock = buildDelegatesBlock($data);
-    $whatsappBlock = brevoWhatsAppButtonHtml();
 
     $acceptUrl = resolveQuoteAcceptUrl($data);
     if ($acceptUrl === '') {
@@ -907,28 +915,7 @@ function buildQuoteEmailHtml(array $data): string
     }
     $acceptHref = htmlspecialchars($acceptUrl, ENT_QUOTES, 'UTF-8');
 
-    return <<<HTML
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml">
-<head>
-  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Your Safer Handling Training Quote</title>
-</head>
-<body bgcolor="#ffffff" style="margin:0; padding:0; background-color:#ffffff; color:#414141;">
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#ffffff; width:100%;">
-    <tr>
-      <td align="center" style="padding:20px 10px;">
-        <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="width:600px; max-width:600px; background-color:#ffffff;">
-
-          <!-- Logo -->
-          <tr>
-            <td align="center" style="padding:10px 15px 20px;">
-              <img src="{$logoSrc}" alt="Safer Handling" width="200" border="0" style="display:block; width:200px; max-width:200px; height:auto;" />
-            </td>
-          </tr>
-
-          <!-- Greeting -->
+    $body = <<<HTML
           <tr>
             <td align="center" style="padding:0 20px 10px; font-family:Arial,Helvetica,sans-serif; font-size:16px; line-height:1.6; color:#414141; text-align:center;">
               <p style="margin:0 0 12px;">Hello {$name} 👋</p>
@@ -936,22 +923,16 @@ function buildQuoteEmailHtml(array $data): string
               <p style="margin:0;">Please find your quote referenced below for your review.</p>
             </td>
           </tr>
-
-          <!-- Heading -->
           <tr>
             <td align="center" style="padding:24px 20px 8px; font-family:Arial,Helvetica,sans-serif; text-align:center;">
               <h1 style="margin:0; font-size:26px; font-weight:700; color:#0255a4; line-height:1.3;">Your Training Quote</h1>
             </td>
           </tr>
-
-          <!-- Intro -->
           <tr>
             <td align="center" style="padding:0 20px 20px; font-family:Arial,Helvetica,sans-serif; font-size:16px; line-height:1.6; color:#414141; text-align:center;">
               <p style="margin:0;">If you are happy to proceed, click <strong>Accept Quote and add venue details</strong> to open the accept quote form, accept terms, and add your venue details.</p>
             </td>
           </tr>
-
-          <!-- Accept Quote button -->
           <tr>
             <td align="center" style="padding:0 20px 32px;">
               <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="300" style="width:300px; background-color:#0255a4; border-radius:4px;">
@@ -963,8 +944,6 @@ function buildQuoteEmailHtml(array $data): string
               </table>
             </td>
           </tr>
-
-          <!-- Quote summary -->
           <tr>
             <td style="padding:0 20px 28px;">
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border:1px solid #d8e8f8; border-radius:4px; overflow:hidden;">
@@ -977,8 +956,6 @@ function buildQuoteEmailHtml(array $data): string
               </table>
             </td>
           </tr>
-
-          <!-- Training date -->
           <tr>
             <td style="padding:0 20px 8px; font-family:Arial,Helvetica,sans-serif;">
               <h2 style="margin:0 0 10px; font-size:20px; font-weight:700; color:#0255a4; text-align:center;">Training Date</h2>
@@ -990,8 +967,6 @@ function buildQuoteEmailHtml(array $data): string
               {$trainingDateBlock}
             </td>
           </tr>
-
-          <!-- Delegates -->
           <tr>
             <td style="padding:0 20px 8px; font-family:Arial,Helvetica,sans-serif;">
               <h2 style="margin:0 0 10px; font-size:20px; font-weight:700; color:#0255a4; text-align:center;">Number of Delegates</h2>
@@ -1003,30 +978,15 @@ function buildQuoteEmailHtml(array $data): string
               {$delegatesBlock}
             </td>
           </tr>
-
-          <!-- Closing -->
           <tr>
             <td align="center" style="padding:0 20px 16px; font-family:Arial,Helvetica,sans-serif; font-size:15px; line-height:1.6; color:#414141; text-align:center;">
               <p style="margin:0 0 12px;">If you have any questions regarding the quote or the training, please don't hesitate to <a href="mailto:{$contactEmail}" style="color:#0255a4; font-weight:700; text-decoration:underline;">contact us</a>.</p>
               <p style="margin:0;">Thank you for considering us for your training requirements. We look forward to working with you.</p>
             </td>
           </tr>
-{$whatsappBlock}
-          <!-- Footer -->
-          <tr>
-            <td align="center" style="padding:20px; border-top:1px solid #e8eef5; font-family:Arial,Helvetica,sans-serif; font-size:13px; line-height:1.5; color:#666666; text-align:center;">
-              <strong style="color:#0255a4;">Safer Handling</strong><br />
-              <a href="https://www.safer-handling.co.uk" style="color:#0255a4; text-decoration:underline;">www.safer-handling.co.uk</a>
-            </td>
-          </tr>
-
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>
 HTML;
+
+    return brevoCustomerEmailHtml('Your Safer Handling Training Quote', $body);
 }
 
 /**

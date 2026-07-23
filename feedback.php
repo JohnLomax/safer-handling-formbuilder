@@ -1,3 +1,7 @@
+<?php
+declare(strict_types=1);
+require_once __DIR__ . '/includes/brand_engage.php';
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -215,11 +219,13 @@
       font-size: 1.45rem;
     }
 
-    .thank-you-view p {
+    .thank-you-view > p {
       margin: 0 auto;
       max-width: 560px;
       color: #2a5e84;
     }
+
+<?= saferHandlingInformFollowEngageWebCss() ?>
 
     @media (max-width: 720px) {
       .brand-header {
@@ -268,6 +274,7 @@
         <img class="thank-you-logo" src="assets/safer-handling-logo.png" alt="Safer Handling logo" />
         <h2>Thank you</h2>
         <p>Your feedback has been submitted. We appreciate you taking the time to help us improve.</p>
+        <?= saferHandlingInformFollowEngageWebHtml() ?>
       </section>
     </div>
   </div>

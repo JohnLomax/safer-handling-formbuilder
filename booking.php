@@ -16,9 +16,12 @@ $prefill = [
     'invoiceName' => '',
     'invoiceEmail' => '',
     'invoiceAddress' => '',
+    'preferredDate' => '',
 ];
 $errorMessage = '';
 $alreadySubmitted = false;
+$preferredDateLocked = false;
+$supportEmail = '';
 $joiningUrl = bookingJoiningInstructionsUrl();
 
 if ($enquiryIdParam === null || $token === '') {
@@ -43,6 +46,13 @@ if ($enquiryIdParam === null || $token === '') {
             trim((string)($formData['addressPostcode'] ?? '')),
         ]);
 
+        $preferredDate = enquiryPreferredDateOnly(
+            (string)($enquiry['preferred_date_time'] ?? ($formData['preferredDate'] ?? ($formData['preferredDateTime'] ?? '')))
+        );
+        if ($preferredDate === '' && !empty($enquiry['date_not_sure'])) {
+            $preferredDate = '';
+        }
+
         $prefill = [
             'bookerName' => trim((string)($enquiry['name'] ?? '')),
             'organisation' => trim((string)($enquiry['organisation_company'] ?? ($formData['organisationCompany'] ?? ''))),
@@ -52,6 +62,7 @@ if ($enquiryIdParam === null || $token === '') {
             'invoiceName' => trim((string)($enquiry['name'] ?? '')),
             'invoiceEmail' => trim((string)($enquiry['email'] ?? '')),
             'invoiceAddress' => implode("\n", $addressParts),
+            'preferredDate' => $preferredDate,
         ];
 
         if ($alreadySubmitted && is_array($bookingMeta['details'] ?? null)) {
@@ -61,6 +72,15 @@ if ($enquiryIdParam === null || $token === '') {
                     $prefill[$key] = (string)$saved[$key];
                 }
             }
+            $prefill['preferredDate'] = enquiryPreferredDateOnly(
+                (string)($saved['preferredDate'] ?? ($prefill['preferredDate'] ?? ''))
+            ) ?: $prefill['preferredDate'];
+        }
+
+        $preferredDateLocked = enquiryPreferredDateIsLocked($prefill['preferredDate']);
+        $supportEmail = function_exists('brevoContactEmail') ? brevoContactEmail() : 'training@safer-handling.co.uk';
+        if ($supportEmail === '') {
+            $supportEmail = 'training@safer-handling.co.uk';
         }
     }
 }
@@ -144,6 +164,7 @@ function bookingH(string $value): string
     input[type="text"],
     input[type="email"],
     input[type="tel"],
+    input[type="date"],
     input[type="file"],
     textarea {
       width: 100%;
@@ -153,6 +174,12 @@ function bookingH(string $value): string
       font-size: 0.96rem;
       background: #fff;
       color: #133a59;
+    }
+    input[type="date"]:disabled,
+    input[type="date"][readonly] {
+      background: #f3f7fb;
+      color: #3a5f7d;
+      cursor: not-allowed;
     }
     textarea { min-height: 110px; resize: vertical; }
     .field-error {
@@ -209,6 +236,8 @@ function bookingH(string $value): string
     .hidden { display: none; }
     .thank-you-view { padding: 34px 24px 38px; text-align: center; }
     .thank-you-view h2 { color: #0255a4; margin: 18px 0 8px; }
+    .thank-you-view > p { margin: 0 auto; max-width: 560px; color: #2a5e84; }
+<?= saferHandlingInformFollowEngageWebCss() ?>
   </style>
 </head>
 <body>
@@ -230,6 +259,7 @@ function bookingH(string $value): string
         <div class="thank-you-view" id="alreadySubmittedView">
           <h2>Booking details already submitted</h2>
           <p>Thank you — we have received your booking details for this enquiry. Our team will be in touch if anything else is needed.</p>
+          <?= saferHandlingInformFollowEngageWebHtml() ?>
         </div>
       <?php else: ?>
         <form id="bookingForm" action="submit_booking.php" method="post" enctype="multipart/form-data" novalidate>
@@ -264,6 +294,33 @@ function bookingH(string $value): string
           <div class="section">
             <h2>Training details</h2>
             <p class="section-intro">This will be where the training will take place. Please do not input a personal address.</p>
+
+            <label for="preferredDate">Preferred date *</label>
+            <?php if ($preferredDateLocked): ?>
+              <input
+                type="date"
+                id="preferredDateDisplay"
+                value="<?= bookingH($prefill['preferredDate']) ?>"
+                readonly
+                disabled
+                aria-describedby="preferredDateLockMessage"
+              />
+              <input type="hidden" id="preferredDate" name="preferredDate" value="<?= bookingH($prefill['preferredDate']) ?>" />
+              <div class="alert alert-warn" id="preferredDateLockMessage" style="margin-top:10px;margin-bottom:0;">
+                Your preferred date is within 2 days and can no longer be changed online.
+                Please contact support<?= $supportEmail !== '' ? ' at <a href="mailto:' . bookingH($supportEmail) . '">' . bookingH($supportEmail) . '</a>' : '' ?> if you need to rearrange.
+              </div>
+            <?php else: ?>
+              <input
+                type="date"
+                id="preferredDate"
+                name="preferredDate"
+                required
+                value="<?= bookingH($prefill['preferredDate']) ?>"
+                min="<?= bookingH((new DateTimeImmutable('today', new DateTimeZone('Europe/London')))->format('Y-m-d')) ?>"
+              />
+              <span class="hint">Confirm or update your preferred training date.</span>
+            <?php endif; ?>
 
             <label for="venueAddress">Training Venue Address *</label>
             <textarea id="venueAddress" name="venueAddress" required maxlength="1000"><?= bookingH($prefill['venueAddress']) ?></textarea>
@@ -373,6 +430,7 @@ TERMS
         <div class="thank-you-view hidden" id="thankYouView">
           <h2>Thank you</h2>
           <p>Your booking details have been submitted. Our team will use these to finalise your training arrangements.</p>
+          <?= saferHandlingInformFollowEngageWebHtml() ?>
         </div>
       <?php endif; ?>
     </div>
@@ -471,13 +529,16 @@ TERMS
       function validate() {
         var ok = true;
         var requiredIds = [
-          "bookerName", "email", "phone", "venueAddress",
+          "bookerName", "email", "phone", "preferredDate", "venueAddress",
           "invoiceName", "invoiceEmail", "invoiceAddress"
         ];
         requiredIds.forEach(function (id) {
           var el = document.getElementById(id);
+          // Locked preferred date uses a hidden input — still validate it has a value.
           var missing = !requiredValue(id);
-          setError(el, missing);
+          if (el && el.type !== "hidden") {
+            setError(el, missing);
+          }
           if (missing) ok = false;
         });
 

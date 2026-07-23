@@ -1250,6 +1250,7 @@ function mondayBookingDetailsNotesBlock(array $details): string
         'Organisation' => $details['organisation'] ?? '',
         'Email' => $details['email'] ?? '',
         'Phone' => $details['phone'] ?? '',
+        'Preferred date' => $details['preferredDate'] ?? '',
         'Venue address' => $details['venueAddress'] ?? '',
         'Special requests' => $details['specialRequests'] ?? '',
         'Invoice name' => $details['invoiceName'] ?? '',
@@ -1457,6 +1458,31 @@ GQL;
             continue;
         }
         $columnValues[$columnId] = mondayColumnValueForType($columnType, $value);
+    }
+
+    $preferredDate = enquiryPreferredDateOnly((string)($details['preferredDate'] ?? ''));
+    if ($preferredDate !== '') {
+        [$preferredDateColumnId, $preferredDateColumnType] = mondayFindColumnByTitles($columns, [
+            'preferred date',
+            'preferred date/time',
+            'preferred date & time',
+            'preferred datetime',
+            'preferred day',
+            'preferred day(s)',
+        ]);
+        if ($preferredDateColumnId !== null && !isset($columnValues[$preferredDateColumnId])) {
+            if ($preferredDateColumnType === 'date') {
+                $datePayload = mondayDateColumnValueFromDatetimeLocal($preferredDate);
+                if ($datePayload !== null) {
+                    $columnValues[$preferredDateColumnId] = $datePayload;
+                }
+            } else {
+                $columnValues[$preferredDateColumnId] = mondayColumnValueForType(
+                    $preferredDateColumnType,
+                    $preferredDate
+                );
+            }
+        }
     }
 
     [$termsColumnId, $termsColumnType] = mondayFindColumnByTitles($columns, [
@@ -1851,6 +1877,31 @@ function mondayBookingDetailsColumnValues(array $columns, array $details, string
             continue;
         }
         $columnValues[$columnId] = mondayColumnValueForType($columnType, $value);
+    }
+
+    $preferredDate = enquiryPreferredDateOnly((string)($details['preferredDate'] ?? ''));
+    if ($preferredDate !== '') {
+        [$preferredDateColumnId, $preferredDateColumnType] = mondayFindColumnByTitles($columns, [
+            'preferred date',
+            'preferred date/time',
+            'preferred date & time',
+            'preferred datetime',
+            'preferred day',
+            'preferred day(s)',
+        ]);
+        if ($preferredDateColumnId !== null && !isset($columnValues[$preferredDateColumnId])) {
+            if ($preferredDateColumnType === 'date') {
+                $datePayload = mondayDateColumnValueFromDatetimeLocal($preferredDate);
+                if ($datePayload !== null) {
+                    $columnValues[$preferredDateColumnId] = $datePayload;
+                }
+            } else {
+                $columnValues[$preferredDateColumnId] = mondayColumnValueForType(
+                    $preferredDateColumnType,
+                    $preferredDate
+                );
+            }
+        }
     }
 
     [$termsColumnId, $termsColumnType] = mondayFindColumnByTitles($columns, [

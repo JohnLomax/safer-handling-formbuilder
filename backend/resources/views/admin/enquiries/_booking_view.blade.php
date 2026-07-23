@@ -25,6 +25,22 @@
     </div>
 
     <div>
+        <p class="text-xs font-semibold uppercase tracking-wide text-sh-mid">Preferred date</p>
+        <p class="mt-1 font-medium text-sh-text">
+            @php
+                $bookingPreferred = trim((string) ($booking['preferredDate'] ?? ''));
+            @endphp
+            @if ($bookingPreferred !== '')
+                {{ $bookingPreferred }}
+            @elseif ($enquiry->preferredDateTimeLabel() !== '')
+                {{ $enquiry->preferredDateTimeLabel() }}
+            @else
+                —
+            @endif
+        </p>
+    </div>
+
+    <div>
         <p class="text-xs font-semibold uppercase tracking-wide text-sh-mid">Venue address</p>
         <p class="mt-1 whitespace-pre-wrap font-medium text-sh-text">{{ $booking['venueAddress'] ?? '—' }}</p>
     </div>

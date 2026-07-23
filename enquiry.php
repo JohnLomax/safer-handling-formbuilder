@@ -5,6 +5,7 @@ $configPath = __DIR__ . '/config.php';
 if (file_exists($configPath)) {
     require_once $configPath;
 }
+require_once __DIR__ . '/includes/brand_engage.php';
 
 $kajabiCoursesUrl = trim((string) appConfigValue(
     'KAJABI_COURSES_URL',
@@ -539,11 +540,13 @@ if ($kajabiCoursesUrl === '') {
       font-size: 1.45rem;
     }
 
-    .thank-you-view p {
+    .thank-you-view > p {
       margin: 0 auto;
       max-width: 560px;
       color: #2a5e84;
     }
+
+<?= saferHandlingInformFollowEngageWebCss() ?>
 
     .actions {
       display: flex;
@@ -922,6 +925,7 @@ if ($kajabiCoursesUrl === '') {
         />
         <h2>Thank You</h2>
         <p>Your enquiry has been submitted. A member of the team will be in touch shortly.</p>
+        <?= saferHandlingInformFollowEngageWebHtml() ?>
       </section>
     </div>
   </div>

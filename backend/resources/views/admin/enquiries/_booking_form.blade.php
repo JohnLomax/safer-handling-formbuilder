@@ -32,6 +32,26 @@
     </div>
 
     <div>
+        <x-input-label for="preferredDate" value="Preferred date" />
+        @php
+            $preferredDateValue = old(
+                'preferredDate',
+                $booking['preferredDate']
+                    ?? (preg_match('/^\d{4}-\d{2}-\d{2}/', (string) $enquiry->preferred_date_time, $m) ? $m[0] : '')
+            );
+        @endphp
+        <x-text-input
+            id="preferredDate"
+            name="preferredDate"
+            type="date"
+            class="mt-1 block w-full"
+            :value="$preferredDateValue"
+            required
+        />
+        <p class="mt-1 text-xs text-sh-mid">Shown on the customer Accept &amp; add venue form. Within 2 days of this date, customers cannot change it online.</p>
+    </div>
+
+    <div>
         <x-input-label for="venueAddress" value="Training venue address" />
         <textarea id="venueAddress" name="venueAddress" rows="3" class="mt-1 block w-full rounded-[10px] border border-[#b7d3ee] px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30" required>{{ old('venueAddress', $booking['venueAddress'] ?? '') }}</textarea>
     </div>

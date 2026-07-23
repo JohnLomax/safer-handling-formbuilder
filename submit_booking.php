@@ -56,6 +56,7 @@ $bookerName = trim((string)($_POST['bookerName'] ?? ''));
 $organisation = trim((string)($_POST['organisation'] ?? ''));
 $email = trim((string)($_POST['email'] ?? ''));
 $phone = trim((string)($_POST['phone'] ?? ''));
+$preferredDate = enquiryPreferredDateOnly((string)($_POST['preferredDate'] ?? ($_POST['preferredDateTime'] ?? '')));
 $venueAddress = trim((string)($_POST['venueAddress'] ?? ''));
 $studentNames = trim((string)($_POST['studentNames'] ?? ''));
 $studentEmails = trim((string)($_POST['studentEmails'] ?? ''));
@@ -68,10 +69,28 @@ $purchaseOrderNumber = trim((string)($_POST['purchaseOrderNumber'] ?? ''));
 $venueRequirements = isset($_POST['venueRequirements']);
 $termsAccepted = isset($_POST['termsAccepted']);
 
+$existingPreferredDate = enquiryPreferredDateOnly((string)($enquiry['preferred_date_time'] ?? ''));
+if ($existingPreferredDate !== '' && enquiryPreferredDateIsLocked($existingPreferredDate)) {
+    // Within 2 days of the stored preferred date — ignore client changes.
+    if ($preferredDate !== '' && $preferredDate !== $existingPreferredDate) {
+        http_response_code(422);
+        $supportEmail = function_exists('brevoContactEmail') ? brevoContactEmail() : 'training@safer-handling.co.uk';
+        echo json_encode([
+            'success' => false,
+            'message' => 'Your preferred date is within 2 days and cannot be changed online. Please contact support'
+                . ($supportEmail !== '' ? ' at ' . $supportEmail : '')
+                . ' if you need to rearrange.',
+        ]);
+        exit;
+    }
+    $preferredDate = $existingPreferredDate;
+}
+
 $required = [
     'Booker name' => $bookerName,
     'Email address' => $email,
     'Phone number' => $phone,
+    'Preferred date' => $preferredDate,
     'Training venue address' => $venueAddress,
     'Invoice name' => $invoiceName,
     'Invoice email' => $invoiceEmail,
@@ -253,6 +272,7 @@ $details = [
     'organisation' => $organisation,
     'email' => $email,
     'phone' => $phone,
+    'preferredDate' => $preferredDate,
     'venueAddress' => $venueAddress,
     'studentNames' => $studentNames,
     'studentEmails' => $studentEmails,
@@ -270,6 +290,7 @@ $details = [
 ];
 
 try {
+    enquiryLoggerUpdatePreferredDate($enquiryId, $preferredDate);
     enquiryLoggerSaveBookingDetails($enquiryId, $details);
     enquiryLoggerMarkQuoteAccepted($enquiryId);
     enquiryLoggerEvent(
@@ -278,6 +299,7 @@ try {
         'Customer submitted booking details, venue confirmation, and accepted terms.',
         [
             'organisation' => $organisation,
+            'preferred_date' => $preferredDate,
             'delegate_count' => count($delegates),
             'has_upload' => $uploadedFileMeta !== null,
             'status' => 'quote_accepted',

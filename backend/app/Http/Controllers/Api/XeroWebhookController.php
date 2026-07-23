@@ -75,16 +75,26 @@ class XeroWebhookController extends Controller
 
     private function webhookKey(): string
     {
+        // Never call env() here — it is null when config is cached in production.
         $candidates = [
-            (string) env('XERO_WEBHOOK_KEY', ''),
+            (string) config('services.xero.webhook_key', ''),
+            (string) ($_ENV['XERO_WEBHOOK_KEY'] ?? ''),
+            (string) ($_SERVER['XERO_WEBHOOK_KEY'] ?? ''),
             (string) (getenv('XERO_WEBHOOK_KEY') ?: ''),
             (string) Setting::getValue('xero_webhook_key', ''),
         ];
 
         foreach ($candidates as $key) {
             $key = trim($key);
+            // Coolify / .env sometimes wraps values in quotes.
+            if (
+                (str_starts_with($key, '"') && str_ends_with($key, '"'))
+                || (str_starts_with($key, "'") && str_ends_with($key, "'"))
+            ) {
+                $key = substr($key, 1, -1);
+            }
             // Accidental leading slash from copy/paste — base64 keys do not start with '/'.
-            $key = ltrim($key, '/');
+            $key = ltrim(trim($key), '/');
             if ($key !== '') {
                 return $key;
             }

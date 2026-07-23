@@ -35,4 +35,9 @@ return [
         ],
     ],
 
+    'xero' => [
+        // Must live in config so `php artisan config:cache` still exposes the value.
+        'webhook_key' => env('XERO_WEBHOOK_KEY'),
+    ],
+
 ];

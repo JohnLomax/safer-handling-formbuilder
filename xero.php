@@ -946,23 +946,23 @@ function xeroBuildQuoteLineFromEnquiry(array $quoteData): array
         ? ' (' . trim($format . ($courseStyle !== '' ? ' · ' . $courseStyle : '')) . ')'
         : ''));
 
-    $grossRaw = trim((string)($quoteData['quoteValue'] ?? ''));
-    if ($grossRaw === '' && !empty($quoteData['quoteDisplay'])) {
-        $grossRaw = preg_replace('/[^0-9.\-]/', '', (string)$quoteData['quoteDisplay']) ?? '';
+    $netRaw = trim((string)($quoteData['quoteValue'] ?? ''));
+    if ($netRaw === '' && !empty($quoteData['quoteDisplay'])) {
+        $netRaw = preg_replace('/[^0-9.\-]/', '', (string)$quoteData['quoteDisplay']) ?? '';
     }
-    if ($grossRaw === '' || !is_numeric($grossRaw)) {
+    if ($netRaw === '' || !is_numeric($netRaw)) {
         throw new RuntimeException('Quote amount is missing or invalid for Xero.');
     }
 
-    // Form quoteValue is the customer-facing total including VAT (and travel).
-    $gross = round((float)$grossRaw, 2);
-    if ($gross <= 0) {
+    // Form quoteValue is the customer-facing amount: Including Travel but Excluding VAT.
+    $net = round((float)$netRaw, 2);
+    if ($net <= 0) {
         throw new RuntimeException('Quote amount must be greater than zero for Xero.');
     }
 
     $rate = xeroVatRate();
-    $net = round($gross / (1 + ($rate / 100)), 2);
-    $vat = round($gross - $net, 2);
+    $vat = round($net * ($rate / 100), 2);
+    $gross = round($net + $vat, 2);
 
     $descriptionParts = [];
     if ($attendees !== '') {
@@ -971,9 +971,9 @@ function xeroBuildQuoteLineFromEnquiry(array $quoteData): array
     if ($trainingType !== '') {
         $descriptionParts[] = 'Training: ' . $trainingType;
     }
-    $descriptionParts[] = 'Total (inc. VAT & travel): ' . number_format($gross, 2, '.', '');
-    $descriptionParts[] = 'Net: ' . number_format($net, 2, '.', '');
+    $descriptionParts[] = 'Including Travel but Excluding VAT: ' . number_format($net, 2, '.', '');
     $descriptionParts[] = 'VAT (' . rtrim(rtrim(number_format($rate, 2, '.', ''), '0'), '.') . '%): ' . number_format($vat, 2, '.', '');
+    $descriptionParts[] = 'Total including VAT: ' . number_format($gross, 2, '.', '');
     $description = implode(' | ', $descriptionParts);
 
     $itemCode = trim((string)($quoteData['xeroItemCode'] ?? ''));
@@ -1012,15 +1012,15 @@ function xeroBuildQuoteLineFromEnquiry(array $quoteData): array
 function xeroCreateQuote(string $contactId, array $quoteData): array
 {
     $line = xeroBuildQuoteLineFromEnquiry($quoteData);
-    // Form amounts are VAT-inclusive. Send Inclusive so Xero Total = form total
-    // (e.g. £1200 inc. VAT), with net/VAT calculated by Xero.
+    // Form amounts are exclusive of VAT (Including Travel but Excluding VAT).
+    // Send Exclusive so Xero SubTotal = form total and Total = form total + VAT.
     $lineItem = [
         'Description' => $line['description'],
         'Quantity' => 1,
-        'UnitAmount' => $line['gross'],
+        'UnitAmount' => $line['net'],
         'AccountCode' => xeroSalesAccountCode(),
         'TaxType' => 'OUTPUT2',
-        'LineAmount' => $line['gross'],
+        'LineAmount' => $line['net'],
     ];
 
     if (is_array($line['item'])) {
@@ -1031,8 +1031,8 @@ function xeroCreateQuote(string $contactId, array $quoteData): array
             $lineItem['Item'] = ['ItemID' => (string)$line['item']['ItemID']];
         }
         // Keep UnitAmount from enquiry so price can differ from the catalogue item.
-        $lineItem['UnitAmount'] = $line['gross'];
-        $lineItem['LineAmount'] = $line['gross'];
+        $lineItem['UnitAmount'] = $line['net'];
+        $lineItem['LineAmount'] = $line['net'];
     }
 
     $title = trim((string)($quoteData['course'] ?? 'Training Quote'));
@@ -1047,8 +1047,8 @@ function xeroCreateQuote(string $contactId, array $quoteData): array
         'Date' => gmdate('Y-m-d'),
         'ExpiryDate' => gmdate('Y-m-d', strtotime('+30 days')),
         'Title' => $title,
-        'Summary' => 'Safer Handling training quote',
-        'LineAmountTypes' => 'Inclusive',
+        'Summary' => 'Safer Handling training quote (Including Travel but Excluding VAT)',
+        'LineAmountTypes' => 'Exclusive',
         'LineItems' => [$lineItem],
         'Status' => 'DRAFT',
         'CurrencyCode' => 'GBP',
@@ -1124,7 +1124,7 @@ function xeroDownloadQuotePdf(string $quoteId, string $quoteNumber = ''): array
 }
 
 /**
- * Create/find contact and create quote in Xero (form total VAT-inclusive). Returns PDF bytes for emailing.
+ * Create/find contact and create quote in Xero (form total excluding VAT, including travel). Returns PDF bytes for emailing.
  *
  * @param array<string, mixed> $quoteData
  * @return array{
@@ -1441,7 +1441,7 @@ function xeroCreateDraftInvoiceFromQuote(string $quoteId, array $bookingDetails 
         'Contact' => ['ContactID' => $contactId],
         'Date' => gmdate('Y-m-d'),
         'DueDate' => gmdate('Y-m-d', strtotime('+30 days')),
-        'LineAmountTypes' => xeroNormalizeLineAmountTypes((string)($quote['LineAmountTypes'] ?? 'Inclusive')),
+        'LineAmountTypes' => xeroNormalizeLineAmountTypes((string)($quote['LineAmountTypes'] ?? 'Exclusive')),
         'LineItems' => $lineItems,
         'Status' => 'DRAFT',
         'CurrencyCode' => (string)($quote['CurrencyCode'] ?? 'GBP'),

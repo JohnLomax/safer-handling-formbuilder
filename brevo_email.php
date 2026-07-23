@@ -796,7 +796,7 @@ function buildQuoteSummaryRows(array $data): string
 
     $quoteDisplay = trim((string)($data['quoteDisplay'] ?? ''));
     if ($quoteDisplay !== '') {
-        $rows[] = quoteEmailSummaryRow('Quote total (Excluding VAT & including travel)', $quoteDisplay, true);
+        $rows[] = quoteEmailSummaryRow('Quote total (Including Travel but Excluding VAT)', $quoteDisplay, true);
     }
 
     if ($rows === []) {
@@ -1055,7 +1055,7 @@ function buildQuoteEmailText(array $data): string
             'Delivery' => trim((string)($data['format'] ?? '') . ((string)($data['courseStyle'] ?? '') !== '' ? ' (' . (string)$data['courseStyle'] . ')' : '')),
             'Delegates' => (string)($data['attendees'] ?? ''),
             'Preferred date' => quoteEmailHasPreferredDate($data) ? (string)$data['preferredDate'] : '',
-            'Quote total (Excluding VAT & including travel)' => (string)($data['quoteDisplay'] ?? ''),
+            'Quote total (Including Travel but Excluding VAT)' => (string)($data['quoteDisplay'] ?? ''),
         ] as $label => $value
     ) {
         if ($value !== '') {
@@ -1221,7 +1221,7 @@ function buildNewLeadEmailHtml(array $data): string
         'Delivery' => trim($format . ($courseStyle !== '' ? ' (' . $courseStyle . ')' : '')),
         'Delegates' => $attendees,
         'Preferred date' => $preferredDate,
-        'Quote (Excluding VAT & including travel)' => $quoteDisplay,
+        'Quote (Including Travel but Excluding VAT)' => $quoteDisplay,
         'Address' => $address,
     ];
 
@@ -1326,7 +1326,7 @@ function buildNewLeadEmailText(array $data): string
         'Delivery' => trim((string)($data['format'] ?? '') . ((string)($data['courseStyle'] ?? '') !== '' ? ' (' . (string)$data['courseStyle'] . ')' : '')),
         'Delegates' => (string)($data['attendees'] ?? ''),
         'Preferred date' => (string)($data['preferredDate'] ?? ''),
-        'Quote (Excluding VAT & including travel)' => (string)($data['quoteDisplay'] ?? ''),
+        'Quote (Including Travel but Excluding VAT)' => (string)($data['quoteDisplay'] ?? ''),
         'Address' => (string)($data['address'] ?? ''),
         'Notes' => (string)($data['extraNotes'] ?? ''),
     ];

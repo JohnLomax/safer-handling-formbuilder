@@ -149,7 +149,7 @@
                         <x-xero-badge class="!h-6 !w-6" />
                         <h3 class="text-base font-semibold text-brand-header">Xero quotes</h3>
                     </div>
-                    <p class="mt-1 text-sm text-sh-mid">Create a Xero contact and quote using the form total as VAT-inclusive, download the quote PDF, and email it to the client via Brevo (Xero has no quote-email API).</p>
+                    <p class="mt-1 text-sm text-sh-mid">Create a Xero contact and quote using the form total as Including Travel but Excluding VAT (Xero adds VAT on top), download the quote PDF, and email it to the client via Brevo (Xero has no quote-email API). Invoices created from those quotes keep the same exclusive totals.</p>
                 </div>
 
                 <div class="flex items-center gap-2">

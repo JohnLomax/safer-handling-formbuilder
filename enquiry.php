@@ -898,7 +898,7 @@ if ($kajabiCoursesUrl === '') {
               <h4>Live Quote</h4>
               <div class="pricing-grid">
                 <div id="trainersRequiredRow"><strong>Number of trainers required:</strong> <span id="trainersRequired">1</span></div>
-                <div id="totalWithVatRow"><strong>Total price estimate (inc. VAT &amp; travel):</strong> <span id="totalWithVatPrice">-</span></div>
+                <div id="totalWithVatRow"><strong>Total price estimate (Including Travel but Excluding VAT):</strong> <span id="totalWithVatPrice">-</span></div>
               </div>
             </div>
 
@@ -1531,45 +1531,45 @@ if ($kajabiCoursesUrl === '') {
         var p = pkg.pricing;
         var n = attendeeCount;
         if (p.kind === "flat") {
-          return formatGbp(p.amount) + " inc. VAT & travel";
+          return formatGbp(p.amount) + " Including Travel but Excluding VAT";
         }
         if (p.kind === "flatUnlimited") {
-          return formatGbp(p.amount) + " inc. VAT & travel (unlimited attendees)";
+          return formatGbp(p.amount) + " Including Travel but Excluding VAT (unlimited attendees)";
         }
         if (p.kind === "perDelegate") {
-          var vatPhrase = p.perAttendee ? "inc. VAT per attendee" : "inc. VAT & travel";
+          var vatPhrase = p.perAttendee ? "Including Travel but Excluding VAT per attendee" : "Including Travel but Excluding VAT";
           return formatGbp(p.rate * n) + " " + vatPhrase + " (" + n + " × " + formatGbp(p.rate) + ")";
         }
         if (p.kind === "addonBands") {
           if (n <= 12) {
-            return formatGbp(p.baseTo12) + " inc. VAT & travel (up to 12)";
+            return formatGbp(p.baseTo12) + " Including Travel but Excluding VAT (up to 12)";
           }
           if (n <= 19) {
             var t20 = p.baseTo12 + (n - 12) * p.per13to20;
-            return formatGbp(t20) + " inc. VAT & travel (" + formatGbp(p.baseTo12) + " + " + (n - 12) + " × " + formatGbp(p.per13to20) + ")";
+            return formatGbp(t20) + " Including Travel but Excluding VAT (" + formatGbp(p.baseTo12) + " + " + (n - 12) + " × " + formatGbp(p.per13to20) + ")";
           }
           if (n === 20) {
-            return formatGbp(p.fixed21Plus) + " inc. VAT & travel (20 attendee offer)";
+            return formatGbp(p.fixed21Plus) + " Including Travel but Excluding VAT (20 attendee offer)";
           }
           var tAfter20 = p.fixed21Plus + (n - 20) * p.per13to20;
-          return formatGbp(tAfter20) + " inc. VAT & travel (" + formatGbp(p.fixed21Plus) + " + " + (n - 20) + " × " + formatGbp(p.per13to20) + ", after 20)";
+          return formatGbp(tAfter20) + " Including Travel but Excluding VAT (" + formatGbp(p.fixed21Plus) + " + " + (n - 20) + " × " + formatGbp(p.per13to20) + ", after 20)";
         }
         if (p.kind === "addonBandsLinear") {
           if (n <= 12) {
-            return formatGbp(p.baseTo12) + " inc. VAT & travel (up to 12)";
+            return formatGbp(p.baseTo12) + " Including Travel but Excluding VAT (up to 12)";
           }
           var tLin = p.baseTo12 + (n - 12) * p.perAfter12;
-          return formatGbp(tLin) + " inc. VAT & travel (" + formatGbp(p.baseTo12) + " + " + (n - 12) + " × " + formatGbp(p.perAfter12) + ")";
+          return formatGbp(tLin) + " Including Travel but Excluding VAT (" + formatGbp(p.baseTo12) + " + " + (n - 12) + " × " + formatGbp(p.perAfter12) + ")";
         }
         if (p.kind === "addonBandsPer4621") {
           if (n <= 12) {
-            return formatGbp(p.baseTo12) + " inc. VAT & travel (up to 12)";
+            return formatGbp(p.baseTo12) + " Including Travel but Excluding VAT (up to 12)";
           }
           if (n <= 19) {
             var tMid = p.baseTo12 + (n - 12) * p.per13to20;
-            return formatGbp(tMid) + " inc. VAT & travel (" + formatGbp(p.baseTo12) + " + " + (n - 12) + " × " + formatGbp(p.per13to20) + ", 13–19)";
+            return formatGbp(tMid) + " Including Travel but Excluding VAT (" + formatGbp(p.baseTo12) + " + " + (n - 12) + " × " + formatGbp(p.per13to20) + ", 13–19)";
           }
-          return formatGbp(p.per21Plus * n) + " inc. VAT & travel (" + n + " × " + formatGbp(p.per21Plus) + ", 20+)";
+          return formatGbp(p.per21Plus * n) + " Including Travel but Excluding VAT (" + n + " × " + formatGbp(p.per21Plus) + ", 20+)";
         }
         return "";
       }

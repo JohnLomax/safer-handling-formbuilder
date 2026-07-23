@@ -85,16 +85,7 @@ class XeroWebhookController extends Controller
         ];
 
         foreach ($candidates as $key) {
-            $key = trim($key);
-            // Coolify / .env sometimes wraps values in quotes.
-            if (
-                (str_starts_with($key, '"') && str_ends_with($key, '"'))
-                || (str_starts_with($key, "'") && str_ends_with($key, "'"))
-            ) {
-                $key = substr($key, 1, -1);
-            }
-            // Accidental leading slash from copy/paste — base64 keys do not start with '/'.
-            $key = ltrim(trim($key), '/');
+            $key = $this->normaliseStoredKey($key);
             if ($key !== '') {
                 return $key;
             }
@@ -103,15 +94,61 @@ class XeroWebhookController extends Controller
         return '';
     }
 
+    /**
+     * Xero's portal often shows the signing key with a leading "/". That slash
+     * is part of the HMAC secret when present — do not strip it for storage.
+     */
+    private function normaliseStoredKey(string $key): string
+    {
+        $key = trim($key);
+        // Coolify / .env sometimes wraps values in quotes.
+        if (
+            (str_starts_with($key, '"') && str_ends_with($key, '"'))
+            || (str_starts_with($key, "'") && str_ends_with($key, "'"))
+        ) {
+            $key = substr($key, 1, -1);
+            $key = trim($key);
+        }
+
+        return $key;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function webhookKeyVariants(string $webhookKey): array
+    {
+        $webhookKey = $this->normaliseStoredKey($webhookKey);
+        if ($webhookKey === '') {
+            return [];
+        }
+
+        $variants = [$webhookKey];
+        $withoutSlash = ltrim($webhookKey, '/');
+        if ($withoutSlash !== '' && $withoutSlash !== $webhookKey) {
+            $variants[] = $withoutSlash;
+        }
+        if (! str_starts_with($webhookKey, '/')) {
+            $variants[] = '/'.$webhookKey;
+        }
+
+        return array_values(array_unique($variants));
+    }
+
     private function signatureIsValid(string $payload, string $signature, string $webhookKey): bool
     {
         if ($payload === '' || $signature === '' || $webhookKey === '') {
             return false;
         }
 
-        $computed = base64_encode(hash_hmac('sha256', $payload, $webhookKey, true));
+        foreach ($this->webhookKeyVariants($webhookKey) as $candidate) {
+            $computed = base64_encode(hash_hmac('sha256', $payload, $candidate, true));
+            if (hash_equals($computed, $signature)) {
+                return true;
+            }
+        }
 
-        return hash_equals($computed, $signature);
+        return false;
     }
 
     /**

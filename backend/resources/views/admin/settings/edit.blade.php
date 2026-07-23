@@ -239,8 +239,8 @@
                     <x-input-label for="xero_webhook_key" value="Webhook key" />
                     <x-text-input id="xero_webhook_key" name="xero_webhook_key" type="password" class="mt-1 block w-full font-mono text-sm" :value="old('xero_webhook_key', $settings['xero_webhook_key'] ?? '')" autocomplete="off" />
                     <p class="mt-1 text-xs text-sh-mid">
-                        From the Xero developer portal → Webhooks (signing key, not the app secret).
-                        Delivery URL must be exactly
+                        Paste the signing key exactly as shown in the Xero developer portal → Webhooks
+                        (including a leading <code>/</code> if present). Delivery URL must be exactly
                         <code class="break-all">{{ rtrim(config('app.url'), '/') }}/api/xero/webhooks</code>.
                         Intent to receive fails with “Response not 2XX” until this key is saved here (or as
                         <code>XERO_WEBHOOK_KEY</code> in the server env) on the live site. Leave blank when

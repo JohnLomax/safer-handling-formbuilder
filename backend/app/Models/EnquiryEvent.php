@@ -186,6 +186,8 @@ class EnquiryEvent extends Model
             str_starts_with($this->event_type, 'booking_email_') => 'booking_email',
             in_array($this->event_type, ['xero_invoice_emailed', 'xero_invoice_email_failed', 'xero_invoice_sent', 'xero_invoice_sent_check_failed'], true) => 'xero_invoice_sent',
             str_starts_with($this->event_type, 'xero_invoice_') => 'xero_invoice',
+            in_array($this->event_type, ['monday_courses_ongoing_created', 'monday_courses_ongoing_synced', 'monday_courses_ongoing_failed', 'monday_courses_ongoing_recreated'], true) => 'monday_courses_ongoing',
+            in_array($this->event_type, ['monday_booking_synced', 'monday_booking_sync_failed'], true) => 'monday_booking',
             in_array($this->event_type, ['kajabi_enrolled', 'kajabi_enroll_failed', 'kajabi_enroll_skipped'], true) => 'kajabi_enroll',
             default => null,
         };
@@ -200,6 +202,8 @@ class EnquiryEvent extends Model
             'booking_email_failed',
             'xero_invoice_failed',
             'xero_invoice_email_failed',
+            'monday_courses_ongoing_failed',
+            'monday_booking_sync_failed',
             'kajabi_enroll_failed',
         ], true);
     }

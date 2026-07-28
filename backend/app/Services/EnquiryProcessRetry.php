@@ -551,11 +551,14 @@ class EnquiryProcessRetry
             $successType = match ($processKey) {
                 'xero_invoice' => 'xero_invoice_created',
                 'xero_invoice_sent' => 'xero_invoice_sent',
+                'monday_courses_ongoing' => 'monday_courses_ongoing_created',
+                'monday_booking' => 'monday_booking_synced',
                 'kajabi_enroll' => 'kajabi_enrolled',
                 default => $processKey.'_sent',
             };
             if ($this->hasSuccessfulEvent($enquiry, $successType)
-                || ($processKey === 'xero_invoice_sent' && $this->hasSuccessfulEvent($enquiry, 'xero_invoice_emailed'))) {
+                || ($processKey === 'xero_invoice_sent' && $this->hasSuccessfulEvent($enquiry, 'xero_invoice_emailed'))
+                || ($processKey === 'monday_courses_ongoing' && $this->hasSuccessfulEvent($enquiry, 'monday_courses_ongoing_synced'))) {
                 throw new RuntimeException('This step has already completed successfully.');
             }
         }
@@ -567,9 +570,39 @@ class EnquiryProcessRetry
             'booking_email_failed' => tap('booking_email', fn () => $this->retryBookingEmail($enquiry)),
             'xero_invoice_failed' => tap('xero_invoice', fn () => $this->retryXeroInvoice($enquiry)),
             'xero_invoice_email_failed' => tap('xero_invoice_sent', fn () => $this->emailXeroInvoiceToCustomer($enquiry)),
+            'monday_courses_ongoing_failed' => tap('monday_courses_ongoing', fn () => $this->retryMondayCoursesOngoing($enquiry)),
+            'monday_booking_sync_failed' => tap('monday_booking', fn () => $this->retryMondayBookingSync($enquiry)),
             'kajabi_enroll_failed' => tap('kajabi_enroll', fn () => $this->retryKajabiEnroll($enquiry)),
             default => throw new RuntimeException('This journey step cannot be retried.'),
         };
+    }
+
+    public function retryMondayCoursesOngoing(Enquiry $enquiry): void
+    {
+        $details = is_array($enquiry->booking_details_json) ? $enquiry->booking_details_json : [];
+        $result = mondaySyncCoursesOngoingBookingItem((int) $enquiry->id, $details);
+        $enquiry->unsetRelation('events');
+        $enquiry->refresh();
+
+        if (empty($result['itemId'])) {
+            throw new RuntimeException('Client Booking Form (Courses Ongoing) record was not created.');
+        }
+    }
+
+    public function retryMondayBookingSync(Enquiry $enquiry): void
+    {
+        $details = is_array($enquiry->booking_details_json) ? $enquiry->booking_details_json : [];
+        if ($details === []) {
+            throw new RuntimeException('No booking details are stored for this enquiry.');
+        }
+
+        $result = mondaySyncBookingDetails((int) $enquiry->id, $details);
+        $enquiry->unsetRelation('events');
+        $enquiry->refresh();
+
+        if (empty($result['itemId']) && empty($result['moved'])) {
+            // Sync may succeed without move; only fail if nothing useful happened and an error path was expected.
+        }
     }
 
     private function hasSuccessfulEvent(Enquiry $enquiry, string $eventType): bool

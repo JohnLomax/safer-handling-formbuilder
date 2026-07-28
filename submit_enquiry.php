@@ -426,52 +426,6 @@ GQL;
 }
 
 /**
- * Monday `date` column JSON from a preferred date value (YYYY-MM-DD, optionally with time).
- * Preferred date is date-only — no time is written to Monday.
- *
- * @return array<string, string>|null Null when empty/unparseable (caller may clear the column).
- */
-function mondayDateColumnValueFromDatetimeLocal(string $datetimeLocal): ?array
-{
-    $datetimeLocal = trim($datetimeLocal);
-    if ($datetimeLocal === '') {
-        return null;
-    }
-    if (! preg_match('/^(\d{4}-\d{2}-\d{2})/', str_replace(' ', 'T', $datetimeLocal), $matches)) {
-        return null;
-    }
-    $dateOnly = $matches[1];
-    $dt = \DateTimeImmutable::createFromFormat('!Y-m-d', $dateOnly, new \DateTimeZone('Europe/London'));
-    if ($dt === false || $dt->format('Y-m-d') !== $dateOnly) {
-        return null;
-    }
-
-    return ['date' => $dateOnly];
-}
-
-/**
- * Remove previous preferred-date note lines before writing a fresh one.
- */
-function mondayStripPreferredDateNoteLines(string $notes): string
-{
-    $notes = trim($notes);
-    if ($notes === '') {
-        return '';
-    }
-
-    $lines = preg_split('/\r\n|\r|\n/', $notes) ?: [];
-    $kept = [];
-    foreach ($lines as $line) {
-        if (preg_match('/^preferred date(\s*\/\s*time)?\s*:/i', trim((string)$line))) {
-            continue;
-        }
-        $kept[] = $line;
-    }
-
-    return trim(implode("\n", $kept));
-}
-
-/**
  * @param array<string,string> $orgData
  */
 function updateMondayOrganisationSubmission(string $email, array $orgData): void

@@ -25,6 +25,7 @@ class SyncXeroSentInvoicesCommand extends Command
             'already_sent' => 0,
             'still_draft' => 0,
             'failed' => 0,
+            'skipped_backoff' => 0,
         ];
 
         try {
@@ -44,7 +45,13 @@ class SyncXeroSentInvoicesCommand extends Command
             if ($onlyId !== null) {
                 $query->whereKey($onlyId);
             } else {
-                $query->whereNull('xero_invoice_sent_at');
+                $now = now('UTC')->format('Y-m-d H:i:s');
+                $query->whereNull('xero_invoice_sent_at')
+                    ->where(function ($q) use ($now): void {
+                        $q->whereNull('xero_invoice_next_sent_check_at')
+                            ->orWhere('xero_invoice_next_sent_check_at', '')
+                            ->orWhere('xero_invoice_next_sent_check_at', '<=', $now);
+                    });
             }
 
             $ids = $query->orderBy('id')->limit(100)->pluck('id');
@@ -64,10 +71,24 @@ class SyncXeroSentInvoicesCommand extends Command
                         $stats['processed']++;
                     } elseif (empty($result['sent'])) {
                         $stats['still_draft']++;
+                        if (function_exists('enquiryLoggerClearXeroInvoiceNextSentCheckAt')) {
+                            enquiryLoggerClearXeroInvoiceNextSentCheckAt($enquiryId);
+                        }
                     }
                 } catch (Throwable $e) {
                     $stats['failed']++;
-                    if (function_exists('enquiryLoggerEvent')) {
+                    if (function_exists('xeroScheduleInvoiceSentRecheck')) {
+                        xeroScheduleInvoiceSentRecheck($enquiryId, $e);
+                    }
+                    if (function_exists('enquiryLoggerEventThrottled')) {
+                        enquiryLoggerEventThrottled(
+                            $enquiryId,
+                            'xero_invoice_sent_check_failed',
+                            'Could not check whether the Xero invoice has been sent.',
+                            ['error' => $e->getMessage()],
+                            12
+                        );
+                    } elseif (function_exists('enquiryLoggerEvent')) {
                         enquiryLoggerEvent(
                             $enquiryId,
                             'xero_invoice_sent_check_failed',
@@ -76,6 +97,11 @@ class SyncXeroSentInvoicesCommand extends Command
                         );
                     }
                     $this->error("Enquiry {$enquiryId}: ".$e->getMessage());
+
+                    if (function_exists('xeroErrorIsRateLimited') && xeroErrorIsRateLimited($e)) {
+                        $this->warn('Xero rate limit hit — stopping this sync run early.');
+                        break;
+                    }
                 }
             }
         } catch (Throwable $e) {

@@ -104,6 +104,7 @@ function enquiryLoggerEnsureSchema(PDO $pdo): void
     enquiryLoggerEnsureColumn($pdo, 'enquiries', 'xero_invoice_number', 'TEXT');
     enquiryLoggerEnsureColumn($pdo, 'enquiries', 'xero_invoice_created_at', 'TEXT');
     enquiryLoggerEnsureColumn($pdo, 'enquiries', 'xero_invoice_sent_at', 'TEXT');
+    enquiryLoggerEnsureColumn($pdo, 'enquiries', 'xero_invoice_next_sent_check_at', 'TEXT');
     enquiryLoggerEnsureColumn($pdo, 'enquiries', 'kajabi_contact_id', 'TEXT');
     enquiryLoggerEnsureColumn($pdo, 'enquiries', 'kajabi_offer_id', 'TEXT');
     enquiryLoggerEnsureColumn($pdo, 'enquiries', 'kajabi_enrolled_at', 'TEXT');
@@ -1109,6 +1110,93 @@ function enquiryLoggerEvent(int $enquiryId, string $eventType, string $message, 
             : null,
         ':created_at' => enquiryLoggerNow(),
     ]);
+}
+
+/**
+ * Log at most once per $minHours for the same enquiry + event type (+ optional same error).
+ */
+function enquiryLoggerEventThrottled(
+    int $enquiryId,
+    string $eventType,
+    string $message,
+    ?array $metadata = null,
+    int $minHours = 12
+): bool {
+    $pdo = enquiryLoggerPdo();
+    $minHours = max(1, $minHours);
+
+    $stmt = $pdo->prepare(
+        'SELECT message, metadata, created_at
+         FROM enquiry_events
+         WHERE enquiry_id = :enquiry_id
+           AND event_type = :event_type
+         ORDER BY id DESC
+         LIMIT 1'
+    );
+    $stmt->execute([
+        ':enquiry_id' => $enquiryId,
+        ':event_type' => $eventType,
+    ]);
+    $last = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (is_array($last)) {
+        $createdAt = trim((string) ($last['created_at'] ?? ''));
+        $lastError = '';
+        $rawMeta = trim((string) ($last['metadata'] ?? ''));
+        if ($rawMeta !== '') {
+            $decoded = json_decode($rawMeta, true);
+            if (is_array($decoded)) {
+                $lastError = trim((string) ($decoded['error'] ?? ''));
+            }
+        }
+        $thisError = trim((string) ($metadata['error'] ?? ''));
+        $sameError = ($thisError === '' && $lastError === '')
+            || ($thisError !== '' && $thisError === $lastError)
+            || (trim((string) ($last['message'] ?? '')) === $message);
+
+        if ($createdAt !== '' && $sameError) {
+            try {
+                $then = new DateTimeImmutable($createdAt, new DateTimeZone('UTC'));
+                $cutoff = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+                $cutoff = $cutoff->modify('-' . $minHours . ' hours');
+                if ($then >= $cutoff) {
+                    return false;
+                }
+            } catch (Throwable) {
+                // Fall through and log.
+            }
+        }
+    }
+
+    enquiryLoggerEvent($enquiryId, $eventType, $message, $metadata);
+
+    return true;
+}
+
+function enquiryLoggerSetXeroInvoiceNextSentCheckAt(int $enquiryId, ?string $whenUtc): void
+{
+    if ($enquiryId <= 0) {
+        return;
+    }
+
+    enquiryLoggerEnsureColumn(enquiryLoggerPdo(), 'enquiries', 'xero_invoice_next_sent_check_at', 'TEXT');
+    $pdo = enquiryLoggerPdo();
+    $stmt = $pdo->prepare(
+        'UPDATE enquiries
+         SET xero_invoice_next_sent_check_at = :next_check,
+             updated_at = :updated_at
+         WHERE id = :id'
+    );
+    $stmt->execute([
+        ':id' => $enquiryId,
+        ':next_check' => $whenUtc !== null && trim($whenUtc) !== '' ? trim($whenUtc) : null,
+        ':updated_at' => enquiryLoggerNow(),
+    ]);
+}
+
+function enquiryLoggerClearXeroInvoiceNextSentCheckAt(int $enquiryId): void
+{
+    enquiryLoggerSetXeroInvoiceNextSentCheckAt($enquiryId, null);
 }
 
 function enquiryLoggerPostId(array $post): ?int

@@ -379,60 +379,83 @@ function xeroApiRequest(
         $url .= (str_contains($url, '?') ? '&' : '?') . http_build_query($query);
     }
 
-    $ch = curl_init($url);
-    if ($ch === false) {
-        throw new RuntimeException('Could not initialize cURL for Xero API.');
-    }
-
-    $headers = [
-        'Authorization: Bearer ' . $auth['access_token'],
-        'Xero-tenant-id: ' . $tenantId,
-        'Accept: ' . $accept,
-    ];
-    if ($body !== null) {
-        $headers[] = 'Content-Type: application/json';
-    }
-
-    $opts = [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_CUSTOMREQUEST => strtoupper($method),
-        CURLOPT_HTTPHEADER => $headers,
-        CURLOPT_HEADER => true,
-        CURLOPT_CONNECTTIMEOUT => 10,
-        CURLOPT_TIMEOUT => 45,
+    $maxAttempts = 5;
+    $last = [
+        'status' => 0,
+        'body' => [],
+        'raw' => '',
+        'content_type' => '',
     ];
 
-    if ($body !== null) {
-        $opts[CURLOPT_POSTFIELDS] = json_encode($body, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-    }
-
-    curl_setopt_array($ch, $opts);
-    $response = curl_exec($ch);
-    $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $headerSize = (int)curl_getinfo($ch, CURLINFO_HEADER_SIZE);
-    $contentType = (string)curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
-    if ($response === false) {
-        $err = curl_error($ch);
-        curl_close($ch);
-        throw new RuntimeException('Xero API request failed: ' . $err);
-    }
-    curl_close($ch);
-
-    $raw = substr((string)$response, $headerSize);
-    $decoded = [];
-    if (str_contains(strtolower($contentType), 'json') || (str_starts_with(ltrim($raw), '{') || str_starts_with(ltrim($raw), '['))) {
-        $parsed = json_decode($raw, true);
-        if (is_array($parsed)) {
-            $decoded = $parsed;
+    for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
+        $ch = curl_init($url);
+        if ($ch === false) {
+            throw new RuntimeException('Could not initialize cURL for Xero API.');
         }
+
+        $headers = [
+            'Authorization: Bearer ' . $auth['access_token'],
+            'Xero-tenant-id: ' . $tenantId,
+            'Accept: ' . $accept,
+        ];
+        if ($body !== null) {
+            $headers[] = 'Content-Type: application/json';
+        }
+
+        $opts = [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CUSTOMREQUEST => strtoupper($method),
+            CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_HEADER => true,
+            CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_TIMEOUT => 45,
+        ];
+
+        if ($body !== null) {
+            $opts[CURLOPT_POSTFIELDS] = json_encode($body, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        }
+
+        curl_setopt_array($ch, $opts);
+        $response = curl_exec($ch);
+        $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $headerSize = (int) curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+        $contentType = (string) curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+        if ($response === false) {
+            $err = curl_error($ch);
+            curl_close($ch);
+            throw new RuntimeException('Xero API request failed: ' . $err);
+        }
+        curl_close($ch);
+
+        $headerBlob = substr((string) $response, 0, $headerSize);
+        $raw = substr((string) $response, $headerSize);
+        $decoded = [];
+        if (str_contains(strtolower($contentType), 'json') || (str_starts_with(ltrim($raw), '{') || str_starts_with(ltrim($raw), '['))) {
+            $parsed = json_decode($raw, true);
+            if (is_array($parsed)) {
+                $decoded = $parsed;
+            }
+        }
+
+        $last = [
+            'status' => $status,
+            'body' => $decoded,
+            'raw' => (string) $raw,
+            'content_type' => $contentType,
+        ];
+
+        if ($status !== 429 || $attempt >= $maxAttempts) {
+            return $last;
+        }
+
+        $retryAfter = 2 * $attempt;
+        if (preg_match('/^Retry-After:\s*(\d+)/im', $headerBlob, $matches) === 1) {
+            $retryAfter = max(1, min(30, (int) $matches[1]));
+        }
+        usleep($retryAfter * 1_000_000);
     }
 
-    return [
-        'status' => $status,
-        'body' => $decoded,
-        'raw' => (string)$raw,
-        'content_type' => $contentType,
-    ];
+    return $last;
 }
 
 function xeroApiErrorMessage(array $body, string $fallback): string
@@ -472,7 +495,41 @@ function xeroApiErrorMessage(array $body, string $fallback): string
         return trim($body['Message']);
     }
 
+    if (!empty($body['Title']) && is_string($body['Title'])) {
+        $title = trim($body['Title']);
+        if ($title !== '') {
+            return $title;
+        }
+    }
+
     return $fallback;
+}
+
+/**
+ * Build a human error from a Xero API response (includes status when body is empty).
+ *
+ * @param array{status:int,body:array<string,mixed>,raw?:string} $resp
+ */
+function xeroApiResponseError(array $resp, string $fallback): string
+{
+    $status = (int) ($resp['status'] ?? 0);
+    if ($status === 429) {
+        return 'Xero rate limit reached (HTTP 429). Wait a minute and retry.';
+    }
+
+    $message = xeroApiErrorMessage(is_array($resp['body'] ?? null) ? $resp['body'] : [], $fallback);
+    if ($message === $fallback && $status > 0) {
+        $raw = trim((string) ($resp['raw'] ?? ''));
+        if ($raw !== '') {
+            $snippet = substr(preg_replace('/\s+/', ' ', $raw) ?? $raw, 0, 240);
+
+            return $fallback . ' (HTTP ' . $status . ': ' . $snippet . ')';
+        }
+
+        return $fallback . ' (HTTP ' . $status . ')';
+    }
+
+    return $message;
 }
 
 /**
@@ -711,8 +768,27 @@ function xeroFindExistingContact(string $name, string $email): ?array
             'page' => 1,
             'includeArchived' => 'false',
         ]);
+        if ($existing['status'] === 429) {
+            throw new RuntimeException(xeroApiResponseError($existing, 'Could not look up Xero contact.'));
+        }
         if ($existing['status'] < 400) {
             $match = xeroPickMatchingContact($existing['body']['Contacts'] ?? [], $name, $email);
+            if ($match !== null) {
+                return $match;
+            }
+        }
+
+        // searchTerm also matches email on many tenants when where-clause filters miss.
+        $searchEmail = xeroApiRequest('GET', 'Contacts', null, [
+            'searchTerm' => $email,
+            'page' => 1,
+            'includeArchived' => 'false',
+        ]);
+        if ($searchEmail['status'] === 429) {
+            throw new RuntimeException(xeroApiResponseError($searchEmail, 'Could not look up Xero contact.'));
+        }
+        if ($searchEmail['status'] < 400) {
+            $match = xeroPickMatchingContact($searchEmail['body']['Contacts'] ?? [], $name, $email);
             if ($match !== null) {
                 return $match;
             }
@@ -726,6 +802,9 @@ function xeroFindExistingContact(string $name, string $email): ?array
             'page' => 1,
             'includeArchived' => 'false',
         ]);
+        if ($existing['status'] === 429) {
+            throw new RuntimeException(xeroApiResponseError($existing, 'Could not look up Xero contact.'));
+        }
         if ($existing['status'] < 400) {
             $match = xeroPickMatchingContact($existing['body']['Contacts'] ?? [], $name, $email);
             if ($match !== null) {
@@ -739,6 +818,9 @@ function xeroFindExistingContact(string $name, string $email): ?array
             'page' => 1,
             'includeArchived' => 'false',
         ]);
+        if ($search['status'] === 429) {
+            throw new RuntimeException(xeroApiResponseError($search, 'Could not look up Xero contact.'));
+        }
         if ($search['status'] < 400) {
             $match = xeroPickMatchingContact($search['body']['Contacts'] ?? [], $name, $email);
             if ($match !== null) {
@@ -806,46 +888,48 @@ function xeroEnsureContactAddress(
 }
 
 /**
- * @param array<string, mixed> $address Optional structured address for tax invoice compliance.
- * @return array{ContactID:string,Name:string}
+ * Prefer organisation/company as the Xero contact Name when present (B2B),
+ * otherwise the person name. Always keep person name for First/Last.
+ *
+ * @param array<string, mixed> $quoteOrAddress
  */
-function xeroFindOrCreateContact(string $name, string $email, array $address = []): array
+function xeroContactDisplayName(string $personName, array $quoteOrAddress = []): string
 {
-    $name = trim($name);
-    $email = trim($email);
-    if ($name === '' || $email === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        throw new RuntimeException('A valid contact name and email are required for Xero.');
+    $personName = trim($personName);
+    $company = trim((string) ($quoteOrAddress['organisationCompany'] ?? $quoteOrAddress['organisation'] ?? ''));
+    if ($company !== '') {
+        return $company;
     }
 
-    $existing = xeroFindExistingContact($name, $email);
-    if ($existing !== null) {
-        $contactId = (string) $existing['ContactID'];
-        xeroEnsureContactAddress($contactId, $address, $name, $email);
+    return $personName;
+}
 
-        return [
-            'ContactID' => $contactId,
-            'Name' => (string) ($existing['Name'] ?? $name),
-        ];
+/**
+ * Create a Xero contact without address (address is applied afterwards best-effort).
+ *
+ * @return array{ContactID:string,Name:string}|null
+ */
+function xeroCreateContactRecord(string $displayName, string $personName, string $email): ?array
+{
+    $displayName = trim($displayName);
+    $personName = trim($personName);
+    $email = trim($email);
+    if ($displayName === '' || $email === '') {
+        return null;
     }
 
     $contactPayload = [
-        'Name' => $name,
+        'Name' => substr($displayName, 0, 255),
         'EmailAddress' => $email,
         'IsCustomer' => true,
     ];
-    // Prefer given/family split when the display name has a space; avoid stuffing
-    // the full name into FirstName (which also surfaces oddly in Xero).
-    $parts = preg_split('/\s+/', $name) ?: [];
-    if (count($parts) >= 2) {
-        $contactPayload['FirstName'] = array_shift($parts);
-        $contactPayload['LastName'] = implode(' ', $parts);
-    } else {
-        $contactPayload['FirstName'] = $name;
-    }
 
-    $addresses = xeroContactAddressesPayload($address);
-    if ($addresses !== []) {
-        $contactPayload['Addresses'] = $addresses;
+    $parts = preg_split('/\s+/', $personName !== '' ? $personName : $displayName) ?: [];
+    if (count($parts) >= 2) {
+        $contactPayload['FirstName'] = substr((string) array_shift($parts), 0, 255);
+        $contactPayload['LastName'] = substr(implode(' ', $parts), 0, 255);
+    } else {
+        $contactPayload['FirstName'] = substr($personName !== '' ? $personName : $displayName, 0, 255);
     }
 
     $created = xeroApiRequest('POST', 'Contacts', [
@@ -854,34 +938,91 @@ function xeroFindOrCreateContact(string $name, string $email, array $address = [
 
     if ($created['status'] < 400 && ! empty($created['body']['Contacts'][0]['ContactID'])) {
         $contact = $created['body']['Contacts'][0];
+        $GLOBALS['xeroLastContactCreateError'] = null;
 
         return [
             'ContactID' => (string) $contact['ContactID'],
-            'Name' => (string) ($contact['Name'] ?? $name),
+            'Name' => (string) ($contact['Name'] ?? $displayName),
         ];
     }
 
-    $error = xeroApiErrorMessage($created['body'], 'Could not create Xero contact.');
+    $GLOBALS['xeroLastContactCreateError'] = xeroApiResponseError($created, 'Could not create Xero contact.');
 
-    // Name already taken (or create raced) — reuse the existing active contact.
-    if (
-        stripos($error, 'already assigned') !== false
-        || stripos($error, 'must be unique') !== false
-        || stripos($error, 'already exists') !== false
-    ) {
-        $fallback = xeroFindExistingContact($name, $email);
+    return null;
+}
+
+/**
+ * @param array<string, mixed> $address Optional structured address for tax invoice compliance.
+ * @return array{ContactID:string,Name:string}
+ */
+function xeroFindOrCreateContact(string $name, string $email, array $address = []): array
+{
+    $personName = trim($name);
+    $email = trim($email);
+    if ($personName === '' || $email === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        throw new RuntimeException('A valid contact name and email are required for Xero.');
+    }
+
+    $displayName = xeroContactDisplayName($personName, $address);
+    if ($displayName === '') {
+        $displayName = $personName;
+    }
+
+    $existing = xeroFindExistingContact($displayName, $email);
+    if ($existing === null && $displayName !== $personName) {
+        $existing = xeroFindExistingContact($personName, $email);
+    }
+    if ($existing !== null) {
+        $contactId = (string) $existing['ContactID'];
+        xeroEnsureContactAddress($contactId, $address, $personName, $email);
+
+        return [
+            'ContactID' => $contactId,
+            'Name' => (string) ($existing['Name'] ?? $displayName),
+        ];
+    }
+
+    $created = xeroCreateContactRecord($displayName, $personName, $email);
+    if ($created === null) {
+        // Name collision / race — reuse whatever we can find now.
+        $fallback = xeroFindExistingContact($displayName, $email)
+            ?? ($displayName !== $personName ? xeroFindExistingContact($personName, $email) : null);
         if ($fallback !== null) {
             $contactId = (string) $fallback['ContactID'];
-            xeroEnsureContactAddress($contactId, $address, $name, $email);
+            xeroEnsureContactAddress($contactId, $address, $personName, $email);
 
             return [
                 'ContactID' => $contactId,
-                'Name' => (string) ($fallback['Name'] ?? $name),
+                'Name' => (string) ($fallback['Name'] ?? $displayName),
             ];
+        }
+
+        // Last resort: unique name with email so quotes can still be created.
+        $uniqueName = $displayName . ' (' . $email . ')';
+        $created = xeroCreateContactRecord($uniqueName, $personName, $email);
+        if ($created === null) {
+            $fallback = xeroFindExistingContact($uniqueName, $email)
+                ?? xeroFindExistingContact($displayName, $email)
+                ?? xeroFindExistingContact($personName, $email);
+            if ($fallback !== null) {
+                $contactId = (string) $fallback['ContactID'];
+                xeroEnsureContactAddress($contactId, $address, $personName, $email);
+
+                return [
+                    'ContactID' => $contactId,
+                    'Name' => (string) ($fallback['Name'] ?? $uniqueName),
+                ];
+            }
+
+            throw new RuntimeException(
+                (string) ($GLOBALS['xeroLastContactCreateError'] ?? 'Could not create Xero contact.')
+            );
         }
     }
 
-    throw new RuntimeException($error);
+    xeroEnsureContactAddress((string) $created['ContactID'], $address, $personName, $email);
+
+    return $created;
 }
 
 /**
@@ -1655,10 +1796,53 @@ function xeroGetInvoice(string $invoiceId): array
 
     $resp = xeroApiRequest('GET', 'Invoices/' . rawurlencode($invoiceId));
     if ($resp['status'] >= 400 || empty($resp['body']['Invoices'][0])) {
-        throw new RuntimeException(xeroApiErrorMessage($resp['body'], 'Could not load Xero invoice.'));
+        throw new RuntimeException(xeroApiResponseError($resp, 'Could not load Xero invoice.'));
     }
 
     return $resp['body']['Invoices'][0];
+}
+
+/**
+ * True when an exception looks like Xero HTTP 429 rate limiting.
+ */
+function xeroErrorIsRateLimited(Throwable $e): bool
+{
+    $message = $e->getMessage();
+
+    return stripos($message, 'HTTP 429') !== false
+        || stripos($message, 'rate limit') !== false;
+}
+
+/**
+ * True when the invoice is missing / permanently unloadable from Xero.
+ */
+function xeroErrorIsInvoiceMissing(Throwable $e): bool
+{
+    $message = $e->getMessage();
+
+    return stripos($message, 'HTTP 404') !== false
+        || stripos($message, 'not found') !== false
+        || stripos($message, 'Invoice not found') !== false;
+}
+
+/**
+ * Back off the next scheduled invoice-sent poll for this enquiry.
+ */
+function xeroScheduleInvoiceSentRecheck(int $enquiryId, Throwable $e): void
+{
+    require_once __DIR__ . '/enquiry_logger.php';
+
+    $hours = 1;
+    if (xeroErrorIsInvoiceMissing($e)) {
+        $hours = 24 * 7; // stop hammering missing invoices
+    } elseif (xeroErrorIsRateLimited($e)) {
+        $hours = 2;
+    }
+
+    $when = (new DateTimeImmutable('now', new DateTimeZone('UTC')))
+        ->modify('+' . $hours . ' hours')
+        ->format('Y-m-d H:i:s');
+    enquiryLoggerSetXeroInvoiceNextSentCheckAt($enquiryId, $when);
 }
 
 /**
@@ -1765,6 +1949,7 @@ function xeroMaybeProcessInvoiceSent(int $enquiryId): ?array
     }
 
     enquiryLoggerMarkXeroInvoiceSent($enquiryId, $invoiceNumber);
+    enquiryLoggerClearXeroInvoiceNextSentCheckAt($enquiryId);
     enquiryLoggerEvent(
         $enquiryId,
         'xero_invoice_sent',
@@ -1886,6 +2071,9 @@ function xeroSyncSentInvoices(?int $onlyEnquiryId = null): array
     $pdo = enquiryLoggerPdo();
     enquiryLoggerEnsureColumn($pdo, 'enquiries', 'xero_invoice_id', 'TEXT');
     enquiryLoggerEnsureColumn($pdo, 'enquiries', 'xero_invoice_sent_at', 'TEXT');
+    enquiryLoggerEnsureColumn($pdo, 'enquiries', 'xero_invoice_next_sent_check_at', 'TEXT');
+
+    $now = enquiryLoggerNow();
 
     if ($onlyEnquiryId !== null) {
         $stmt = $pdo->prepare(
@@ -1896,14 +2084,20 @@ function xeroSyncSentInvoices(?int $onlyEnquiryId = null): array
         );
         $stmt->execute([':id' => $onlyEnquiryId]);
     } else {
-        $stmt = $pdo->query(
+        $stmt = $pdo->prepare(
             'SELECT id FROM enquiries
              WHERE xero_invoice_id IS NOT NULL
                AND TRIM(xero_invoice_id) != \'\'
                AND (xero_invoice_sent_at IS NULL OR TRIM(xero_invoice_sent_at) = \'\')
+               AND (
+                    xero_invoice_next_sent_check_at IS NULL
+                    OR TRIM(xero_invoice_next_sent_check_at) = \'\'
+                    OR xero_invoice_next_sent_check_at <= :now
+               )
              ORDER BY id ASC
              LIMIT 100'
         );
+        $stmt->execute([':now' => $now]);
     }
 
     $ids = $stmt ? $stmt->fetchAll(PDO::FETCH_COLUMN) : [];
@@ -1924,15 +2118,23 @@ function xeroSyncSentInvoices(?int $onlyEnquiryId = null): array
                 $stats['processed']++;
             } elseif (empty($result['sent'])) {
                 $stats['still_draft']++;
+                // Still draft — clear any previous backoff so we keep normal polling.
+                enquiryLoggerClearXeroInvoiceNextSentCheckAt($enquiryId);
             }
         } catch (Throwable $e) {
             $stats['failed']++;
-            enquiryLoggerEvent(
+            xeroScheduleInvoiceSentRecheck($enquiryId, $e);
+            enquiryLoggerEventThrottled(
                 $enquiryId,
                 'xero_invoice_sent_check_failed',
                 'Could not check whether the Xero invoice has been sent.',
-                ['error' => $e->getMessage()]
+                ['error' => $e->getMessage()],
+                12
             );
+            // Don't keep hitting Xero for every pending enquiry during a rate-limit window.
+            if (xeroErrorIsRateLimited($e)) {
+                break;
+            }
         }
     }
 

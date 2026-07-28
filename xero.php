@@ -1235,6 +1235,36 @@ function xeroCreateQuote(string $contactId, array $quoteData): array
 }
 
 /**
+ * Download a quote PDF from Xero (Accept: application/pdf).
+ *
+ * @return array{content:string,filename:string}
+ */
+function xeroDownloadQuotePdf(string $quoteId, string $quoteNumber = ''): array
+{
+    $quoteId = trim($quoteId);
+    if ($quoteId === '') {
+        throw new RuntimeException('Xero quote ID is missing.');
+    }
+
+    $resp = xeroApiRequest('GET', 'Quotes/' . rawurlencode($quoteId), null, [], 'application/pdf');
+    if ($resp['status'] >= 400 || $resp['raw'] === '') {
+        throw new RuntimeException(xeroApiResponseError($resp, 'Could not download Xero quote PDF.'));
+    }
+
+    if (! str_starts_with($resp['raw'], '%PDF')) {
+        throw new RuntimeException('Xero did not return a PDF for this quote.');
+    }
+
+    $safeNumber = preg_replace('/[^A-Za-z0-9_-]+/', '-', trim($quoteNumber)) ?: 'quote';
+    $filename = 'Safer-Handling-Quote-' . $safeNumber . '.pdf';
+
+    return [
+        'content' => $resp['raw'],
+        'filename' => $filename,
+    ];
+}
+
+/**
  * Download an invoice PDF from Xero (Accept: application/pdf).
  *
  * @return array{content:string,filename:string}

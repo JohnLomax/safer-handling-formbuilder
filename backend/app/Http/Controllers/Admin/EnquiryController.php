@@ -350,11 +350,11 @@ class EnquiryController extends Controller
     public function syncXeroInvoiceSent(Enquiry $enquiry, EnquiryProcessRetry $retry): RedirectResponse
     {
         try {
-            $result = $retry->syncXeroInvoiceSent($enquiry);
+            $result = $retry->emailXeroInvoiceToCustomer($enquiry);
             $enquiry->refresh();
 
-            if (! empty($result['already_sent']) || (! empty($result['sent']) && empty($result['processed']))) {
-                $status = 'Xero invoice was already marked as sent for this enquiry.';
+            if (! empty($result['already_sent'])) {
+                $status = 'Invoice was already sent to the customer for this enquiry.';
                 if (! empty($result['kajabi']['enrolled'])) {
                     $status .= ' Kajabi enrollment completed.';
                 }
@@ -364,8 +364,10 @@ class EnquiryController extends Controller
                     ->with('status', $status);
             }
 
-            if (! empty($result['processed'])) {
-                $parts = ['Xero invoice marked as sent.'];
+            if (! empty($result['emailed']) || ! empty($result['processed'])) {
+                $parts = ['Invoice emailed to the customer'
+                    .(! empty($result['to_email']) ? ' ('.$result['to_email'].')' : '')
+                    .'.'];
                 if (! empty($result['monday_quote_won']['moved'])) {
                     $parts[] = 'Moved to Monday "'.($result['monday_quote_won']['groupName'] ?? 'Quote Won').'".';
                 }
@@ -391,15 +393,13 @@ class EnquiryController extends Controller
                     ->with('status', implode(' ', $parts));
             }
 
-            $status = $result['invoice_status'] ?? 'DRAFT';
-
             return redirect()
                 ->route('admin.enquiries.show', $enquiry)
-                ->with('status', 'Xero invoice is not marked as sent yet (status: '.$status.'). Send/email it in Xero, then check again.');
+                ->with('status', 'Invoice email did not complete.');
         } catch (Throwable $e) {
             return redirect()
                 ->route('admin.enquiries.show', $enquiry)
-                ->withErrors(['xero_invoice_sent' => 'Could not sync Xero invoice sent status: '.$e->getMessage()]);
+                ->withErrors(['xero_invoice_sent' => 'Could not email invoice to the customer: '.$e->getMessage()]);
         }
     }
 

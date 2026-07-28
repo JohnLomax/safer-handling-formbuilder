@@ -67,7 +67,9 @@ class EnquiryEvent extends Model
         'monday_booking_synced' => 'Booking synced to Monday',
         'monday_booking_sync_failed' => 'Monday booking sync failed',
         'xero_invoice_created' => 'Draft Xero invoice created',
-        'xero_invoice_sent' => 'Xero invoice sent',
+        'xero_invoice_sent' => 'Invoice sent to customer',
+        'xero_invoice_emailed' => 'Invoice emailed to customer',
+        'xero_invoice_email_failed' => 'Invoice email to customer failed',
         'xero_invoice_failed' => 'Xero invoice creation failed',
         'xero_invoice_skipped' => 'Xero invoice skipped',
         'xero_invoice_sent_check_failed' => 'Xero invoice sent check failed',
@@ -161,6 +163,7 @@ class EnquiryEvent extends Model
     {
         return str_ends_with($this->event_type, '_sent')
             || $this->event_type === 'xero_invoice_created'
+            || $this->event_type === 'xero_invoice_emailed'
             || $this->event_type === 'monday_moved_quote_won'
             || $this->event_type === 'monday_moved_exported'
             || $this->event_type === 'monday_courses_ongoing_created'
@@ -181,6 +184,7 @@ class EnquiryEvent extends Model
             str_starts_with($this->event_type, 'lead_notification_') => 'lead_notification',
             str_starts_with($this->event_type, 'resume_email_') => 'resume_email',
             str_starts_with($this->event_type, 'booking_email_') => 'booking_email',
+            in_array($this->event_type, ['xero_invoice_emailed', 'xero_invoice_email_failed', 'xero_invoice_sent', 'xero_invoice_sent_check_failed'], true) => 'xero_invoice_sent',
             str_starts_with($this->event_type, 'xero_invoice_') => 'xero_invoice',
             in_array($this->event_type, ['kajabi_enrolled', 'kajabi_enroll_failed', 'kajabi_enroll_skipped'], true) => 'kajabi_enroll',
             default => null,
@@ -195,6 +199,7 @@ class EnquiryEvent extends Model
             'resume_email_failed',
             'booking_email_failed',
             'xero_invoice_failed',
+            'xero_invoice_email_failed',
             'kajabi_enroll_failed',
         ], true);
     }

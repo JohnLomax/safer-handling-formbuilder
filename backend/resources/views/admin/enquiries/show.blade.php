@@ -280,10 +280,10 @@
                                     <form method="POST" action="{{ route('admin.enquiries.sync.xero-invoice-sent', $enquiry) }}" class="mt-3">
                                         @csrf
                                         <button type="submit" class="btn-brand-outline text-xs">
-                                            Check if invoice sent
+                                            Email invoice to customer
                                         </button>
                                     </form>
-                                    <p class="mt-2 text-xs text-sh-mid">When the invoice is emailed/marked sent in Xero, this moves Monday to Quote Won, creates the Client Booking Form record, and enrolls the contact in Kajabi.</p>
+                                    <p class="mt-2 text-xs text-sh-mid">Emails the invoice PDF to the customer via Brevo, then marks it sent and progresses Monday / Kajabi.</p>
                                 @endif
                             </div>
 

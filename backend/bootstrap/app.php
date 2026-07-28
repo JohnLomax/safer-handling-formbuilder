@@ -21,14 +21,14 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withSchedule(function (Schedule $schedule): void {
-        // Detect invoices marked/sent in Xero and progress Monday Quote Won + Courses Ongoing.
-        $schedule->command('xero:sync-sent-invoices')->everyFiveMinutes()->withoutOverlapping();
-
         // Reminder to accept quote / add venue details 24 hours before preferred date.
         $schedule->command('booking:send-venue-reminders')->hourly()->withoutOverlapping();
 
         // Auto-reply (email.html) for office inbox messages with no human reply after N hours.
         $schedule->command('email:send-office-auto-replies')->everyFifteenMinutes()->withoutOverlapping();
+
+        // Invoice-sent progression is driven by emailing the customer (Brevo) or the Xero webhook —
+        // not by polling Xero invoice status every few minutes.
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

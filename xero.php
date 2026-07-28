@@ -1235,32 +1235,348 @@ function xeroCreateQuote(string $contactId, array $quoteData): array
 }
 
 /**
- * Download a quote PDF from Xero (Accept: application/pdf).
+ * Download an invoice PDF from Xero (Accept: application/pdf).
  *
  * @return array{content:string,filename:string}
  */
-function xeroDownloadQuotePdf(string $quoteId, string $quoteNumber = ''): array
+function xeroDownloadInvoicePdf(string $invoiceId, string $invoiceNumber = ''): array
 {
-    $quoteId = trim($quoteId);
-    if ($quoteId === '') {
-        throw new RuntimeException('Xero quote ID is missing.');
+    $invoiceId = trim($invoiceId);
+    if ($invoiceId === '') {
+        throw new RuntimeException('Xero invoice ID is missing.');
     }
 
-    $resp = xeroApiRequest('GET', 'Quotes/' . rawurlencode($quoteId), null, [], 'application/pdf');
+    $resp = xeroApiRequest('GET', 'Invoices/' . rawurlencode($invoiceId), null, [], 'application/pdf');
     if ($resp['status'] >= 400 || $resp['raw'] === '') {
-        throw new RuntimeException(xeroApiErrorMessage($resp['body'], 'Could not download Xero quote PDF.'));
+        throw new RuntimeException(xeroApiResponseError($resp, 'Could not download Xero invoice PDF.'));
     }
 
-    if (!str_starts_with($resp['raw'], '%PDF')) {
-        throw new RuntimeException('Xero did not return a PDF for this quote.');
+    if (! str_starts_with($resp['raw'], '%PDF')) {
+        throw new RuntimeException('Xero did not return a PDF for this invoice.');
     }
 
-    $safeNumber = preg_replace('/[^A-Za-z0-9_-]+/', '-', trim($quoteNumber)) ?: 'quote';
-    $filename = 'Safer-Handling-Quote-' . $safeNumber . '.pdf';
+    $safeNumber = preg_replace('/[^A-Za-z0-9_-]+/', '-', trim($invoiceNumber)) ?: 'invoice';
+    $filename = 'Safer-Handling-Invoice-' . $safeNumber . '.pdf';
 
     return [
         'content' => $resp['raw'],
         'filename' => $filename,
+    ];
+}
+
+/**
+ * Best-effort: mark the invoice as sent in Xero after we email the customer ourselves.
+ */
+function xeroMarkInvoiceSentToContact(string $invoiceId): void
+{
+    $invoiceId = trim($invoiceId);
+    if ($invoiceId === '') {
+        return;
+    }
+
+    $resp = xeroApiRequest('POST', 'Invoices', [
+        'Invoices' => [[
+            'InvoiceID' => $invoiceId,
+            'SentToContact' => true,
+        ]],
+    ]);
+
+    if ($resp['status'] >= 400) {
+        // Non-fatal — customer email is the source of truth for "sent".
+        return;
+    }
+}
+
+/**
+ * Email the Xero invoice PDF to the customer via Brevo, then progress Monday/Kajabi.
+ *
+ * Customer delivery (Brevo) is the source of truth — we do not poll Xero for SentToContact.
+ *
+ * @return array{
+ *   processed:bool,
+ *   sent:bool,
+ *   already_sent:bool,
+ *   emailed:bool,
+ *   invoice_status:?string,
+ *   to_email:?string,
+ *   monday_quote_won:?array,
+ *   monday_courses_ongoing:?array,
+ *   kajabi:?array
+ * }
+ */
+function xeroEmailInvoiceToCustomer(int $enquiryId): array
+{
+    require_once __DIR__ . '/enquiry_logger.php';
+    require_once __DIR__ . '/brevo_email.php';
+
+    if (! xeroEnabled()) {
+        throw new RuntimeException('Xero is disabled.');
+    }
+
+    if (brevoApiKey() === '') {
+        throw new RuntimeException('Brevo API key is not configured.');
+    }
+
+    enquiryLoggerEnsureColumn(enquiryLoggerPdo(), 'enquiries', 'xero_invoice_id', 'TEXT');
+    enquiryLoggerEnsureColumn(enquiryLoggerPdo(), 'enquiries', 'xero_invoice_sent_at', 'TEXT');
+
+    $pdo = enquiryLoggerPdo();
+    $stmt = $pdo->prepare(
+        'SELECT id, name, email, xero_invoice_id, xero_invoice_number, xero_invoice_sent_at, booking_details_json
+         FROM enquiries WHERE id = :id LIMIT 1'
+    );
+    $stmt->execute([':id' => $enquiryId]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (! is_array($row)) {
+        throw new RuntimeException('Enquiry not found.');
+    }
+
+    $invoiceId = trim((string) ($row['xero_invoice_id'] ?? ''));
+    if ($invoiceId === '') {
+        throw new RuntimeException('This enquiry has no Xero invoice to email.');
+    }
+
+    if (trim((string) ($row['xero_invoice_sent_at'] ?? '')) !== '') {
+        $kajabi = null;
+        try {
+            require_once __DIR__ . '/kajabi.php';
+            $kajabi = kajabiMaybeEnrollAfterQuoteWon($enquiryId);
+        } catch (Throwable $e) {
+            $kajabi = ['attempted' => true, 'enrolled' => false, 'error' => $e->getMessage()];
+        }
+
+        return [
+            'processed' => false,
+            'sent' => true,
+            'already_sent' => true,
+            'emailed' => false,
+            'invoice_status' => null,
+            'to_email' => null,
+            'monday_quote_won' => null,
+            'monday_courses_ongoing' => null,
+            'kajabi' => $kajabi,
+        ];
+    }
+
+    $bookingDetails = [];
+    $rawBooking = trim((string) ($row['booking_details_json'] ?? ''));
+    if ($rawBooking !== '') {
+        $decoded = json_decode($rawBooking, true);
+        if (is_array($decoded)) {
+            $bookingDetails = $decoded;
+        }
+    }
+
+    $toEmail = trim((string) ($bookingDetails['invoiceEmail'] ?? ''));
+    if ($toEmail === '' || ! filter_var($toEmail, FILTER_VALIDATE_EMAIL)) {
+        $toEmail = trim((string) ($row['email'] ?? ''));
+    }
+    if ($toEmail === '' || ! filter_var($toEmail, FILTER_VALIDATE_EMAIL)) {
+        throw new RuntimeException('A valid customer email is required to send the invoice.');
+    }
+
+    $toName = trim((string) ($bookingDetails['invoiceName'] ?? $bookingDetails['bookerName'] ?? $row['name'] ?? ''));
+    if ($toName === '') {
+        $toName = $toEmail;
+    }
+
+    $invoiceNumber = trim((string) ($row['xero_invoice_number'] ?? ''));
+    $invoiceStatus = null;
+    try {
+        $invoice = xeroGetInvoice($invoiceId);
+        $invoiceNumber = trim((string) ($invoice['InvoiceNumber'] ?? $invoiceNumber));
+        $invoiceStatus = strtoupper(trim((string) ($invoice['Status'] ?? '')));
+    } catch (Throwable $e) {
+        // PDF download may still work; continue with stored invoice number.
+        $invoiceStatus = null;
+    }
+
+    $pdf = xeroDownloadInvoicePdf($invoiceId, $invoiceNumber);
+
+    try {
+        sendInvoiceEmailViaBrevo($toEmail, $toName, [
+            'name' => $toName,
+            'email' => $toEmail,
+            'invoiceNumber' => $invoiceNumber,
+        ], $pdf);
+    } catch (Throwable $e) {
+        enquiryLoggerEvent(
+            $enquiryId,
+            'xero_invoice_email_failed',
+            'Invoice email could not be sent to the customer.',
+            [
+                'error' => $e->getMessage(),
+                'to_email' => $toEmail,
+                'xero_invoice_id' => $invoiceId,
+                'xero_invoice_number' => $invoiceNumber !== '' ? $invoiceNumber : null,
+            ]
+        );
+        throw $e;
+    }
+
+    xeroMarkInvoiceSentToContact($invoiceId);
+
+    enquiryLoggerEvent(
+        $enquiryId,
+        'xero_invoice_emailed',
+        'Invoice emailed to the customer via Brevo (PDF attached).',
+        [
+            'channel' => 'brevo',
+            'to_email' => $toEmail,
+            'xero_invoice_id' => $invoiceId,
+            'xero_invoice_number' => $invoiceNumber !== '' ? $invoiceNumber : null,
+        ]
+    );
+
+    $progress = xeroProgressAfterInvoiceSentToCustomer(
+        $enquiryId,
+        $invoiceId,
+        $invoiceNumber,
+        $invoiceStatus,
+        $bookingDetails,
+        'brevo'
+    );
+
+    return array_merge($progress, [
+        'emailed' => true,
+        'to_email' => $toEmail,
+    ]);
+}
+
+/**
+ * Mark invoice sent locally and run Monday / Forge / Kajabi follow-ups.
+ *
+ * @param array<string, mixed> $bookingDetails
+ * @return array{
+ *   processed:bool,
+ *   sent:bool,
+ *   already_sent:bool,
+ *   invoice_status:?string,
+ *   monday_quote_won:?array,
+ *   monday_courses_ongoing:?array,
+ *   kajabi:?array
+ * }
+ */
+function xeroProgressAfterInvoiceSentToCustomer(
+    int $enquiryId,
+    string $invoiceId,
+    string $invoiceNumber,
+    ?string $invoiceStatus,
+    array $bookingDetails,
+    string $channel = 'xero'
+): array {
+    require_once __DIR__ . '/enquiry_logger.php';
+    require_once __DIR__ . '/monday_helpers.php';
+
+    if (enquiryLoggerXeroInvoiceAlreadySent($enquiryId)) {
+        $kajabi = null;
+        try {
+            require_once __DIR__ . '/kajabi.php';
+            $kajabi = kajabiMaybeEnrollAfterQuoteWon($enquiryId);
+        } catch (Throwable $e) {
+            $kajabi = ['attempted' => true, 'enrolled' => false, 'error' => $e->getMessage()];
+        }
+
+        return [
+            'processed' => false,
+            'sent' => true,
+            'already_sent' => true,
+            'invoice_status' => $invoiceStatus,
+            'monday_quote_won' => null,
+            'monday_courses_ongoing' => null,
+            'kajabi' => $kajabi,
+        ];
+    }
+
+    enquiryLoggerMarkXeroInvoiceSent($enquiryId, $invoiceNumber);
+    enquiryLoggerClearXeroInvoiceNextSentCheckAt($enquiryId);
+    enquiryLoggerEvent(
+        $enquiryId,
+        'xero_invoice_sent',
+        $channel === 'brevo'
+            ? 'Invoice sent to the customer — progressing Monday to Quote Won and Client Booking Form.'
+            : 'Xero invoice marked as sent — progressing Monday to Quote Won and Client Booking Form.',
+        [
+            'channel' => $channel,
+            'xero_invoice_id' => $invoiceId,
+            'xero_invoice_number' => $invoiceNumber !== '' ? $invoiceNumber : null,
+            'xero_invoice_status' => $invoiceStatus !== '' && $invoiceStatus !== null ? $invoiceStatus : null,
+            'sent_to_contact' => true,
+        ]
+    );
+
+    $mondayQuoteWon = null;
+    $mondayCoursesOngoing = null;
+
+    try {
+        $mondayQuoteWon = mondayMoveEnquiryToQuoteWonAfterInvoiceSent($enquiryId);
+    } catch (Throwable $e) {
+        enquiryLoggerEvent(
+            $enquiryId,
+            'monday_move_failed',
+            'Invoice was sent to the customer, but the Monday item could not be moved to Quote Won.',
+            [
+                'error' => $e->getMessage(),
+                'xero_invoice_id' => $invoiceId,
+            ]
+        );
+    }
+
+    try {
+        $mondayCoursesOngoing = mondaySyncCoursesOngoingBookingItem($enquiryId, $bookingDetails);
+    } catch (Throwable $e) {
+        enquiryLoggerEvent(
+            $enquiryId,
+            'monday_courses_ongoing_failed',
+            'Invoice was sent to the customer, but the Client Booking Form (Courses Ongoing) record could not be created.',
+            [
+                'error' => $e->getMessage(),
+                'xero_invoice_id' => $invoiceId,
+            ]
+        );
+    }
+
+    try {
+        require_once __DIR__ . '/forge_webhook.php';
+        forgeMaybeMarkInvoiceSent($enquiryId, $bookingDetails);
+    } catch (Throwable $e) {
+        enquiryLoggerEvent(
+            $enquiryId,
+            'forge_booking_sync_failed',
+            'Invoice was sent to the customer, but Forge status could not be updated to Invoice Sent.',
+            [
+                'error' => $e->getMessage(),
+                'xero_invoice_id' => $invoiceId,
+            ]
+        );
+    }
+
+    $kajabi = null;
+    try {
+        require_once __DIR__ . '/kajabi.php';
+        $kajabi = kajabiMaybeEnrollAfterQuoteWon($enquiryId);
+    } catch (Throwable $e) {
+        enquiryLoggerEvent(
+            $enquiryId,
+            'kajabi_enroll_failed',
+            'Invoice was sent and Quote Won progressed, but Kajabi enrollment failed.',
+            [
+                'channel' => 'kajabi',
+                'error' => $e->getMessage(),
+                'xero_invoice_id' => $invoiceId,
+            ]
+        );
+        $kajabi = ['attempted' => true, 'enrolled' => false, 'error' => $e->getMessage()];
+    }
+
+    return [
+        'processed' => true,
+        'sent' => true,
+        'already_sent' => false,
+        'invoice_status' => $invoiceStatus !== '' && $invoiceStatus !== null ? $invoiceStatus : null,
+        'monday_quote_won' => $mondayQuoteWon,
+        'monday_courses_ongoing' => $mondayCoursesOngoing,
+        'kajabi' => $kajabi,
     ];
 }
 
@@ -1948,21 +2264,6 @@ function xeroMaybeProcessInvoiceSent(int $enquiryId): ?array
         ];
     }
 
-    enquiryLoggerMarkXeroInvoiceSent($enquiryId, $invoiceNumber);
-    enquiryLoggerClearXeroInvoiceNextSentCheckAt($enquiryId);
-    enquiryLoggerEvent(
-        $enquiryId,
-        'xero_invoice_sent',
-        'Xero invoice marked as sent — progressing Monday to Quote Won and Client Booking Form.',
-        [
-            'channel' => 'xero',
-            'xero_invoice_id' => $invoiceId,
-            'xero_invoice_number' => $invoiceNumber !== '' ? $invoiceNumber : null,
-            'xero_invoice_status' => $invoiceStatus !== '' ? $invoiceStatus : null,
-            'sent_to_contact' => true,
-        ]
-    );
-
     $bookingDetails = [];
     $rawBooking = trim((string)($row['booking_details_json'] ?? ''));
     if ($rawBooking !== '') {
@@ -1972,79 +2273,14 @@ function xeroMaybeProcessInvoiceSent(int $enquiryId): ?array
         }
     }
 
-    $mondayQuoteWon = null;
-    $mondayCoursesOngoing = null;
-
-    try {
-        $mondayQuoteWon = mondayMoveEnquiryToQuoteWonAfterInvoiceSent($enquiryId);
-    } catch (Throwable $e) {
-        enquiryLoggerEvent(
-            $enquiryId,
-            'monday_move_failed',
-            'Xero invoice was sent, but the Monday item could not be moved to Quote Won.',
-            [
-                'error' => $e->getMessage(),
-                'xero_invoice_id' => $invoiceId,
-            ]
-        );
-    }
-
-    try {
-        $mondayCoursesOngoing = mondaySyncCoursesOngoingBookingItem($enquiryId, $bookingDetails);
-    } catch (Throwable $e) {
-        enquiryLoggerEvent(
-            $enquiryId,
-            'monday_courses_ongoing_failed',
-            'Xero invoice was sent, but the Client Booking Form (Courses Ongoing) record could not be created.',
-            [
-                'error' => $e->getMessage(),
-                'xero_invoice_id' => $invoiceId,
-            ]
-        );
-    }
-
-    try {
-        require_once __DIR__ . '/forge_webhook.php';
-        forgeMaybeMarkInvoiceSent($enquiryId, $bookingDetails);
-    } catch (Throwable $e) {
-        enquiryLoggerEvent(
-            $enquiryId,
-            'forge_booking_sync_failed',
-            'Xero invoice was sent, but Forge status could not be updated to Invoice Sent.',
-            [
-                'error' => $e->getMessage(),
-                'xero_invoice_id' => $invoiceId,
-            ]
-        );
-    }
-
-    $kajabi = null;
-    try {
-        require_once __DIR__ . '/kajabi.php';
-        $kajabi = kajabiMaybeEnrollAfterQuoteWon($enquiryId);
-    } catch (Throwable $e) {
-        enquiryLoggerEvent(
-            $enquiryId,
-            'kajabi_enroll_failed',
-            'Xero invoice was sent and Quote Won progressed, but Kajabi enrollment failed.',
-            [
-                'channel' => 'kajabi',
-                'error' => $e->getMessage(),
-                'xero_invoice_id' => $invoiceId,
-            ]
-        );
-        $kajabi = ['attempted' => true, 'enrolled' => false, 'error' => $e->getMessage()];
-    }
-
-    return [
-        'processed' => true,
-        'sent' => true,
-        'already_sent' => false,
-        'invoice_status' => $invoiceStatus !== '' ? $invoiceStatus : null,
-        'monday_quote_won' => $mondayQuoteWon,
-        'monday_courses_ongoing' => $mondayCoursesOngoing,
-        'kajabi' => $kajabi,
-    ];
+    return xeroProgressAfterInvoiceSentToCustomer(
+        $enquiryId,
+        $invoiceId,
+        $invoiceNumber,
+        $invoiceStatus !== '' ? $invoiceStatus : null,
+        $bookingDetails,
+        'xero'
+    );
 }
 
 /**

@@ -517,23 +517,31 @@ class EnquiryProcessRetry
     }
 
     /**
+     * Email the Xero invoice PDF to the customer (Brevo). Customer delivery is the source of truth.
+     *
+     * @return array<string, mixed>
+     */
+    public function emailXeroInvoiceToCustomer(Enquiry $enquiry): array
+    {
+        if (! $this->canSyncXeroInvoiceSent($enquiry) && $enquiry->xero_invoice_sent_at === null) {
+            throw new RuntimeException('This enquiry has no Xero invoice to email.');
+        }
+
+        $result = xeroEmailInvoiceToCustomer((int) $enquiry->id);
+        $enquiry->unsetRelation('events');
+        $enquiry->refresh();
+
+        return $result;
+    }
+
+    /**
+     * @deprecated Prefer emailXeroInvoiceToCustomer — kept for webhook/manual Xero-status sync.
+     *
      * @return array{processed:bool,sent:bool,already_sent:bool,invoice_status:?string,monday_quote_won:?array,monday_courses_ongoing:?array}
      */
     public function syncXeroInvoiceSent(Enquiry $enquiry): array
     {
-        if (! $this->canSyncXeroInvoiceSent($enquiry) && $enquiry->xero_invoice_sent_at === null) {
-            throw new RuntimeException('This enquiry has no Xero invoice to check.');
-        }
-
-        $result = xeroMaybeProcessInvoiceSent((int) $enquiry->id);
-        $enquiry->unsetRelation('events');
-        $enquiry->refresh();
-
-        if ($result === null) {
-            throw new RuntimeException('Could not check Xero invoice status for this enquiry.');
-        }
-
-        return $result;
+        return $this->emailXeroInvoiceToCustomer($enquiry);
     }
 
     public function retryFromFailedEvent(Enquiry $enquiry, EnquiryEvent $event): string
@@ -542,10 +550,12 @@ class EnquiryProcessRetry
         if ($processKey !== null) {
             $successType = match ($processKey) {
                 'xero_invoice' => 'xero_invoice_created',
+                'xero_invoice_sent' => 'xero_invoice_sent',
                 'kajabi_enroll' => 'kajabi_enrolled',
                 default => $processKey.'_sent',
             };
-            if ($this->hasSuccessfulEvent($enquiry, $successType)) {
+            if ($this->hasSuccessfulEvent($enquiry, $successType)
+                || ($processKey === 'xero_invoice_sent' && $this->hasSuccessfulEvent($enquiry, 'xero_invoice_emailed'))) {
                 throw new RuntimeException('This step has already completed successfully.');
             }
         }
@@ -556,6 +566,7 @@ class EnquiryProcessRetry
             'resume_email_failed' => tap('resume_email', fn () => $this->retryResumeEmail($enquiry)),
             'booking_email_failed' => tap('booking_email', fn () => $this->retryBookingEmail($enquiry)),
             'xero_invoice_failed' => tap('xero_invoice', fn () => $this->retryXeroInvoice($enquiry)),
+            'xero_invoice_email_failed' => tap('xero_invoice_sent', fn () => $this->emailXeroInvoiceToCustomer($enquiry)),
             'kajabi_enroll_failed' => tap('kajabi_enroll', fn () => $this->retryKajabiEnroll($enquiry)),
             default => throw new RuntimeException('This journey step cannot be retried.'),
         };

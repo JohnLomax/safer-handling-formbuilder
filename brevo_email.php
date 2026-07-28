@@ -1233,6 +1233,137 @@ function sendQuoteEmailViaBrevo(string $toEmail, string $toName, array $quoteDat
     }
 }
 
+/**
+ * @param array<string, mixed> $data
+ * @param array{content?:string,filename?:string}|null $pdfAttachment
+ */
+function sendInvoiceEmailViaBrevo(string $toEmail, string $toName, array $data, ?array $pdfAttachment = null): void
+{
+    $apiKey = brevoApiKey();
+    if ($apiKey === '') {
+        throw new RuntimeException('Brevo API key is not configured.');
+    }
+
+    $toEmail = trim($toEmail);
+    if ($toEmail === '' || ! filter_var($toEmail, FILTER_VALIDATE_EMAIL)) {
+        throw new RuntimeException('A valid customer email is required to send the invoice.');
+    }
+
+    $sender = brevoSenderConfig();
+    $invoiceNumber = trim((string) ($data['invoiceNumber'] ?? ''));
+    $subject = $invoiceNumber !== ''
+        ? 'Your Safer Handling Invoice ' . $invoiceNumber
+        : 'Your Safer Handling Invoice';
+
+    $payload = [
+        'sender' => $sender,
+        'to' => [
+            [
+                'email' => $toEmail,
+                'name' => $toName !== '' ? $toName : $toEmail,
+            ],
+        ],
+        'replyTo' => [
+            'email' => brevoContactEmail(),
+            'name' => $sender['name'],
+        ],
+        'subject' => $subject,
+        'htmlContent' => buildInvoiceEmailHtml($data),
+        'textContent' => buildInvoiceEmailText($data),
+    ];
+
+    $pdfContent = is_array($pdfAttachment) ? (string) ($pdfAttachment['content'] ?? '') : '';
+    if ($pdfContent !== '') {
+        $filename = trim((string) ($pdfAttachment['filename'] ?? 'Safer-Handling-Invoice.pdf'));
+        if ($filename === '') {
+            $filename = 'Safer-Handling-Invoice.pdf';
+        }
+        $payload['attachment'] = [[
+            'content' => base64_encode($pdfContent),
+            'name' => $filename,
+        ]];
+    }
+
+    $ch = curl_init('https://api.brevo.com/v3/smtp/email');
+    if ($ch === false) {
+        throw new RuntimeException('Could not initialize cURL for Brevo.');
+    }
+
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_HTTPHEADER => [
+            'accept: application/json',
+            'api-key: ' . $apiKey,
+            'content-type: application/json',
+        ],
+        CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+    ]);
+
+    $raw = curl_exec($ch);
+    $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    if ($raw === false) {
+        $err = curl_error($ch);
+        curl_close($ch);
+        throw new RuntimeException('Brevo API request failed: ' . $err);
+    }
+    curl_close($ch);
+
+    $decoded = json_decode($raw, true);
+    if ($status >= 400) {
+        $message = is_array($decoded) ? trim((string) ($decoded['message'] ?? '')) : '';
+        if ($message === '') {
+            $message = 'Brevo API returned HTTP ' . $status . '.';
+        }
+        throw new RuntimeException($message);
+    }
+}
+
+/**
+ * @param array<string, mixed> $data
+ */
+function buildInvoiceEmailHtml(array $data): string
+{
+    $name = trim((string) ($data['name'] ?? 'there'));
+    $invoiceNumber = trim((string) ($data['invoiceNumber'] ?? ''));
+
+    $rows = '';
+    $rows .= '<tr><td style="padding:0 0 16px 0;font-family:Arial,sans-serif;font-size:16px;line-height:1.5;color:#16324a;">'
+        . 'Hello ' . htmlspecialchars($name, ENT_QUOTES, 'UTF-8') . ','
+        . '</td></tr>';
+    $rows .= '<tr><td style="padding:0 0 16px 0;font-family:Arial,sans-serif;font-size:16px;line-height:1.5;color:#16324a;">'
+        . 'Please find your Safer Handling invoice'
+        . ($invoiceNumber !== '' ? ' <strong>' . htmlspecialchars($invoiceNumber, ENT_QUOTES, 'UTF-8') . '</strong>' : '')
+        . ' attached as a PDF.'
+        . '</td></tr>';
+    $rows .= '<tr><td style="padding:0 0 16px 0;font-family:Arial,sans-serif;font-size:16px;line-height:1.5;color:#16324a;">'
+        . 'If you have any questions, just reply to this email.'
+        . '</td></tr>';
+
+    return brevoCustomerEmailHtml('Your Safer Handling Invoice', $rows);
+}
+
+/**
+ * @param array<string, mixed> $data
+ */
+function buildInvoiceEmailText(array $data): string
+{
+    $name = trim((string) ($data['name'] ?? 'there'));
+    $invoiceNumber = trim((string) ($data['invoiceNumber'] ?? ''));
+
+    return implode("\n", array_filter([
+        'Hello ' . $name . ',',
+        '',
+        'Please find your Safer Handling invoice'
+            . ($invoiceNumber !== '' ? ' ' . $invoiceNumber : '')
+            . ' attached as a PDF.',
+        '',
+        'If you have any questions, just reply to this email.',
+        '',
+        'Safer Handling',
+    ]));
+}
+
 function brevoOfficeEmail(): string
 {
     $email = appConfigValue('BREVO_OFFICE_EMAIL', 'brevoOfficeEmail', 'office@safer-handling.co.uk');

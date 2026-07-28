@@ -114,10 +114,13 @@
                                             @if ($enquiry->isMondaySynced())
                                                 <x-monday-badge compact />
                                             @endif
-                                            @if (in_array($enquiry->status, ['quote_sent', 'quote_accepted'], true)
+                                            @if (in_array($enquiry->status, ['quote_sent', 'quote_accepted', 'quote_won'], true)
                                                 || $enquiry->quote_email_sent_at
                                                 || filled($enquiry->xero_quote_id))
                                                 <x-xero-badge compact />
+                                            @endif
+                                            @if ($enquiry->kajabi_enrolled_at || filled($enquiry->kajabi_contact_id))
+                                                <x-kajabi-badge compact />
                                             @endif
                                         </div>
                                     </div>

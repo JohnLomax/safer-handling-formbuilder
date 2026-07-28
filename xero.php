@@ -1721,6 +1721,23 @@ function xeroMaybeProcessInvoiceSent(int $enquiryId): ?array
     }
 
     if (trim((string)($row['xero_invoice_sent_at'] ?? '')) !== '') {
+        $kajabi = null;
+        try {
+            require_once __DIR__ . '/kajabi.php';
+            $kajabi = kajabiMaybeEnrollAfterQuoteWon($enquiryId);
+        } catch (Throwable $e) {
+            enquiryLoggerEvent(
+                $enquiryId,
+                'kajabi_enroll_failed',
+                'Kajabi enrollment failed after invoice already marked sent: '.$e->getMessage(),
+                [
+                    'channel' => 'kajabi',
+                    'error' => $e->getMessage(),
+                ]
+            );
+            $kajabi = ['attempted' => true, 'enrolled' => false, 'error' => $e->getMessage()];
+        }
+
         return [
             'processed' => false,
             'sent' => true,
@@ -1728,6 +1745,7 @@ function xeroMaybeProcessInvoiceSent(int $enquiryId): ?array
             'invoice_status' => null,
             'monday_quote_won' => null,
             'monday_courses_ongoing' => null,
+            'kajabi' => $kajabi,
         ];
     }
 
@@ -1815,6 +1833,24 @@ function xeroMaybeProcessInvoiceSent(int $enquiryId): ?array
         );
     }
 
+    $kajabi = null;
+    try {
+        require_once __DIR__ . '/kajabi.php';
+        $kajabi = kajabiMaybeEnrollAfterQuoteWon($enquiryId);
+    } catch (Throwable $e) {
+        enquiryLoggerEvent(
+            $enquiryId,
+            'kajabi_enroll_failed',
+            'Xero invoice was sent and Quote Won progressed, but Kajabi enrollment failed.',
+            [
+                'channel' => 'kajabi',
+                'error' => $e->getMessage(),
+                'xero_invoice_id' => $invoiceId,
+            ]
+        );
+        $kajabi = ['attempted' => true, 'enrolled' => false, 'error' => $e->getMessage()];
+    }
+
     return [
         'processed' => true,
         'sent' => true,
@@ -1822,6 +1858,7 @@ function xeroMaybeProcessInvoiceSent(int $enquiryId): ?array
         'invoice_status' => $invoiceStatus !== '' ? $invoiceStatus : null,
         'monday_quote_won' => $mondayQuoteWon,
         'monday_courses_ongoing' => $mondayCoursesOngoing,
+        'kajabi' => $kajabi,
     ];
 }
 

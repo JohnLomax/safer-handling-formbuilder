@@ -33,6 +33,12 @@
                         <span class="text-xs font-semibold text-[#0b6e8a]">Xero</span>
                     </span>
                 @endif
+                @if ($enquiry->kajabi_enrolled_at || filled($enquiry->kajabi_contact_id))
+                    <span class="inline-flex items-center gap-1.5 rounded-full border border-sh-border bg-white px-2.5 py-1">
+                        <x-kajabi-badge compact />
+                        <span class="text-xs font-semibold text-sh-text">Kajabi</span>
+                    </span>
+                @endif
             </div>
         </div>
     </x-slot>
@@ -40,7 +46,7 @@
     <div class="admin-shell space-y-6">
             @include('admin.partials.alerts')
 
-            <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 <div class="enquiry-stat">
                     <p class="text-xs font-semibold uppercase tracking-wide text-sh-mid">Started</p>
                     <p class="mt-1 text-sm font-semibold text-sh-text">{{ $enquiry->created_at?->format('d M Y') }}</p>
@@ -66,6 +72,38 @@
                     </p>
                     <p class="mt-1 text-sm font-semibold text-sh-text">{{ $enquiry->quote_email_sent_at ? 'Sent' : 'Not sent' }}</p>
                     <p class="text-xs text-sh-mid">{{ $enquiry->quote_email_sent_at?->format('d M Y H:i') ?? '—' }}</p>
+                </div>
+                <div class="enquiry-stat">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-sh-mid inline-flex items-center gap-1.5">
+                        <x-xero-badge compact class="!h-3.5 !w-3.5" />
+                        Xero Invoice
+                    </p>
+                    @if ($enquiry->xero_invoice_sent_at)
+                        <p class="mt-1 text-sm font-semibold text-sh-text">Sent</p>
+                        <p class="text-xs text-sh-mid">{{ $enquiry->xero_invoice_number ? $enquiry->xero_invoice_number.' · ' : '' }}{{ $enquiry->xero_invoice_sent_at->format('d M Y H:i') }}</p>
+                    @elseif ($enquiry->xero_invoice_id)
+                        <p class="mt-1 text-sm font-semibold text-sh-text">Draft</p>
+                        <p class="text-xs text-sh-mid">{{ $enquiry->xero_invoice_number ?: 'Not sent' }}</p>
+                    @else
+                        <p class="mt-1 text-sm font-semibold text-sh-text">—</p>
+                        <p class="text-xs text-sh-mid">Not created</p>
+                    @endif
+                </div>
+                <div class="enquiry-stat">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-sh-mid inline-flex items-center gap-1.5">
+                        <x-kajabi-badge compact class="!h-3.5 !w-3.5" />
+                        Kajabi
+                    </p>
+                    @if ($enquiry->kajabi_enrolled_at)
+                        <p class="mt-1 text-sm font-semibold text-sh-text">Enrolled</p>
+                        <p class="text-xs text-sh-mid leading-snug" title="{{ $enquiry->kajabiCourseTitle() }}">{{ $enquiry->kajabiCourseTitle() }}</p>
+                    @elseif ($enquiry->events->contains(fn ($event) => $event->event_type === 'kajabi_enroll_failed'))
+                        <p class="mt-1 text-sm font-semibold text-sh-text">Failed</p>
+                        <p class="text-xs text-sh-mid">Enrollment failed</p>
+                    @else
+                        <p class="mt-1 text-sm font-semibold text-sh-text">Not enrolled</p>
+                        <p class="text-xs text-sh-mid">—</p>
+                    @endif
                 </div>
                 <div class="enquiry-stat">
                     <p class="text-xs font-semibold uppercase tracking-wide text-sh-mid">Edit Enquiry Email</p>
@@ -245,7 +283,45 @@
                                             Check if invoice sent
                                         </button>
                                     </form>
-                                    <p class="mt-2 text-xs text-sh-mid">When the invoice is emailed/marked sent in Xero, this moves Monday to Quote Won and creates the Client Booking Form record.</p>
+                                    <p class="mt-2 text-xs text-sh-mid">When the invoice is emailed/marked sent in Xero, this moves Monday to Quote Won, creates the Client Booking Form record, and enrolls the contact in Kajabi.</p>
+                                @endif
+                            </div>
+
+                            <div class="rounded-[12px] border border-sh-border bg-white/70 p-4">
+                                <div class="flex items-center justify-between gap-3">
+                                    <div class="flex items-center gap-2">
+                                        <x-kajabi-badge compact />
+                                        <span class="text-sm font-semibold text-sh-text">Kajabi</span>
+                                    </div>
+                                    @if ($enquiry->kajabi_enrolled_at)
+                                        <span class="status-pill status-pill-success">Enrolled</span>
+                                    @elseif ($enquiry->events->contains(fn ($event) => $event->event_type === 'kajabi_enroll_failed'))
+                                        <span class="status-pill status-pill-progress">Failed</span>
+                                    @elseif ($enquiry->xero_invoice_sent_at || $enquiry->status === 'quote_won')
+                                        <span class="status-pill status-pill-muted">Pending</span>
+                                    @else
+                                        <span class="status-pill status-pill-muted">—</span>
+                                    @endif
+                                </div>
+                                @if ($enquiry->kajabi_enrolled_at)
+                                    <p class="mt-3 text-xs font-semibold uppercase tracking-wide text-sh-mid">Course</p>
+                                    <p class="mt-1 text-sm font-semibold leading-snug text-sh-text">{{ $enquiry->kajabiCourseTitle() }}</p>
+                                    <p class="mt-2 text-xs text-sh-mid">
+                                        Enrolled {{ $enquiry->kajabi_enrolled_at->format('d M Y · H:i') }}
+                                        @if (filled($enquiry->kajabi_contact_id))
+                                            · Contact <span class="font-mono">{{ $enquiry->kajabi_contact_id }}</span>
+                                        @endif
+                                    </p>
+                                @else
+                                    <p class="mt-3 text-xs text-sh-mid">Creates a Kajabi account (if needed) and assigns <span class="font-semibold text-sh-text">2026 Legal Briefing on the use of Reasonable Force</span> when Quote Won runs.</p>
+                                @endif
+                                @if (in_array('kajabi_enroll', $retryableActions, true))
+                                    <form method="POST" action="{{ route('admin.enquiries.retry.kajabi-enroll', $enquiry) }}" class="mt-3">
+                                        @csrf
+                                        <button type="submit" class="btn-brand-outline text-xs">
+                                            Enroll in Kajabi
+                                        </button>
+                                    </form>
                                 @endif
                             </div>
 
@@ -463,6 +539,8 @@
                                 <div class="journey-marker">
                                     @if ($event->isMondayEvent())
                                         <x-monday-badge compact />
+                                    @elseif ($event->isKajabiEvent())
+                                        <x-kajabi-badge compact />
                                     @elseif ($event->isXeroEvent())
                                         <x-xero-badge compact />
                                     @elseif ($event->isEmailEvent())
@@ -485,7 +563,9 @@
                                 ])>
                                     <div class="flex flex-wrap items-start justify-between gap-2">
                                         <p class="inline-flex items-center gap-1.5 text-sm font-semibold text-sh-text">
-                                            @if ($event->isXeroEvent())
+                                            @if ($event->isKajabiEvent())
+                                                <x-kajabi-badge compact class="!h-4 !w-4" />
+                                            @elseif ($event->isXeroEvent())
                                                 <x-xero-badge compact class="!h-4 !w-4" />
                                             @elseif ($event->isMondayEvent())
                                                 <x-monday-badge compact class="!h-4 !w-4" />

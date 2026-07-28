@@ -44,14 +44,20 @@ function forgeExternalRef(int $enquiryId): string
 
 /**
  * Map local enquiry / booking state to the Forge booking_status label.
- * Accept-form → Accepted; after Xero invoice is sent → Invoice Sent.
+ * Accept-form → Accepted; after Xero invoice is sent → Invoice Sent;
+ * after Kajabi enrollment → Quote Won.
  */
 function forgeBookingStatusLabel(
     ?string $enquiryStatus,
     bool $termsAccepted = false,
-    bool $invoiceSent = false
+    bool $invoiceSent = false,
+    bool $quoteWon = false
 ): string {
     $status = strtolower(trim((string)$enquiryStatus));
+
+    if ($quoteWon || $status === 'kajabi_enrolled') {
+        return 'Quote Won';
+    }
 
     if ($invoiceSent || $status === 'quote_won' || $status === 'invoice_sent') {
         return 'Invoice Sent';
@@ -555,6 +561,8 @@ function forgeMaybeSyncBooking(
         $syncMessage = 'Booking snapshot sent to Forge with status Accepted.';
     } elseif ($bookingStatus === 'Invoice Sent') {
         $syncMessage = 'Booking snapshot sent to Forge with status Invoice Sent.';
+    } elseif ($bookingStatus === 'Quote Won') {
+        $syncMessage = 'Booking snapshot sent to Forge with status Quote Won.';
     }
 
     enquiryLoggerEvent(
@@ -642,7 +650,11 @@ function forgeMaybeMarkBookingAccepted(int $enquiryId, array $bookingDetails = [
     }
 
     $current = trim((string)($row['forge_booking_status'] ?? ''));
-    if (strcasecmp($current, 'Accepted') === 0 || strcasecmp($current, 'Invoice Sent') === 0) {
+    if (
+        strcasecmp($current, 'Accepted') === 0
+        || strcasecmp($current, 'Invoice Sent') === 0
+        || strcasecmp($current, 'Quote Won') === 0
+    ) {
         return null;
     }
 
@@ -697,11 +709,11 @@ function forgeMaybeMarkInvoiceSent(int $enquiryId, array $bookingDetails = []): 
     }
 
     $current = trim((string)($row['forge_booking_status'] ?? ''));
-    if (strcasecmp($current, 'Invoice Sent') === 0) {
+    if (strcasecmp($current, 'Invoice Sent') === 0 || strcasecmp($current, 'Quote Won') === 0) {
         return [
             'status' => 'pending',
             'action' => 'edit',
-            'booking_status' => 'Invoice Sent',
+            'booking_status' => $current !== '' ? $current : 'Invoice Sent',
             'skipped' => true,
         ];
     }
@@ -710,4 +722,65 @@ function forgeMaybeMarkInvoiceSent(int $enquiryId, array $bookingDetails = []): 
     $bookingDetails['invoiceSent'] = true;
 
     return forgeMaybeSyncBooking($enquiryId, $bookingDetails, 'Invoice Sent');
+}
+
+/**
+ * After Kajabi enrollment completes, push an edit so Forge moves Invoice Sent → Quote Won.
+ *
+ * @param array<string, mixed> $bookingDetails
+ * @return array<string, mixed>|null
+ */
+function forgeMaybeMarkQuoteWon(int $enquiryId, array $bookingDetails = []): ?array
+{
+    require_once __DIR__ . '/enquiry_logger.php';
+
+    if (!forgeEnabled()) {
+        return null;
+    }
+
+    enquiryLoggerEnsureForgeColumns();
+    $pdo = enquiryLoggerPdo();
+    $stmt = $pdo->prepare(
+        'SELECT forge_synced_at, forge_booking_status, booking_details_json
+         FROM enquiries WHERE id = :id LIMIT 1'
+    );
+    $stmt->execute([':id' => $enquiryId]);
+    $row = $stmt->fetch();
+    if (!$row) {
+        return null;
+    }
+
+    if ($bookingDetails === []) {
+        $raw = trim((string)($row['booking_details_json'] ?? ''));
+        if ($raw !== '') {
+            $decoded = json_decode($raw, true);
+            if (is_array($decoded)) {
+                $bookingDetails = $decoded;
+            }
+        }
+    }
+    if ($bookingDetails === []) {
+        enquiryLoggerEvent(
+            $enquiryId,
+            'forge_booking_sync_skipped',
+            'Kajabi enrollment completed, but Forge status could not be updated to Quote Won because booking details are missing.'
+        );
+
+        return null;
+    }
+
+    $current = trim((string)($row['forge_booking_status'] ?? ''));
+    if (strcasecmp($current, 'Quote Won') === 0) {
+        return [
+            'status' => 'pending',
+            'action' => 'edit',
+            'booking_status' => 'Quote Won',
+            'skipped' => true,
+        ];
+    }
+
+    $bookingDetails['termsAccepted'] = true;
+    $bookingDetails['invoiceSent'] = true;
+
+    return forgeMaybeSyncBooking($enquiryId, $bookingDetails, 'Quote Won');
 }

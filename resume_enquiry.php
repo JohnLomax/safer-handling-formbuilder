@@ -32,7 +32,7 @@ if ($enquiryId === null || $token === '') {
 }
 
 try {
-    $row = enquiryLoggerGetForResume($enquiryId, $token);
+    $row = enquiryLoggerGetByResumeToken($enquiryId, $token);
     if ($row === null) {
         http_response_code(404);
         echo json_encode([
@@ -66,17 +66,23 @@ try {
         unset($formData['dateNotSure']);
     }
     $formData = enquiryPostWithNormalisedPreferredDate($formData);
+    $status = (string)($row['status'] ?? '');
+    $editable = enquiryLoggerIsEditableStatus($status);
 
     echo json_encode([
         'success' => true,
+        'editable' => $editable,
+        'lockMessage' => $editable ? null : enquiryLoggerResumeLockMessage($status),
         'enquiry' => [
             'id' => (int)$row['id'],
             'name' => (string)$row['name'],
             'email' => (string)$row['email'],
             'enquiryType' => (string)$row['enquiry_type'],
-            'status' => (string)$row['status'],
+            'status' => $status,
             'resumeToken' => (string)$row['resume_token'],
             'formData' => $formData,
+            'editable' => $editable,
+            'lockMessage' => $editable ? null : enquiryLoggerResumeLockMessage($status),
         ],
     ]);
 } catch (Throwable $e) {

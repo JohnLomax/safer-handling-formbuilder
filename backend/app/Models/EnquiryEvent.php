@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\InterpretsUtcTimestamps;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class EnquiryEvent extends Model
 {
+    use InterpretsUtcTimestamps;
+
     public $timestamps = false;
 
     protected $fillable = [
@@ -40,6 +43,8 @@ class EnquiryEvent extends Model
         'monday_moved_quote_accepted' => 'Moved to Quote Accepted on Monday',
         'monday_moved_quote_won' => 'Moved to Quote Won on Monday',
         'monday_quote_won_group_created' => 'Monday Quote Won group created',
+        'monday_moved_exported' => 'Moved to Exported on Monday',
+        'monday_exported_group_created' => 'Monday Exported group created',
         'monday_courses_ongoing_created' => 'Client Booking Form record created',
         'monday_courses_ongoing_synced' => 'Client Booking Form record updated',
         'monday_courses_ongoing_failed' => 'Client Booking Form sync failed',
@@ -55,6 +60,8 @@ class EnquiryEvent extends Model
         'resume_email_failed' => 'Edit Enquiry Email failed',
         'booking_email_sent' => 'Accept Quote / venue details email sent',
         'booking_email_failed' => 'Accept Quote / venue details email failed',
+        'booking_reminder_sent' => 'Accept Quote / venue details reminder sent',
+        'booking_reminder_failed' => 'Accept Quote / venue details reminder failed',
         'booking_details_submitted' => 'Booking details submitted',
         'monday_booking_group_created' => 'Monday booking group created',
         'monday_booking_synced' => 'Booking synced to Monday',
@@ -68,6 +75,11 @@ class EnquiryEvent extends Model
         'forge_booking_sync_failed' => 'Forge booking sync failed',
         'forge_booking_sync_skipped' => 'Forge booking sync skipped',
         'forge_status_updated' => 'Forge booking status updated',
+        'kajabi_account_created' => 'Kajabi account created',
+        'kajabi_account_found' => 'Existing Kajabi account found',
+        'kajabi_enrolled' => 'Enrolled in Kajabi course',
+        'kajabi_enroll_failed' => 'Kajabi enrollment failed',
+        'kajabi_enroll_skipped' => 'Kajabi enrollment skipped',
         'lead_notification_sent' => 'New lead email sent to office',
         'lead_notification_failed' => 'New lead email failed',
         'storage_saved' => 'Enquiry saved locally',
@@ -89,8 +101,23 @@ class EnquiryEvent extends Model
         return str_starts_with($this->event_type, 'monday_');
     }
 
+    public function isKajabiEvent(): bool
+    {
+        if (str_starts_with($this->event_type, 'kajabi_')) {
+            return true;
+        }
+
+        $metadata = is_array($this->metadata) ? $this->metadata : [];
+
+        return ($metadata['channel'] ?? null) === 'kajabi';
+    }
+
     public function isXeroEvent(): bool
     {
+        if ($this->isKajabiEvent()) {
+            return false;
+        }
+
         if (str_starts_with($this->event_type, 'quote_email_')
             || str_starts_with($this->event_type, 'xero_')) {
             return true;
@@ -115,7 +142,7 @@ class EnquiryEvent extends Model
 
     public function isEmailEvent(): bool
     {
-        if ($this->isXeroEvent()) {
+        if ($this->isXeroEvent() || $this->isKajabiEvent()) {
             return false;
         }
 
@@ -135,8 +162,11 @@ class EnquiryEvent extends Model
         return str_ends_with($this->event_type, '_sent')
             || $this->event_type === 'xero_invoice_created'
             || $this->event_type === 'monday_moved_quote_won'
+            || $this->event_type === 'monday_moved_exported'
             || $this->event_type === 'monday_courses_ongoing_created'
-            || $this->event_type === 'monday_courses_ongoing_synced';
+            || $this->event_type === 'monday_courses_ongoing_synced'
+            || $this->event_type === 'kajabi_enrolled'
+            || $this->event_type === 'kajabi_account_created';
     }
 
     public function isManualRetrySuccess(): bool
@@ -152,6 +182,7 @@ class EnquiryEvent extends Model
             str_starts_with($this->event_type, 'resume_email_') => 'resume_email',
             str_starts_with($this->event_type, 'booking_email_') => 'booking_email',
             str_starts_with($this->event_type, 'xero_invoice_') => 'xero_invoice',
+            in_array($this->event_type, ['kajabi_enrolled', 'kajabi_enroll_failed', 'kajabi_enroll_skipped'], true) => 'kajabi_enroll',
             default => null,
         };
     }
@@ -164,6 +195,7 @@ class EnquiryEvent extends Model
             'resume_email_failed',
             'booking_email_failed',
             'xero_invoice_failed',
+            'kajabi_enroll_failed',
         ], true);
     }
 }

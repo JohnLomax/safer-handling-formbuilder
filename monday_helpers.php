@@ -1844,6 +1844,145 @@ function mondayMoveEnquiryToQuoteWonAfterInvoiceSent(int $enquiryId): array
 }
 
 /**
+ * Preferred Monday group after Kajabi enrollment completes (Exported).
+ */
+function mondayExportedGroupName(): string
+{
+    $configured = trim((string)(getenv('MONDAY_EXPORTED_GROUP_NAME') ?: ($GLOBALS['mondayExportedGroupName'] ?? '')));
+    if ($configured !== '') {
+        return $configured;
+    }
+
+    return 'Exported';
+}
+
+/**
+ * @return list<string>
+ */
+function mondayExportedGroupNameCandidates(): array
+{
+    $candidates = [
+        mondayExportedGroupName(),
+        'Exported',
+        'Export',
+        'Exported to Forge',
+    ];
+
+    $unique = [];
+    foreach ($candidates as $name) {
+        $name = trim($name);
+        if ($name === '') {
+            continue;
+        }
+        $key = strtolower($name);
+        if (isset($unique[$key])) {
+            continue;
+        }
+        $unique[$key] = $name;
+    }
+
+    return array_values($unique);
+}
+
+/**
+ * @return array{groupId:string,groupName:string,created:bool}
+ */
+function mondayResolveExportedGroup(string $token, int $boardId): array
+{
+    foreach (mondayExportedGroupNameCandidates() as $candidate) {
+        $groupId = mondayFindGroupIdByName($token, $boardId, $candidate);
+        if ($groupId !== null) {
+            return [
+                'groupId' => $groupId,
+                'groupName' => $candidate,
+                'created' => false,
+            ];
+        }
+    }
+
+    $preferred = mondayExportedGroupName();
+    $groupId = mondayCreateGroup($token, $boardId, $preferred);
+
+    return [
+        'groupId' => $groupId,
+        'groupName' => $preferred,
+        'created' => true,
+    ];
+}
+
+/**
+ * Move the enquiry pipeline item to Exported after Kajabi enrollment completes.
+ *
+ * @return array{moved:bool,groupId:string,groupName:string,itemId:string,skipped?:bool}
+ */
+function mondayMoveEnquiryToExportedAfterKajabi(int $enquiryId): array
+{
+    require_once __DIR__ . '/enquiry_logger.php';
+
+    $pdo = enquiryLoggerPdo();
+    $stmt = $pdo->prepare('SELECT monday_item_id FROM enquiries WHERE id = :id LIMIT 1');
+    $stmt->execute([':id' => $enquiryId]);
+    $row = $stmt->fetch();
+    $itemId = trim((string)($row['monday_item_id'] ?? ''));
+    if ($itemId === '') {
+        enquiryLoggerEvent(
+            $enquiryId,
+            'monday_move_skipped',
+            'Kajabi enrollment completed, but Monday item could not be moved to Exported because no Monday item ID is stored.'
+        );
+
+        return [
+            'moved' => false,
+            'groupId' => '',
+            'groupName' => '',
+            'itemId' => '',
+            'skipped' => true,
+        ];
+    }
+
+    $monday = mondayAppConfig();
+    $token = $monday['token'];
+    $boardIdRaw = $monday['boardId'];
+    if ($token === '' || $boardIdRaw === '' || !is_numeric($boardIdRaw)) {
+        throw new RuntimeException(mondayConfigMissingMessage());
+    }
+
+    $boardId = (int)$boardIdRaw;
+    $group = mondayResolveExportedGroup($token, $boardId);
+    if (!empty($group['created'])) {
+        enquiryLoggerEvent(
+            $enquiryId,
+            'monday_exported_group_created',
+            'Created Monday group "' . $group['groupName'] . '" for Exported.',
+            [
+                'monday_group_id' => $group['groupId'],
+                'monday_group_name' => $group['groupName'],
+            ]
+        );
+    }
+
+    $result = mondayMoveItemToGroupByName($itemId, $group['groupName']);
+    enquiryLoggerEvent(
+        $enquiryId,
+        'monday_moved_exported',
+        'Enquiry moved to Monday group "' . $result['groupName'] . '" (Exported) after Kajabi enrollment.',
+        [
+            'monday_item_id' => $itemId,
+            'monday_group_id' => $result['groupId'],
+            'monday_group_name' => $result['groupName'],
+            'trigger' => 'kajabi_enrolled',
+        ]
+    );
+
+    return [
+        'moved' => true,
+        'groupId' => $result['groupId'],
+        'groupName' => $result['groupName'],
+        'itemId' => $itemId,
+    ];
+}
+
+/**
  * Build Monday column values from booking details (shared by Quote Accepted + Courses Ongoing).
  *
  * @param array<int, array<string, mixed>> $columns

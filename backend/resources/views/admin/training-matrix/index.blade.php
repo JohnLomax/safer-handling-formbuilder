@@ -77,7 +77,7 @@
         </div>
     </div>
 
-    <x-modal name="matrix-create-modal" maxWidth="4xl" focusable :show="$openCreateModal">
+    <x-modal name="matrix-create-modal" maxWidth="1440" focusable :show="$openCreateModal">
         <div class="admin-modal-header">
             <div>
                 <h3 class="text-lg font-semibold text-brand-header">Add training row</h3>
@@ -95,7 +95,7 @@
     </x-modal>
 
     @if ($editEntry)
-        <x-modal name="matrix-edit-modal" maxWidth="4xl" focusable :show="$openEditModal">
+        <x-modal name="matrix-edit-modal" maxWidth="1440" focusable :show="$openEditModal">
             <div class="admin-modal-header">
                 <div>
                     <h3 class="text-lg font-semibold text-brand-header">Edit training row</h3>
@@ -112,4 +112,6 @@
             </div>
         </x-modal>
     @endif
+
+    <x-field-help-modal />
 </x-app-layout>

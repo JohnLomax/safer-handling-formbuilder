@@ -44,6 +44,7 @@ RUN apt-get update \
         pcntl \
         pdo_mysql \
         pdo_sqlite \
+        imap \
     && php -m | grep -qi pdo_sqlite \
     && php -m | grep -qi pdo_mysql \
     && rm -rf /var/lib/apt/lists/*

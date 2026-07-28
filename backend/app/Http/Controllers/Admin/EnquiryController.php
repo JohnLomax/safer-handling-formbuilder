@@ -354,9 +354,14 @@ class EnquiryController extends Controller
             $enquiry->refresh();
 
             if (! empty($result['already_sent']) || (! empty($result['sent']) && empty($result['processed']))) {
+                $status = 'Xero invoice was already marked as sent for this enquiry.';
+                if (! empty($result['kajabi']['enrolled'])) {
+                    $status .= ' Kajabi enrollment completed.';
+                }
+
                 return redirect()
                     ->route('admin.enquiries.show', $enquiry)
-                    ->with('status', 'Xero invoice was already marked as sent for this enquiry.');
+                    ->with('status', $status);
             }
 
             if (! empty($result['processed'])) {
@@ -367,6 +372,18 @@ class EnquiryController extends Controller
                 if (! empty($result['monday_courses_ongoing']['itemId'])) {
                     $parts[] = (! empty($result['monday_courses_ongoing']['created']) ? 'Created' : 'Updated')
                         .' Client Booking Form (Courses Ongoing) record.';
+                }
+                if (! empty($result['kajabi']['enrolled'])) {
+                    $parts[] = 'Enrolled in Kajabi'
+                        .(isset($result['kajabi']['offer_title']) ? ' ('.$result['kajabi']['offer_title'].')' : '')
+                        .'.';
+                } elseif (! empty($result['kajabi']['error']) && empty($result['kajabi']['already_enrolled'])) {
+                    $parts[] = 'Kajabi enrollment did not complete.';
+                }
+                if (! empty($result['kajabi']['monday']['moved'])) {
+                    $parts[] = 'Moved to Monday "'
+                        .($result['kajabi']['monday']['groupName'] ?? 'Exported')
+                        .'".';
                 }
 
                 return redirect()
@@ -386,6 +403,16 @@ class EnquiryController extends Controller
         }
     }
 
+    public function retryKajabiEnroll(Enquiry $enquiry, EnquiryProcessRetry $retry): RedirectResponse
+    {
+        return $this->runRetry(
+            $enquiry,
+            'Kajabi enrollment',
+            fn () => $retry->retryKajabiEnroll($enquiry),
+            'Kajabi account/course enrollment completed successfully.'
+        );
+    }
+
     public function retryEvent(Enquiry $enquiry, EnquiryEvent $event, EnquiryProcessRetry $retry): RedirectResponse
     {
         if ((int) $event->enquiry_id !== (int) $enquiry->id) {
@@ -398,6 +425,7 @@ class EnquiryController extends Controller
             'resume_email' => 'Edit Enquiry Email',
             'booking_email' => 'Accept Quote / venue details email',
             'xero_invoice' => 'Xero draft invoice',
+            'kajabi_enroll' => 'Kajabi enrollment',
         ];
 
         try {

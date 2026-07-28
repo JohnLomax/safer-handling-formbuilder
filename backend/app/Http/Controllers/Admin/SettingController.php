@@ -34,6 +34,15 @@ class SettingController extends Controller
         'brevo_quote_accept_url',
         'form_base_url',
         'brevo_resume_email_enabled',
+        'office_auto_reply_enabled',
+        'office_auto_reply_hours',
+        'office_imap_host',
+        'office_imap_port',
+        'office_imap_encryption',
+        'office_imap_username',
+        'office_imap_password',
+        'office_imap_inbox_folder',
+        'office_imap_sent_folder',
         'xero_enabled',
         'xero_client_id',
         'xero_client_secret',
@@ -89,6 +98,15 @@ class SettingController extends Controller
             'brevo_quote_accept_url' => ['nullable', 'string', 'max:500'],
             'form_base_url' => ['nullable', 'url', 'max:500'],
             'brevo_resume_email_enabled' => ['nullable', 'boolean'],
+            'office_auto_reply_enabled' => ['nullable', 'boolean'],
+            'office_auto_reply_hours' => ['nullable', 'integer', 'min:1', 'max:168'],
+            'office_imap_host' => ['nullable', 'string', 'max:255'],
+            'office_imap_port' => ['nullable', 'integer', 'min:1', 'max:65535'],
+            'office_imap_encryption' => ['nullable', 'string', 'in:ssl,tls,none'],
+            'office_imap_username' => ['nullable', 'email', 'max:255'],
+            'office_imap_password' => ['nullable', 'string'],
+            'office_imap_inbox_folder' => ['nullable', 'string', 'max:255'],
+            'office_imap_sent_folder' => ['nullable', 'string', 'max:255'],
             'xero_enabled' => ['nullable', 'boolean'],
             'xero_client_id' => ['nullable', 'string', 'max:255'],
             'xero_client_secret' => ['nullable', 'string'],
@@ -109,6 +127,7 @@ class SettingController extends Controller
                 'brevo_email_enabled',
                 'brevo_resume_email_enabled',
                 'brevo_lead_notification_enabled',
+                'office_auto_reply_enabled',
                 'xero_enabled',
                 'forge_enabled',
             ], true)) {
@@ -123,10 +142,17 @@ class SettingController extends Controller
                 'monday_api_token',
                 'ideal_postcodes_api_key',
                 'brevo_api_key',
+                'office_imap_password',
                 'xero_client_secret',
                 'xero_webhook_key',
                 'forge_webhook_token',
             ], true)) {
+                continue;
+            }
+
+            if (in_array($key, ['office_auto_reply_hours', 'office_imap_port'], true)) {
+                Setting::setValue($key, (string) ((int) ($incoming !== '' ? $incoming : ($key === 'office_imap_port' ? 993 : 8))));
+
                 continue;
             }
 

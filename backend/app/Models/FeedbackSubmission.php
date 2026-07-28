@@ -2,10 +2,13 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\InterpretsUtcTimestamps;
 use Illuminate\Database\Eloquent\Model;
 
 class FeedbackSubmission extends Model
 {
+    use InterpretsUtcTimestamps;
+
     public $timestamps = false;
 
     protected $table = 'feedback_submissions';

@@ -145,6 +145,72 @@
 
             <div class="brand-panel space-y-4">
                 <div>
+                    <h3 class="text-base font-semibold text-brand-header">Office unreplied auto-reply</h3>
+                    <p class="mt-1 text-sm text-sh-mid">
+                        When enabled, the scheduler checks the office inbox and sends the <code>email.html</code> template from
+                        <strong>office@safer-handling.co.uk</strong> to people who emailed in and have not received a human reply within 8 hours.
+                    </p>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <input id="office_auto_reply_enabled" name="office_auto_reply_enabled" type="checkbox" value="1" class="rounded border-[#b9d4ef] text-brand shadow-sm focus:ring-brand" @checked(old('office_auto_reply_enabled', filter_var($settings['office_auto_reply_enabled'] ?? '0', FILTER_VALIDATE_BOOLEAN)))>
+                    <label for="office_auto_reply_enabled" class="text-sm text-sh-mid">Enable automatic unreplied email responses (after 8 hours)</label>
+                </div>
+
+                <div class="grid gap-4 md:grid-cols-2">
+                    <div>
+                        <x-input-label for="office_auto_reply_hours" value="Wait hours before auto-reply" />
+                        <x-text-input id="office_auto_reply_hours" name="office_auto_reply_hours" type="number" min="1" max="168" class="mt-1 block w-full" :value="old('office_auto_reply_hours', $settings['office_auto_reply_hours'] ?? '8')" />
+                    </div>
+                    <div>
+                        <x-input-label for="office_imap_username" value="IMAP username" />
+                        <x-text-input id="office_imap_username" name="office_imap_username" type="email" class="mt-1 block w-full" :value="old('office_imap_username', $settings['office_imap_username'] ?? ($settings['brevo_office_email'] ?? 'office@safer-handling.co.uk'))" />
+                    </div>
+                </div>
+
+                <div class="grid gap-4 md:grid-cols-3">
+                    <div class="md:col-span-2">
+                        <x-input-label for="office_imap_host" value="IMAP host" />
+                        <x-text-input id="office_imap_host" name="office_imap_host" type="text" class="mt-1 block w-full font-mono text-sm" :value="old('office_imap_host', $settings['office_imap_host'] ?? 'outlook.office365.com')" />
+                    </div>
+                    <div>
+                        <x-input-label for="office_imap_port" value="IMAP port" />
+                        <x-text-input id="office_imap_port" name="office_imap_port" type="number" class="mt-1 block w-full" :value="old('office_imap_port', $settings['office_imap_port'] ?? '993')" />
+                    </div>
+                </div>
+
+                <div class="grid gap-4 md:grid-cols-2">
+                    <div>
+                        <x-input-label for="office_imap_encryption" value="IMAP encryption" />
+                        <select id="office_imap_encryption" name="office_imap_encryption" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-brand focus:ring-brand">
+                            @php $enc = old('office_imap_encryption', $settings['office_imap_encryption'] ?? 'ssl'); @endphp
+                            <option value="ssl" @selected($enc === 'ssl')>SSL</option>
+                            <option value="tls" @selected($enc === 'tls')>TLS</option>
+                            <option value="none" @selected($enc === 'none')>None</option>
+                        </select>
+                    </div>
+                    <div>
+                        <x-input-label for="office_imap_password" value="IMAP password / app password" />
+                        <x-text-input id="office_imap_password" name="office_imap_password" type="password" class="mt-1 block w-full font-mono text-sm" :value="old('office_imap_password', '')" autocomplete="new-password" />
+                        <p class="mt-1 text-xs text-sh-mid">Leave blank when saving to keep the existing password. Microsoft 365 usually needs an app password if IMAP is allowed.</p>
+                    </div>
+                </div>
+
+                <div class="grid gap-4 md:grid-cols-2">
+                    <div>
+                        <x-input-label for="office_imap_inbox_folder" value="Inbox folder" />
+                        <x-text-input id="office_imap_inbox_folder" name="office_imap_inbox_folder" type="text" class="mt-1 block w-full" :value="old('office_imap_inbox_folder', $settings['office_imap_inbox_folder'] ?? 'INBOX')" />
+                    </div>
+                    <div>
+                        <x-input-label for="office_imap_sent_folder" value="Sent folder" />
+                        <x-text-input id="office_imap_sent_folder" name="office_imap_sent_folder" type="text" class="mt-1 block w-full" :value="old('office_imap_sent_folder', $settings['office_imap_sent_folder'] ?? 'Sent Items')" />
+                        <p class="mt-1 text-xs text-sh-mid">Used to detect whether someone from the office has already replied.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="brand-panel space-y-4">
+                <div>
                     <div class="flex items-center gap-2">
                         <x-xero-badge class="!h-6 !w-6" />
                         <h3 class="text-base font-semibold text-brand-header">Xero quotes</h3>

@@ -488,6 +488,42 @@ if ($kajabiCoursesUrl === '') {
       padding: 11px;
     }
 
+    .resume-locked-banner {
+      margin: 0 0 16px;
+      padding: 14px 16px;
+      border-radius: 12px;
+      border: 1px solid #f3c1c1;
+      background: #fef2f2;
+      color: #7f1d1d;
+    }
+
+    .resume-locked-banner strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 0.98rem;
+    }
+
+    .resume-locked-banner p {
+      margin: 0;
+      font-size: 0.92rem;
+      line-height: 1.45;
+      color: #9f1239;
+    }
+
+    form.is-locked .actions,
+    form.is-locked #continueBtn,
+    form.is-locked #submitBtn {
+      display: none !important;
+    }
+
+    form.is-locked input,
+    form.is-locked select,
+    form.is-locked textarea,
+    form.is-locked button {
+      pointer-events: none;
+      opacity: 0.85;
+    }
+
     .date-guidance {
       margin-top: 10px;
       background: rgba(186, 218, 85, 0.22);
@@ -643,6 +679,10 @@ if ($kajabiCoursesUrl === '') {
       <form id="enquiryForm" action="submit_enquiry.php" method="post" novalidate>
         <input type="hidden" id="enquiryId" name="enquiryId" value="" />
         <input type="hidden" id="resumeToken" name="resumeToken" value="" />
+        <div id="resumeLockedBanner" class="resume-locked-banner hidden" role="status" aria-live="polite">
+          <strong>This enquiry can no longer be edited</strong>
+          <p id="resumeLockedMessage">If you need to change any details, please contact Safer Handling.</p>
+        </div>
         <section class="section" id="section1">
           <h2>Start by filling in the form</h2>
           <p class="section-intro">Use the steps below to choose the course that fits you and build your personalised quote.</p>
@@ -1206,6 +1246,31 @@ if ($kajabiCoursesUrl === '') {
         notice.textContent = message;
       }
 
+      function showLockedEnquiryMessage(message) {
+        var banner = document.getElementById("resumeLockedBanner");
+        var text = document.getElementById("resumeLockedMessage");
+        if (text) {
+          text.textContent = message || "This enquiry has already been completed and can no longer be edited here. If you need to change any details, please contact Safer Handling.";
+        }
+        if (banner) {
+          banner.classList.remove("hidden");
+        }
+        if (form) {
+          form.classList.add("is-locked");
+          Array.prototype.forEach.call(form.querySelectorAll("input, select, textarea, button"), function (el) {
+            if (el.type === "hidden") {
+              return;
+            }
+            el.setAttribute("readonly", "readonly");
+            el.setAttribute("disabled", "disabled");
+          });
+        }
+        showResumeNotice(message || "This enquiry can no longer be edited.");
+        if (banner && typeof banner.scrollIntoView === "function") {
+          banner.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      }
+
       var enquiryProgressSaveTimer = null;
 
       function scheduleEnquiryProgressSave() {
@@ -1268,8 +1333,20 @@ if ($kajabiCoursesUrl === '') {
             restoreOrganisationSelections(enquiry.formData || {});
             syncPreferredDateUiState();
             updateFinalDetailsVisibility();
+
+            var editable = enquiry.editable !== false;
+            if (!editable) {
+              showLockedEnquiryMessage(
+                enquiry.lockMessage ||
+                  "This enquiry has already been completed and can no longer be edited here. If you need to change any details, please contact Safer Handling."
+              );
+              return true;
+            }
+
             if (enquiry.status === "quote_sent") {
               showResumeNotice("We restored this enquiry (quote already sent). You can review or update the details.");
+            } else if (enquiry.status === "quote_accepted") {
+              showResumeNotice("We restored this enquiry (quote accepted). You can review or update the details.");
             } else if (enquiry.status === "submitted") {
               showResumeNotice("We restored your submitted enquiry. You can review or update your details.");
             } else {
@@ -1279,7 +1356,11 @@ if ($kajabiCoursesUrl === '') {
           })
           .catch(function (error) {
             console.error(error);
-            showResumeNotice(error && error.message ? error.message : "We could not restore your saved enquiry.");
+            showResumeNotice(
+              error && error.message
+                ? error.message
+                : "We could not restore your saved enquiry. The link may be invalid or has expired."
+            );
             return false;
           });
       }

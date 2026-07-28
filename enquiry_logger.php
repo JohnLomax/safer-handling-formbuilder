@@ -97,12 +97,16 @@ function enquiryLoggerEnsureSchema(PDO $pdo): void
     enquiryLoggerEnsureColumn($pdo, 'enquiries', 'organisation_company', 'TEXT');
     enquiryLoggerEnsureColumn($pdo, 'enquiries', 'booking_details_json', 'TEXT');
     enquiryLoggerEnsureColumn($pdo, 'enquiries', 'booking_email_sent_at', 'TEXT');
+    enquiryLoggerEnsureColumn($pdo, 'enquiries', 'booking_reminder_sent_at', 'TEXT');
     enquiryLoggerEnsureColumn($pdo, 'enquiries', 'booking_submitted_at', 'TEXT');
     enquiryLoggerEnsureColumn($pdo, 'enquiries', 'terms_accepted_at', 'TEXT');
     enquiryLoggerEnsureColumn($pdo, 'enquiries', 'xero_invoice_id', 'TEXT');
     enquiryLoggerEnsureColumn($pdo, 'enquiries', 'xero_invoice_number', 'TEXT');
     enquiryLoggerEnsureColumn($pdo, 'enquiries', 'xero_invoice_created_at', 'TEXT');
     enquiryLoggerEnsureColumn($pdo, 'enquiries', 'xero_invoice_sent_at', 'TEXT');
+    enquiryLoggerEnsureColumn($pdo, 'enquiries', 'kajabi_contact_id', 'TEXT');
+    enquiryLoggerEnsureColumn($pdo, 'enquiries', 'kajabi_offer_id', 'TEXT');
+    enquiryLoggerEnsureColumn($pdo, 'enquiries', 'kajabi_enrolled_at', 'TEXT');
     enquiryLoggerEnsureColumn($pdo, 'enquiries', 'monday_booking_item_id', 'TEXT');
     enquiryLoggerEnsureColumn($pdo, 'enquiries', 'forge_synced_at', 'TEXT');
     enquiryLoggerEnsureColumn($pdo, 'enquiries', 'forge_event_id', 'TEXT');
@@ -134,6 +138,7 @@ function enquiryLoggerEnsureColumn(PDO $pdo, string $table, string $column, stri
 
 function enquiryLoggerNow(): string
 {
+    // Persist UTC; admin UI converts to Europe/London for display.
     return gmdate('Y-m-d H:i:s');
 }
 
@@ -299,7 +304,43 @@ function enquiryLoggerEnsureResumeToken(int $enquiryId): string
 /**
  * @return array<string, mixed>|null
  */
-function enquiryLoggerGetForResume(int $enquiryId, string $token): ?array
+function enquiryLoggerEditableStatuses(): array
+{
+    return [
+        'in_progress',
+        'contacted',
+        'submitted',
+        'quote_sent',
+        'quote_accepted',
+        'failed',
+    ];
+}
+
+function enquiryLoggerIsEditableStatus(?string $status): bool
+{
+    $status = strtolower(trim((string) $status));
+
+    return in_array($status, enquiryLoggerEditableStatuses(), true);
+}
+
+/**
+ * Human message when an enquiry resume link is valid but the form is locked.
+ */
+function enquiryLoggerResumeLockMessage(?string $status): string
+{
+    $status = strtolower(trim((string) $status));
+
+    return match ($status) {
+        'quote_won' => 'This enquiry has already been won and can no longer be edited here. If you need to change any details, please contact Safer Handling.',
+        default => 'This enquiry has already been completed and can no longer be edited here. If you need to change any details, please contact Safer Handling.',
+    };
+}
+
+/**
+ * Load an enquiry by id + resume token (any status).
+ * Used for Edit form / resume display, including locked (non-editable) enquiries.
+ */
+function enquiryLoggerGetByResumeToken(int $enquiryId, string $token): ?array
 {
     $token = trim($token);
     if ($token === '') {
@@ -311,29 +352,32 @@ function enquiryLoggerGetForResume(int $enquiryId, string $token): ?array
         'SELECT * FROM enquiries
          WHERE id = :id
            AND resume_token = :token
-           AND status IN (
-             :status_in_progress,
-             :status_contacted,
-             :status_submitted,
-             :status_quote_sent,
-             :status_quote_accepted,
-             :status_failed
-           )
          LIMIT 1'
     );
     $stmt->execute([
         ':id' => $enquiryId,
         ':token' => $token,
-        ':status_in_progress' => 'in_progress',
-        ':status_contacted' => 'contacted',
-        ':status_submitted' => 'submitted',
-        ':status_quote_sent' => 'quote_sent',
-        ':status_quote_accepted' => 'quote_accepted',
-        ':status_failed' => 'failed',
     ]);
     $row = $stmt->fetch();
 
     return is_array($row) ? $row : null;
+}
+
+/**
+ * Load an enquiry that is still allowed to be edited / used for booking resume.
+ */
+function enquiryLoggerGetForResume(int $enquiryId, string $token): ?array
+{
+    $row = enquiryLoggerGetByResumeToken($enquiryId, $token);
+    if ($row === null) {
+        return null;
+    }
+
+    if (!enquiryLoggerIsEditableStatus((string)($row['status'] ?? ''))) {
+        return null;
+    }
+
+    return $row;
 }
 
 function enquiryLoggerResumeEmailAlreadySent(int $enquiryId): bool
@@ -791,6 +835,41 @@ function enquiryLoggerMarkBookingEmailSent(int $enquiryId): void
     );
     $stmt->execute([
         ':id' => $enquiryId,
+        ':booking_email_sent_at' => $now,
+        ':updated_at' => $now,
+    ]);
+}
+
+function enquiryLoggerBookingReminderAlreadySent(int $enquiryId): bool
+{
+    enquiryLoggerEnsureColumn(enquiryLoggerPdo(), 'enquiries', 'booking_reminder_sent_at', 'TEXT');
+
+    $pdo = enquiryLoggerPdo();
+    $stmt = $pdo->prepare('SELECT booking_reminder_sent_at FROM enquiries WHERE id = :id LIMIT 1');
+    $stmt->execute([':id' => $enquiryId]);
+    $row = $stmt->fetch();
+
+    return trim((string) ($row['booking_reminder_sent_at'] ?? '')) !== '';
+}
+
+function enquiryLoggerMarkBookingReminderSent(int $enquiryId): void
+{
+    enquiryLoggerEnsureColumn(enquiryLoggerPdo(), 'enquiries', 'booking_reminder_sent_at', 'TEXT');
+    enquiryLoggerEnsureColumn(enquiryLoggerPdo(), 'enquiries', 'booking_email_sent_at', 'TEXT');
+
+    $pdo = enquiryLoggerPdo();
+    $now = enquiryLoggerNow();
+
+    $stmt = $pdo->prepare(
+        'UPDATE enquiries SET
+            booking_reminder_sent_at = :booking_reminder_sent_at,
+            booking_email_sent_at = COALESCE(booking_email_sent_at, :booking_email_sent_at),
+            updated_at = :updated_at
+         WHERE id = :id'
+    );
+    $stmt->execute([
+        ':id' => $enquiryId,
+        ':booking_reminder_sent_at' => $now,
         ':booking_email_sent_at' => $now,
         ':updated_at' => $now,
     ]);

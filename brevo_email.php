@@ -273,6 +273,11 @@ function buildBookingDetailsEmailHtml(array $data): string
     $name = htmlspecialchars((string)($data['name'] ?? ''), ENT_QUOTES, 'UTF-8');
     $bookingUrl = htmlspecialchars((string)($data['bookingUrl'] ?? ''), ENT_QUOTES, 'UTF-8');
     $contactEmail = htmlspecialchars(brevoContactEmail(), ENT_QUOTES, 'UTF-8');
+    $isReminder = ! empty($data['isReminder']);
+    $preferredLabel = trim((string) ($data['preferredDateLabel'] ?? ''));
+    $preferredHtml = $preferredLabel !== ''
+        ? htmlspecialchars($preferredLabel, ENT_QUOTES, 'UTF-8')
+        : '';
     $joiningUrl = trim((string)($data['joiningInstructionsUrl'] ?? ''));
     $joiningBlock = '';
     if ($joiningUrl !== '') {
@@ -288,17 +293,33 @@ function buildBookingDetailsEmailHtml(array $data): string
 HTML;
     }
 
+    if ($isReminder) {
+        $intro = '<p style="margin:0 0 12px;">Hello '.$name.',</p>'
+            .'<p style="margin:0 0 12px;"><strong>Reminder:</strong> we still need your venue details to finalise your Safer Handling training booking.</p>';
+        if ($preferredHtml !== '') {
+            $intro .= '<p style="margin:0 0 12px;">Your preferred training date is <strong style="color:#0255a4;">'.$preferredHtml.'</strong> — please accept the quote and add venue details as soon as possible.</p>';
+        } else {
+            $intro .= '<p style="margin:0;">Please accept the quote and add your venue details, delegate names, invoice information, and confirm our terms and conditions.</p>';
+        }
+        $heading = 'Reminder: Accept Quote and add venue details';
+        $title = 'Reminder: Accept Quote and add venue details — Safer Handling';
+    } else {
+        $intro = '<p style="margin:0 0 12px;">Hello '.$name.',</p>'
+            .'<p style="margin:0 0 12px;">Thank you for your Safer Handling training quote.</p>'
+            .'<p style="margin:0;">If you are happy to proceed, please accept the quote and add your venue details, delegate names, invoice information, and confirm our terms and conditions.</p>';
+        $heading = 'Accept Quote and add venue details';
+        $title = 'Accept Quote and add venue details — Safer Handling';
+    }
+
     $body = <<<HTML
           <tr>
             <td align="center" style="padding:0 20px 10px; font-family:Arial,Helvetica,sans-serif; font-size:16px; line-height:1.6; color:#414141; text-align:center;">
-              <p style="margin:0 0 12px;">Hello {$name},</p>
-              <p style="margin:0 0 12px;">Thank you for your Safer Handling training quote.</p>
-              <p style="margin:0;">If you are happy to proceed, please accept the quote and add your venue details, delegate names, invoice information, and confirm our terms and conditions.</p>
+              {$intro}
             </td>
           </tr>
           <tr>
             <td align="center" style="padding:24px 20px 8px; font-family:Arial,Helvetica,sans-serif; text-align:center;">
-              <h1 style="margin:0; font-size:24px; font-weight:700; color:#0255a4; line-height:1.3;">Accept Quote and add venue details</h1>
+              <h1 style="margin:0; font-size:24px; font-weight:700; color:#0255a4; line-height:1.3;">{$heading}</h1>
             </td>
           </tr>
 {$joiningBlock}
@@ -321,7 +342,7 @@ HTML;
           </tr>
 HTML;
 
-    return brevoCustomerEmailHtml('Accept Quote and add venue details — Safer Handling', $body);
+    return brevoCustomerEmailHtml($title, $body);
 }
 
 /**
@@ -329,13 +350,25 @@ HTML;
  */
 function buildBookingDetailsEmailText(array $data): string
 {
+    $isReminder = ! empty($data['isReminder']);
+    $preferredLabel = trim((string) ($data['preferredDateLabel'] ?? ''));
+
     $lines = [
         'Hello ' . (string)($data['name'] ?? '') . ',',
         '',
-        'Thank you for your Safer Handling training quote.',
-        'If you are happy to proceed, please accept the quote and add your venue details, delegate names, invoice information, and confirm our terms and conditions.',
-        '',
     ];
+
+    if ($isReminder) {
+        $lines[] = 'Reminder: we still need your venue details to finalise your Safer Handling training booking.';
+        if ($preferredLabel !== '') {
+            $lines[] = 'Your preferred training date is '.$preferredLabel.' — please accept the quote and add venue details as soon as possible.';
+        }
+        $lines[] = '';
+    } else {
+        $lines[] = 'Thank you for your Safer Handling training quote.';
+        $lines[] = 'If you are happy to proceed, please accept the quote and add your venue details, delegate names, invoice information, and confirm our terms and conditions.';
+        $lines[] = '';
+    }
 
     $joiningUrl = trim((string)($data['joiningInstructionsUrl'] ?? ''));
     if ($joiningUrl !== '') {
@@ -384,7 +417,9 @@ function sendBookingDetailsEmailViaBrevo(string $toEmail, string $toName, array 
             'email' => brevoContactEmail(),
             'name' => $sender['name'],
         ],
-        'subject' => 'Accept Quote and add venue details — Safer Handling',
+        'subject' => ! empty($data['isReminder'])
+            ? 'Reminder: Accept Quote and add venue details — Safer Handling'
+            : 'Accept Quote and add venue details — Safer Handling',
         'htmlContent' => buildBookingDetailsEmailHtml($data),
         'textContent' => buildBookingDetailsEmailText($data),
     ];
@@ -488,6 +523,80 @@ function maybeSendBookingDetailsEmail(int $enquiryId, string $name, string $emai
             'booking_url' => $bookingUrl,
             'preferred_date' => $preferredDate !== '' ? $preferredDate : null,
             'resent' => $force,
+        ]
+    );
+
+    return true;
+}
+
+/**
+ * Automated reminder: send when preferred date is within 24 hours and venue details are still missing.
+ */
+function maybeSendBookingVenueReminderEmail(int $enquiryId, string $name, string $email): bool
+{
+    if (brevoApiKey() === '') {
+        return false;
+    }
+
+    if (enquiryLoggerBookingReminderAlreadySent($enquiryId)) {
+        return false;
+    }
+
+    $bookingMeta = enquiryLoggerGetBookingDetails($enquiryId);
+    if (is_array($bookingMeta) && trim((string) ($bookingMeta['booking_submitted_at'] ?? '')) !== '') {
+        return false;
+    }
+
+    $pdo = enquiryLoggerPdo();
+    $stmt = $pdo->prepare(
+        'SELECT preferred_date_time, date_not_sure, name, email FROM enquiries WHERE id = :id LIMIT 1'
+    );
+    $stmt->execute([':id' => $enquiryId]);
+    $row = $stmt->fetch();
+    if (! is_array($row) || ! empty($row['date_not_sure'])) {
+        return false;
+    }
+
+    $preferredDate = enquiryPreferredDateOnly((string) ($row['preferred_date_time'] ?? ''));
+    $daysUntil = enquiryPreferredDateDaysUntil($preferredDate);
+    // Reminder window: preferred date is tomorrow (1 day) or today if the hourly run missed yesterday.
+    if ($preferredDate === '' || $daysUntil === null || $daysUntil > 1 || $daysUntil < 0) {
+        return false;
+    }
+
+    $toName = trim($name) !== '' ? $name : trim((string) ($row['name'] ?? ''));
+    $toEmail = trim($email) !== '' ? $email : trim((string) ($row['email'] ?? ''));
+    if ($toName === '' || $toEmail === '') {
+        throw new RuntimeException('Customer name and email are required for the venue reminder.');
+    }
+
+    $token = enquiryLoggerEnsureResumeToken($enquiryId);
+    $bookingUrl = buildBookingDetailsUrl($enquiryId, $token);
+    if ($bookingUrl === '') {
+        throw new RuntimeException('Form base URL is not configured.');
+    }
+
+    $preferredLabel = formatPreferredTrainingDate($preferredDate, false);
+
+    sendBookingDetailsEmailViaBrevo($toEmail, $toName, [
+        'name' => $toName,
+        'email' => $toEmail,
+        'bookingUrl' => $bookingUrl,
+        'joiningInstructionsUrl' => bookingJoiningInstructionsUrl(),
+        'isReminder' => true,
+        'preferredDateLabel' => $preferredLabel,
+    ]);
+
+    enquiryLoggerMarkBookingReminderSent($enquiryId);
+    enquiryLoggerEvent(
+        $enquiryId,
+        'booking_reminder_sent',
+        'Accept Quote / venue details reminder sent (24 hours before preferred date).',
+        [
+            'booking_url' => $bookingUrl,
+            'preferred_date' => $preferredDate,
+            'days_until' => $daysUntil,
+            'automated' => true,
         ]
     );
 
@@ -1543,4 +1652,134 @@ function sendQuoteToClient(string $toEmail, string $toName, array $quoteData): a
     sendQuoteEmailViaBrevo($toEmail, $toName, $quoteData);
 
     return ['channel' => 'brevo'];
+}
+
+function buildOfficeUnrepliedAutoReplyHtml(): string
+{
+    $path = __DIR__ . '/email.html';
+    if (! is_file($path)) {
+        throw new RuntimeException('Office auto-reply template email.html was not found.');
+    }
+
+    $html = (string) file_get_contents($path);
+    if (trim($html) === '') {
+        throw new RuntimeException('Office auto-reply template email.html is empty.');
+    }
+
+    $formBase = rtrim(brevoFormBaseUrl(), '/');
+    if ($formBase !== '') {
+        $html = str_replace('https://saferhandling.formsoffline.co.uk/', $formBase . '/', $html);
+        $html = str_replace('https://saferhandling.formsoffline.co.uk', $formBase, $html);
+    }
+
+    return $html;
+}
+
+function buildOfficeUnrepliedAutoReplyText(): string
+{
+    return implode("\n", [
+        'Hello,',
+        '',
+        'Thanks for taking the time to contact our team at Safer-handling - your request is important to us and we endeavour to get back to you as soon as is humanly possible!',
+        '',
+        'Why not create a personalised quote for you or your organisation?',
+        'You can do this by entering some basic information into our sector specific training needs analysis and course costings calculator.',
+        '',
+        'Find out now: ' . (rtrim(brevoFormBaseUrl(), '/') ?: 'https://saferhandling.formsoffline.co.uk'),
+        '',
+        'Safer Handling',
+    ]);
+}
+
+/**
+ * Delayed auto-response for unreplied office inbox mail (template: email.html).
+ */
+function sendOfficeUnrepliedAutoReplyViaBrevo(
+    string $toEmail,
+    string $toName,
+    string $inReplyToMessageId = '',
+    string $originalSubject = ''
+): void {
+    $apiKey = brevoApiKey();
+    if ($apiKey === '') {
+        throw new RuntimeException('Brevo API key is not configured.');
+    }
+
+    $toEmail = trim($toEmail);
+    if ($toEmail === '' || ! filter_var($toEmail, FILTER_VALIDATE_EMAIL)) {
+        throw new RuntimeException('A valid recipient email is required for the office auto-reply.');
+    }
+
+    $officeEmail = brevoOfficeEmail();
+    $senderName = trim((string) (brevoSenderConfig()['name'] ?? 'Safer Handling'));
+    if ($senderName === '') {
+        $senderName = 'Safer Handling';
+    }
+
+    $subject = 'Thanks for taking the time to contact our team at Safer-handling';
+    $originalSubject = trim($originalSubject);
+    if ($originalSubject !== '' && stripos($originalSubject, 'Re:') !== 0) {
+        $subject = 'Re: ' . $originalSubject;
+    } elseif ($originalSubject !== '') {
+        $subject = $originalSubject;
+    }
+
+    $headers = [
+        'X-Safer-Handling-Auto-Reply' => 'unreplied-office',
+    ];
+    $inReplyToMessageId = trim($inReplyToMessageId, " \t<>");
+    if ($inReplyToMessageId !== '') {
+        $headers['In-Reply-To'] = '<' . $inReplyToMessageId . '>';
+        $headers['References'] = '<' . $inReplyToMessageId . '>';
+    }
+
+    $payload = [
+        'sender' => [
+            'email' => $officeEmail,
+            'name' => $senderName,
+        ],
+        'to' => [
+            [
+                'email' => $toEmail,
+                'name' => $toName !== '' ? $toName : $toEmail,
+            ],
+        ],
+        'replyTo' => [
+            'email' => $officeEmail,
+            'name' => $senderName,
+        ],
+        'subject' => $subject,
+        'htmlContent' => buildOfficeUnrepliedAutoReplyHtml(),
+        'textContent' => buildOfficeUnrepliedAutoReplyText(),
+        'headers' => $headers,
+    ];
+
+    $ch = curl_init('https://api.brevo.com/v3/smtp/email');
+    if ($ch === false) {
+        throw new RuntimeException('Unable to initialise Brevo request.');
+    }
+
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_HTTPHEADER => [
+            'accept: application/json',
+            'api-key: ' . $apiKey,
+            'content-type: application/json',
+        ],
+        CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+    ]);
+
+    $raw = curl_exec($ch);
+    $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    if ($raw === false) {
+        $err = curl_error($ch);
+        curl_close($ch);
+        throw new RuntimeException('Brevo API request failed: ' . $err);
+    }
+    curl_close($ch);
+
+    if ($status < 200 || $status >= 300) {
+        throw new RuntimeException('Brevo API returned HTTP ' . $status . ': ' . $raw);
+    }
 }

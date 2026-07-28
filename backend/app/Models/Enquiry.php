@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\InterpretsUtcTimestamps;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Enquiry extends Model
 {
+    use InterpretsUtcTimestamps;
+
     protected $fillable = [
         'name',
         'email',
@@ -41,11 +44,15 @@ class Enquiry extends Model
         'xero_quote_sent_at',
         'xero_invoice_created_at',
         'xero_invoice_sent_at',
+        'kajabi_contact_id',
+        'kajabi_offer_id',
+        'kajabi_enrolled_at',
         'forge_synced_at',
         'forge_event_id',
         'forge_last_action',
         'forge_booking_status',
         'booking_email_sent_at',
+        'booking_reminder_sent_at',
         'booking_submitted_at',
         'terms_accepted_at',
         'resume_token',
@@ -65,8 +72,10 @@ class Enquiry extends Model
             'xero_quote_sent_at' => 'datetime',
             'xero_invoice_created_at' => 'datetime',
             'xero_invoice_sent_at' => 'datetime',
+            'kajabi_enrolled_at' => 'datetime',
             'forge_synced_at' => 'datetime',
             'booking_email_sent_at' => 'datetime',
+            'booking_reminder_sent_at' => 'datetime',
             'booking_submitted_at' => 'datetime',
             'terms_accepted_at' => 'datetime',
             'resume_email_sent_at' => 'datetime',
@@ -208,6 +217,38 @@ class Enquiry extends Model
     public function hasBookingDetails(): bool
     {
         return $this->booking_submitted_at !== null && is_array($this->booking_details_json);
+    }
+
+    public function isKajabiEnrolled(): bool
+    {
+        return $this->kajabi_enrolled_at !== null || filled($this->kajabi_contact_id);
+    }
+
+    /**
+     * Course title assigned in Kajabi (from journey metadata when available).
+     */
+    public function kajabiCourseTitle(): string
+    {
+        $default = '2026 Legal Briefing on the use of Reasonable Force';
+
+        $events = $this->relationLoaded('events')
+            ? $this->events
+            : $this->events()->where('event_type', 'kajabi_enrolled')->orderByDesc('id')->limit(5)->get();
+
+        foreach ($events->sortByDesc('id') as $event) {
+            if ($event->event_type !== 'kajabi_enrolled') {
+                continue;
+            }
+            $metadata = is_array($event->metadata) ? $event->metadata : [];
+            foreach (['kajabi_course_title', 'kajabi_offer_title'] as $key) {
+                $title = trim((string) ($metadata[$key] ?? ''));
+                if ($title !== '') {
+                    return $title;
+                }
+            }
+        }
+
+        return $default;
     }
 
     public function canStaffProgressBooking(): bool

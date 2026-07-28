@@ -45,6 +45,10 @@ class EnquiryProcessRetry
             $actions[] = 'xero_invoice_sent';
         }
 
+        if ($this->canRetryKajabiEnroll($enquiry)) {
+            $actions[] = 'kajabi_enroll';
+        }
+
         return $actions;
     }
 
@@ -177,6 +181,41 @@ class EnquiryProcessRetry
         return xeroEnabled()
             && trim((string) $enquiry->xero_invoice_id) !== ''
             && $enquiry->xero_invoice_sent_at === null;
+    }
+
+    public function canRetryKajabiEnroll(Enquiry $enquiry): bool
+    {
+        if (! function_exists('kajabiEnabled') || ! kajabiEnabled()) {
+            return false;
+        }
+
+        return $enquiry->kajabi_enrolled_at === null
+            && ! $this->hasSuccessfulEvent($enquiry, 'kajabi_enrolled')
+            && (
+                $enquiry->status === 'quote_won'
+                || $enquiry->xero_invoice_sent_at !== null
+                || $this->hasSuccessfulEvent($enquiry, 'xero_invoice_sent')
+                || $this->hasSuccessfulEvent($enquiry, 'monday_moved_quote_won')
+                || $this->hasSuccessfulEvent($enquiry, 'kajabi_enroll_failed')
+            );
+    }
+
+    public function retryKajabiEnroll(Enquiry $enquiry): void
+    {
+        if (! $this->canRetryKajabiEnroll($enquiry) && $enquiry->kajabi_enrolled_at === null) {
+            throw new RuntimeException('Kajabi enrollment cannot be retried for this enquiry yet.');
+        }
+
+        if ($enquiry->kajabi_enrolled_at !== null || $this->hasSuccessfulEvent($enquiry, 'kajabi_enrolled')) {
+            throw new RuntimeException('Kajabi enrollment has already completed.');
+        }
+
+        $result = kajabiMaybeEnrollAfterQuoteWon((int) $enquiry->id, true);
+        $enquiry->refresh();
+
+        if (empty($result['enrolled'])) {
+            throw new RuntimeException((string) ($result['error'] ?? 'Kajabi enrollment failed.'));
+        }
     }
 
     public function retryQuoteEmail(Enquiry $enquiry): void
@@ -501,9 +540,11 @@ class EnquiryProcessRetry
     {
         $processKey = $event->processKey();
         if ($processKey !== null) {
-            $successType = $processKey === 'xero_invoice'
-                ? 'xero_invoice_created'
-                : $processKey.'_sent';
+            $successType = match ($processKey) {
+                'xero_invoice' => 'xero_invoice_created',
+                'kajabi_enroll' => 'kajabi_enrolled',
+                default => $processKey.'_sent',
+            };
             if ($this->hasSuccessfulEvent($enquiry, $successType)) {
                 throw new RuntimeException('This step has already completed successfully.');
             }
@@ -515,6 +556,7 @@ class EnquiryProcessRetry
             'resume_email_failed' => tap('resume_email', fn () => $this->retryResumeEmail($enquiry)),
             'booking_email_failed' => tap('booking_email', fn () => $this->retryBookingEmail($enquiry)),
             'xero_invoice_failed' => tap('xero_invoice', fn () => $this->retryXeroInvoice($enquiry)),
+            'kajabi_enroll_failed' => tap('kajabi_enroll', fn () => $this->retryKajabiEnroll($enquiry)),
             default => throw new RuntimeException('This journey step cannot be retried.'),
         };
     }
@@ -624,6 +666,7 @@ class EnquiryProcessRetry
         require_once $root.'/monday_helpers.php';
         require_once $root.'/brevo_email.php';
         require_once $root.'/xero.php';
+        require_once $root.'/kajabi.php';
         $booted = true;
     }
 }

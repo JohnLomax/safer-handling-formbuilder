@@ -348,6 +348,21 @@ function applyAppSettingsToGlobals(): void
         'kajabi_courses_url',
         (string)($GLOBALS['kajabiCoursesUrl'] ?? 'https://safer-handling.mykajabi.com/store')
     );
+    $GLOBALS['kajabiClientId'] = appSetting('kajabi_client_id', (string)($GLOBALS['kajabiClientId'] ?? ''));
+    $GLOBALS['kajabiClientSecret'] = appSetting('kajabi_client_secret', (string)($GLOBALS['kajabiClientSecret'] ?? ''));
+    $GLOBALS['kajabiSiteId'] = appSetting('kajabi_site_id', (string)($GLOBALS['kajabiSiteId'] ?? '157262'));
+    $GLOBALS['kajabiOfferId'] = appSetting('kajabi_offer_id', (string)($GLOBALS['kajabiOfferId'] ?? '2150036193'));
+    $GLOBALS['kajabiOfferTitle'] = appSetting(
+        'kajabi_offer_title',
+        (string)($GLOBALS['kajabiOfferTitle'] ?? '2026 Legal Briefing on the use of Reasonable Force')
+    );
+    // Leave unset when not configured so kajabiEnabled() can auto-enable from credentials.
+    $kajabiEnabledRaw = appSetting('kajabi_enabled', '');
+    if ($kajabiEnabledRaw !== '') {
+        $GLOBALS['kajabiEnabled'] = filter_var($kajabiEnabledRaw, FILTER_VALIDATE_BOOLEAN);
+    }
+    $GLOBALS['kajabiAccessToken'] = appSetting('kajabi_access_token', (string)($GLOBALS['kajabiAccessToken'] ?? ''));
+    $GLOBALS['kajabiTokenExpiresAt'] = appSetting('kajabi_token_expires_at', (string)($GLOBALS['kajabiTokenExpiresAt'] ?? ''));
     $GLOBALS['brevoApiKey'] = appSetting('brevo_api_key', (string)($GLOBALS['brevoApiKey'] ?? ''));
     $GLOBALS['brevoEmailEnabled'] = appSettingBool('brevo_email_enabled', (bool)($GLOBALS['brevoEmailEnabled'] ?? false));
     $GLOBALS['brevoSenderEmail'] = appSetting('brevo_sender_email', (string)($GLOBALS['brevoSenderEmail'] ?? ''));
@@ -359,6 +374,15 @@ function applyAppSettingsToGlobals(): void
     $GLOBALS['brevoQuoteAcceptUrl'] = appSetting('brevo_quote_accept_url', (string)($GLOBALS['brevoQuoteAcceptUrl'] ?? ''));
     $GLOBALS['formBaseUrl'] = appSetting('form_base_url', (string)($GLOBALS['formBaseUrl'] ?? ''));
     $GLOBALS['brevoResumeEmailEnabled'] = appSettingBool('brevo_resume_email_enabled', (bool)($GLOBALS['brevoResumeEmailEnabled'] ?? true));
+    $GLOBALS['officeAutoReplyEnabled'] = appSettingBool('office_auto_reply_enabled', (bool)($GLOBALS['officeAutoReplyEnabled'] ?? false));
+    $GLOBALS['officeAutoReplyHours'] = appSetting('office_auto_reply_hours', (string)($GLOBALS['officeAutoReplyHours'] ?? '8'));
+    $GLOBALS['officeImapHost'] = appSetting('office_imap_host', (string)($GLOBALS['officeImapHost'] ?? 'outlook.office365.com'));
+    $GLOBALS['officeImapPort'] = appSetting('office_imap_port', (string)($GLOBALS['officeImapPort'] ?? '993'));
+    $GLOBALS['officeImapEncryption'] = appSetting('office_imap_encryption', (string)($GLOBALS['officeImapEncryption'] ?? 'ssl'));
+    $GLOBALS['officeImapUsername'] = appSetting('office_imap_username', (string)($GLOBALS['officeImapUsername'] ?? 'office@safer-handling.co.uk'));
+    $GLOBALS['officeImapPassword'] = appSetting('office_imap_password', (string)($GLOBALS['officeImapPassword'] ?? ''));
+    $GLOBALS['officeImapInboxFolder'] = appSetting('office_imap_inbox_folder', (string)($GLOBALS['officeImapInboxFolder'] ?? 'INBOX'));
+    $GLOBALS['officeImapSentFolder'] = appSetting('office_imap_sent_folder', (string)($GLOBALS['officeImapSentFolder'] ?? 'Sent Items'));
     $GLOBALS['xeroEnabled'] = appSettingBool('xero_enabled', (bool)($GLOBALS['xeroEnabled'] ?? false));
     $GLOBALS['xeroClientId'] = appSetting('xero_client_id', (string)($GLOBALS['xeroClientId'] ?? ''));
     $GLOBALS['xeroClientSecret'] = appSetting('xero_client_secret', (string)($GLOBALS['xeroClientSecret'] ?? ''));

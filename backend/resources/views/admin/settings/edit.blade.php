@@ -99,6 +99,16 @@
                 </div>
 
                 <div>
+                    <x-input-label for="brevo_webhook_secret" value="Brevo webhook secret (email opens)" />
+                    <x-text-input id="brevo_webhook_secret" name="brevo_webhook_secret" type="password" class="mt-1 block w-full font-mono text-sm" :value="old('brevo_webhook_secret', $settings['brevo_webhook_secret'] ?? '')" autocomplete="off" />
+                    <p class="mt-1 text-xs text-sh-mid">
+                        Optional. In Brevo → Transactional → Webhooks, add
+                        <code class="rounded bg-sh-surface px-1">{{ rtrim(config('app.url'), '/') }}/api/brevo/webhooks?token=YOUR_SECRET</code>
+                        for <strong>Opened</strong> / <strong>Unique opened</strong>. Leave blank when saving to keep the existing secret.
+                    </p>
+                </div>
+
+                <div>
                     <x-input-label for="form_base_url" value="Public form base URL" />
                     <x-text-input id="form_base_url" name="form_base_url" type="url" class="mt-1 block w-full" :value="old('form_base_url', $settings['form_base_url'] ?? '')" placeholder="https://www.example.com" />
                     <p class="mt-1 text-xs text-sh-mid">Used in Edit Enquiry Emails. Leave blank to auto-detect from the form server.</p>

@@ -374,6 +374,7 @@ function applyAppSettingsToGlobals(): void
     $GLOBALS['brevoQuoteAcceptUrl'] = appSetting('brevo_quote_accept_url', (string)($GLOBALS['brevoQuoteAcceptUrl'] ?? ''));
     $GLOBALS['formBaseUrl'] = appSetting('form_base_url', (string)($GLOBALS['formBaseUrl'] ?? ''));
     $GLOBALS['brevoResumeEmailEnabled'] = appSettingBool('brevo_resume_email_enabled', (bool)($GLOBALS['brevoResumeEmailEnabled'] ?? true));
+    $GLOBALS['brevoWebhookSecret'] = appSetting('brevo_webhook_secret', (string)($GLOBALS['brevoWebhookSecret'] ?? ''));
     $GLOBALS['officeAutoReplyEnabled'] = appSettingBool('office_auto_reply_enabled', (bool)($GLOBALS['officeAutoReplyEnabled'] ?? false));
     $GLOBALS['officeAutoReplyHours'] = appSetting('office_auto_reply_hours', (string)($GLOBALS['officeAutoReplyHours'] ?? '8'));
     $GLOBALS['officeImapHost'] = appSetting('office_imap_host', (string)($GLOBALS['officeImapHost'] ?? 'outlook.office365.com'));

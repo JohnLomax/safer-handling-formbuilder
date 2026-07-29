@@ -70,8 +70,19 @@
                         <x-xero-badge compact class="!h-3.5 !w-3.5" />
                         Xero Quote
                     </p>
-                    <p class="mt-1 text-sm font-semibold text-sh-text">{{ $enquiry->quote_email_sent_at ? 'Sent' : 'Not sent' }}</p>
-                    <p class="text-xs text-sh-mid">{{ $enquiry->quote_email_sent_at?->format('d M Y H:i') ?? '—' }}</p>
+                    @php $quoteOpenedAt = $enquiry->customerEmailOpenedAt('quote_email_sent'); @endphp
+                    <p class="mt-1 text-sm font-semibold text-sh-text">
+                        @if ($quoteOpenedAt)
+                            Read
+                        @elseif ($enquiry->quote_email_sent_at)
+                            Sent
+                        @else
+                            Not sent
+                        @endif
+                    </p>
+                    <p class="text-xs text-sh-mid">
+                        {{ $quoteOpenedAt?->format('d M Y H:i') ?? ($enquiry->quote_email_sent_at?->format('d M Y H:i') ?? '—') }}
+                    </p>
                 </div>
                 <div class="enquiry-stat">
                     <p class="text-xs font-semibold uppercase tracking-wide text-sh-mid inline-flex items-center gap-1.5">
@@ -107,13 +118,39 @@
                 </div>
                 <div class="enquiry-stat">
                     <p class="text-xs font-semibold uppercase tracking-wide text-sh-mid">Edit Enquiry Email</p>
-                    <p class="mt-1 text-sm font-semibold text-sh-text">{{ $enquiry->resume_email_sent_at ? 'Sent' : 'Not sent' }}</p>
-                    <p class="text-xs text-sh-mid">{{ $enquiry->resume_email_sent_at?->format('d M Y H:i') ?? '—' }}</p>
+                    @php $resumeOpenedAt = $enquiry->customerEmailOpenedAt('resume_email_sent'); @endphp
+                    <p class="mt-1 text-sm font-semibold text-sh-text">
+                        @if ($resumeOpenedAt)
+                            Read
+                        @elseif ($enquiry->resume_email_sent_at)
+                            Sent
+                        @else
+                            Not sent
+                        @endif
+                    </p>
+                    <p class="text-xs text-sh-mid">
+                        {{ $resumeOpenedAt?->format('d M Y H:i') ?? ($enquiry->resume_email_sent_at?->format('d M Y H:i') ?? '—') }}
+                    </p>
                 </div>
                 <div class="enquiry-stat">
                     <p class="text-xs font-semibold uppercase tracking-wide text-sh-mid">Booking details</p>
-                    <p class="mt-1 text-sm font-semibold text-sh-text">{{ $enquiry->booking_submitted_at ? 'Submitted' : ($enquiry->booking_email_sent_at ? 'Email sent' : 'Pending') }}</p>
-                    <p class="text-xs text-sh-mid">{{ $enquiry->booking_submitted_at?->format('d M Y H:i') ?? ($enquiry->booking_email_sent_at?->format('d M Y H:i') ?? '—') }}</p>
+                    @php $bookingOpenedAt = $enquiry->customerEmailOpenedAt('booking_email_sent'); @endphp
+                    <p class="mt-1 text-sm font-semibold text-sh-text">
+                        @if ($enquiry->booking_submitted_at)
+                            Submitted
+                        @elseif ($bookingOpenedAt)
+                            Email read
+                        @elseif ($enquiry->booking_email_sent_at)
+                            Email sent
+                        @else
+                            Pending
+                        @endif
+                    </p>
+                    <p class="text-xs text-sh-mid">
+                        {{ $enquiry->booking_submitted_at?->format('d M Y H:i')
+                            ?? ($bookingOpenedAt?->format('d M Y H:i')
+                            ?? ($enquiry->booking_email_sent_at?->format('d M Y H:i') ?? '—')) }}
+                    </p>
                 </div>
             </div>
 
@@ -218,7 +255,10 @@
                                         <x-xero-badge compact />
                                         <span class="text-sm font-semibold text-sh-text">Xero Quote</span>
                                     </div>
-                                    @if ($enquiry->quote_email_sent_at)
+                                    @php $quoteOpenedAtCard = $enquiry->customerEmailOpenedAt('quote_email_sent'); @endphp
+                                    @if ($quoteOpenedAtCard)
+                                        <span class="status-pill status-pill-success">Read</span>
+                                    @elseif ($enquiry->quote_email_sent_at)
                                         <span class="status-pill status-pill-success">Sent</span>
                                     @else
                                         <span class="status-pill status-pill-muted">Not sent</span>
@@ -227,7 +267,9 @@
                                 @if ($enquiry->xero_quote_number)
                                     <p class="mt-3 text-xs text-sh-mid">{{ $enquiry->xero_quote_number }}</p>
                                 @endif
-                                @if ($enquiry->quote_email_sent_at)
+                                @if ($quoteOpenedAtCard)
+                                    <p class="mt-1 text-xs text-sh-mid">Opened {{ $quoteOpenedAtCard->format('d M Y · H:i') }}</p>
+                                @elseif ($enquiry->quote_email_sent_at)
                                     <p class="mt-1 text-xs text-sh-mid">{{ $enquiry->quote_email_sent_at->format('d M Y · H:i') }}</p>
                                 @endif
                                 @if (in_array('quote_email', $retryableActions, true))
@@ -370,7 +412,13 @@
                                     @endif
                                 </div>
                                 @if ($enquiry->resume_email_sent_at)
-                                    <p class="mt-3 text-xs text-sh-mid">Edit Enquiry Email {{ $enquiry->resume_email_sent_at->format('d M Y · H:i') }}</p>
+                                    @php $resumeOpenedAtCard = $enquiry->customerEmailOpenedAt('resume_email_sent'); @endphp
+                                    <p class="mt-3 text-xs text-sh-mid">
+                                        Edit Enquiry Email {{ $enquiry->resume_email_sent_at->format('d M Y · H:i') }}
+                                        @if ($resumeOpenedAtCard)
+                                            · <span class="font-semibold text-[#047857]">Read {{ $resumeOpenedAtCard->format('d M Y · H:i') }}</span>
+                                        @endif
+                                    </p>
                                 @endif
                                 @if ($enquiry->submitted_at)
                                     <p class="mt-1 text-xs text-sh-mid">Form submitted {{ $enquiry->submitted_at->format('d M Y · H:i') }}</p>
@@ -418,8 +466,11 @@
                             <div class="rounded-[12px] border border-sh-border bg-white/70 p-4">
                                 <div class="flex items-center justify-between gap-3">
                                     <span class="text-sm font-semibold text-sh-text">Booking details</span>
+                                    @php $bookingOpenedAtCard = $enquiry->customerEmailOpenedAt('booking_email_sent'); @endphp
                                     @if ($enquiry->booking_submitted_at)
                                         <span class="status-pill status-pill-success">Completed</span>
+                                    @elseif ($bookingOpenedAtCard)
+                                        <span class="status-pill status-pill-success">Email read</span>
                                     @elseif ($enquiry->booking_email_sent_at)
                                         <span class="status-pill status-pill-progress">Awaiting client</span>
                                     @else
@@ -427,7 +478,12 @@
                                     @endif
                                 </div>
                                 @if ($enquiry->booking_email_sent_at)
-                                    <p class="mt-3 text-xs text-sh-mid">Email {{ $enquiry->booking_email_sent_at->format('d M Y · H:i') }}</p>
+                                    <p class="mt-3 text-xs text-sh-mid">
+                                        Email {{ $enquiry->booking_email_sent_at->format('d M Y · H:i') }}
+                                        @if ($bookingOpenedAtCard)
+                                            · <span class="font-semibold text-[#047857]">Read {{ $bookingOpenedAtCard->format('d M Y · H:i') }}</span>
+                                        @endif
+                                    </p>
                                 @endif
                                 @if ($enquiry->booking_submitted_at)
                                     <p class="mt-1 text-xs text-sh-mid">Form submitted {{ $enquiry->booking_submitted_at->format('d M Y · H:i') }}</p>
@@ -571,6 +627,9 @@
                                                 <x-monday-badge compact class="!h-4 !w-4" />
                                             @endif
                                             {{ $event->label() }}
+                                            @if ($event->wasOpenedByCustomer())
+                                                <span class="status-pill status-pill-success !px-2 !py-0.5">Read</span>
+                                            @endif
                                         </p>
                                         <div class="flex shrink-0 flex-wrap items-center gap-2">
                                             @php

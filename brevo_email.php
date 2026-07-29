@@ -25,6 +25,227 @@ function brevoApiKey(): string
     return trim((string)(getenv('BREVO_API_KEY') ?: ($GLOBALS['brevoApiKey'] ?? '')));
 }
 
+/**
+ * Optional shared secret for POST /api/brevo/webhooks (?token=…).
+ */
+function brevoWebhookSecret(): string
+{
+    $env = trim((string) (getenv('BREVO_WEBHOOK_SECRET') ?: ''));
+    if ($env !== '') {
+        return $env;
+    }
+
+    if (function_exists('applyAppSettingsToGlobals')) {
+        applyAppSettingsToGlobals();
+    }
+
+    return trim((string) ($GLOBALS['brevoWebhookSecret'] ?? ''));
+}
+
+/**
+ * Normalise Brevo message-id for storage / matching.
+ */
+function brevoNormaliseMessageId(string $messageId): string
+{
+    return trim($messageId, " \t<>\"'");
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @return array<string, mixed>
+ */
+function brevoWithEnquiryTracking(array $payload, int $enquiryId, string $kind): array
+{
+    if ($enquiryId < 1 || $kind === '') {
+        return $payload;
+    }
+
+    $tags = [];
+    if (isset($payload['tags']) && is_array($payload['tags'])) {
+        foreach ($payload['tags'] as $tag) {
+            $tag = trim((string) $tag);
+            if ($tag !== '') {
+                $tags[] = $tag;
+            }
+        }
+    }
+    $tags[] = 'enquiry-' . $enquiryId;
+    $tags[] = 'kind-' . $kind;
+    $payload['tags'] = array_values(array_unique($tags));
+
+    $headers = [];
+    if (isset($payload['headers']) && is_array($payload['headers'])) {
+        $headers = $payload['headers'];
+    }
+    $headers['X-Mailin-custom'] = json_encode(
+        ['enquiryId' => $enquiryId, 'kind' => $kind],
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+    );
+    $payload['headers'] = $headers;
+
+    return $payload;
+}
+
+/**
+ * POST to Brevo transactional SMTP API. Returns Brevo messageId when present.
+ *
+ * @param array<string, mixed> $payload
+ */
+function brevoExecuteSmtpSend(array $payload): string
+{
+    $apiKey = brevoApiKey();
+    if ($apiKey === '') {
+        throw new RuntimeException('Brevo API key is not configured.');
+    }
+
+    $ch = curl_init('https://api.brevo.com/v3/smtp/email');
+    if ($ch === false) {
+        throw new RuntimeException('Could not initialize cURL for Brevo.');
+    }
+
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_HTTPHEADER => [
+            'accept: application/json',
+            'api-key: ' . $apiKey,
+            'content-type: application/json',
+        ],
+        CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+    ]);
+
+    $raw = curl_exec($ch);
+    $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    if ($raw === false) {
+        $err = curl_error($ch);
+        curl_close($ch);
+        throw new RuntimeException('Brevo API request failed: ' . $err);
+    }
+    curl_close($ch);
+
+    $decoded = json_decode($raw, true);
+    if ($status >= 400) {
+        $message = is_array($decoded) ? trim((string) ($decoded['message'] ?? '')) : '';
+        if ($message === '') {
+            $message = 'Brevo API returned HTTP ' . $status . '.';
+        }
+        throw new RuntimeException($message);
+    }
+
+    $messageId = '';
+    if (is_array($decoded)) {
+        $messageId = brevoNormaliseMessageId((string) ($decoded['messageId'] ?? $decoded['message_id'] ?? ''));
+    }
+
+    return $messageId;
+}
+
+/**
+ * Map tracking kind → enquiry journey event type for the outbound email.
+ */
+function brevoEmailKindToSentEventType(string $kind): ?string
+{
+    return match ($kind) {
+        'quote' => 'quote_email_sent',
+        'resume' => 'resume_email_sent',
+        'booking' => 'booking_email_sent',
+        'booking_reminder' => 'booking_reminder_sent',
+        'invoice' => 'xero_invoice_emailed',
+        default => null,
+    };
+}
+
+/**
+ * Human label for a tracked customer email kind.
+ */
+function brevoEmailKindLabel(string $kind): string
+{
+    return match ($kind) {
+        'quote' => 'Quote email',
+        'resume' => 'Edit Enquiry Email',
+        'booking' => 'Accept Quote / venue details email',
+        'booking_reminder' => 'Accept Quote / venue details reminder',
+        'invoice' => 'Invoice email',
+        default => 'Email',
+    };
+}
+
+/**
+ * Record that a customer opened a Brevo transactional email (from webhook).
+ *
+ * @param array<string, mixed> $payload
+ * @return array{recorded:bool,enquiryId:?int,kind:?string,firstOpen:bool}
+ */
+function brevoHandleTransactionalOpenWebhook(array $payload): array
+{
+    require_once __DIR__ . '/enquiry_logger.php';
+
+    $event = strtolower(trim((string) ($payload['event'] ?? '')));
+    if (! in_array($event, ['opened', 'uniqueopened', 'unique_opened'], true)) {
+        return ['recorded' => false, 'enquiryId' => null, 'kind' => null, 'firstOpen' => false];
+    }
+
+    $messageId = brevoNormaliseMessageId((string) ($payload['message-id'] ?? $payload['messageId'] ?? ''));
+    $enquiryId = 0;
+    $kind = '';
+
+    $customRaw = trim((string) ($payload['X-Mailin-custom'] ?? $payload['x-mailin-custom'] ?? ''));
+    if ($customRaw !== '') {
+        $custom = json_decode($customRaw, true);
+        if (is_array($custom)) {
+            $enquiryId = (int) ($custom['enquiryId'] ?? $custom['enquiry_id'] ?? 0);
+            $kind = trim((string) ($custom['kind'] ?? ''));
+        }
+    }
+
+    $tags = $payload['tags'] ?? [];
+    if (! is_array($tags) && is_string($tags) && $tags !== '') {
+        $decodedTags = json_decode($tags, true);
+        if (is_array($decodedTags)) {
+            $tags = $decodedTags;
+        } else {
+            $split = preg_split('/\s*,\s*/', trim($tags, "[] \t\"'"));
+            $tags = is_array($split) ? $split : [];
+        }
+    }
+    if (is_array($tags)) {
+        foreach ($tags as $tag) {
+            $tag = trim((string) $tag);
+            if ($enquiryId < 1 && preg_match('/^enquiry-(\d+)$/i', $tag, $m)) {
+                $enquiryId = (int) $m[1];
+            }
+            if ($kind === '' && preg_match('/^kind-(.+)$/i', $tag, $m)) {
+                $kind = trim((string) $m[1]);
+            }
+        }
+    }
+
+    if ($enquiryId < 1) {
+        return ['recorded' => false, 'enquiryId' => null, 'kind' => null, 'firstOpen' => false];
+    }
+
+    $result = enquiryLoggerMarkCustomerEmailOpened(
+        $enquiryId,
+        $messageId,
+        $kind,
+        [
+            'event' => $event,
+            'email' => trim((string) ($payload['email'] ?? '')),
+            'subject' => trim((string) ($payload['subject'] ?? '')),
+            'opened_at_ts' => (int) ($payload['ts_event'] ?? $payload['ts'] ?? 0),
+            'user_agent' => trim((string) ($payload['user_agent'] ?? '')),
+            'device_used' => trim((string) ($payload['device_used'] ?? '')),
+        ]
+    );
+
+    return [
+        'recorded' => $result['updated'],
+        'enquiryId' => $enquiryId,
+        'kind' => $result['kind'] !== '' ? $result['kind'] : ($kind !== '' ? $kind : null),
+        'firstOpen' => $result['firstOpen'],
+    ];
+}
+
 function brevoEmailEnabled(): bool
 {
     $env = getenv('BREVO_EMAIL_ENABLED');
@@ -392,7 +613,7 @@ function buildBookingDetailsEmailText(array $data): string
 /**
  * @param array<string, mixed> $data
  */
-function sendBookingDetailsEmailViaBrevo(string $toEmail, string $toName, array $data): void
+function sendBookingDetailsEmailViaBrevo(string $toEmail, string $toName, array $data): string
 {
     $apiKey = brevoApiKey();
     if ($apiKey === '') {
@@ -424,39 +645,11 @@ function sendBookingDetailsEmailViaBrevo(string $toEmail, string $toName, array 
         'textContent' => buildBookingDetailsEmailText($data),
     ];
 
-    $ch = curl_init('https://api.brevo.com/v3/smtp/email');
-    if ($ch === false) {
-        throw new RuntimeException('Unable to initialise Brevo request.');
-    }
+    $enquiryId = (int) ($data['enquiryId'] ?? 0);
+    $kind = ! empty($data['isReminder']) ? 'booking_reminder' : 'booking';
+    $payload = brevoWithEnquiryTracking($payload, $enquiryId, $kind);
 
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_POST => true,
-        CURLOPT_HTTPHEADER => [
-            'accept: application/json',
-            'api-key: ' . $apiKey,
-            'content-type: application/json',
-        ],
-        CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-    ]);
-
-    $raw = curl_exec($ch);
-    $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    if ($raw === false) {
-        $err = curl_error($ch);
-        curl_close($ch);
-        throw new RuntimeException('Brevo API request failed: ' . $err);
-    }
-    curl_close($ch);
-
-    $decoded = json_decode($raw, true);
-    if ($status >= 400) {
-        $message = is_array($decoded) ? trim((string)($decoded['message'] ?? '')) : '';
-        if ($message === '') {
-            $message = 'Brevo API returned HTTP ' . $status . '.';
-        }
-        throw new RuntimeException($message);
-    }
+    return brevoExecuteSmtpSend($payload);
 }
 
 /**
@@ -505,9 +698,10 @@ function maybeSendBookingDetailsEmail(int $enquiryId, string $name, string $emai
         throw new RuntimeException('Form base URL is not configured.');
     }
 
-    sendBookingDetailsEmailViaBrevo($email, $name, [
+    $messageId = sendBookingDetailsEmailViaBrevo($email, $name, [
         'name' => $name,
         'email' => $email,
+        'enquiryId' => $enquiryId,
         'bookingUrl' => $bookingUrl,
         'joiningInstructionsUrl' => bookingJoiningInstructionsUrl(),
     ]);
@@ -523,6 +717,8 @@ function maybeSendBookingDetailsEmail(int $enquiryId, string $name, string $emai
             'booking_url' => $bookingUrl,
             'preferred_date' => $preferredDate !== '' ? $preferredDate : null,
             'resent' => $force,
+            'brevo_message_id' => $messageId !== '' ? $messageId : null,
+            'email_kind' => 'booking',
         ]
     );
 
@@ -578,9 +774,10 @@ function maybeSendBookingVenueReminderEmail(int $enquiryId, string $name, string
 
     $preferredLabel = formatPreferredTrainingDate($preferredDate, false);
 
-    sendBookingDetailsEmailViaBrevo($toEmail, $toName, [
+    $messageId = sendBookingDetailsEmailViaBrevo($toEmail, $toName, [
         'name' => $toName,
         'email' => $toEmail,
+        'enquiryId' => $enquiryId,
         'bookingUrl' => $bookingUrl,
         'joiningInstructionsUrl' => bookingJoiningInstructionsUrl(),
         'isReminder' => true,
@@ -597,6 +794,8 @@ function maybeSendBookingVenueReminderEmail(int $enquiryId, string $name, string
             'preferred_date' => $preferredDate,
             'days_until' => $daysUntil,
             'automated' => true,
+            'brevo_message_id' => $messageId !== '' ? $messageId : null,
+            'email_kind' => 'booking_reminder',
         ]
     );
 
@@ -675,13 +874,8 @@ function buildResumeEnquiryEmailText(array $data): string
 /**
  * @param array<string, mixed> $data
  */
-function sendResumeEnquiryEmailViaBrevo(string $toEmail, string $toName, array $data): void
+function sendResumeEnquiryEmailViaBrevo(string $toEmail, string $toName, array $data): string
 {
-    $apiKey = brevoApiKey();
-    if ($apiKey === '') {
-        throw new RuntimeException('Brevo API key is not configured.');
-    }
-
     $resumeUrl = trim((string)($data['resumeUrl'] ?? ''));
     if ($resumeUrl === '') {
         throw new RuntimeException('Resume form URL is not configured.');
@@ -705,39 +899,9 @@ function sendResumeEnquiryEmailViaBrevo(string $toEmail, string $toName, array $
         'textContent' => buildResumeEnquiryEmailText($data),
     ];
 
-    $ch = curl_init('https://api.brevo.com/v3/smtp/email');
-    if ($ch === false) {
-        throw new RuntimeException('Could not initialize cURL for Brevo.');
-    }
+    $payload = brevoWithEnquiryTracking($payload, (int) ($data['enquiryId'] ?? 0), 'resume');
 
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_POST => true,
-        CURLOPT_HTTPHEADER => [
-            'accept: application/json',
-            'api-key: ' . $apiKey,
-            'content-type: application/json',
-        ],
-        CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-    ]);
-
-    $raw = curl_exec($ch);
-    $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    if ($raw === false) {
-        $err = curl_error($ch);
-        curl_close($ch);
-        throw new RuntimeException('Brevo API request failed: ' . $err);
-    }
-    curl_close($ch);
-
-    $decoded = json_decode($raw, true);
-    if ($status >= 400) {
-        $message = is_array($decoded) ? trim((string)($decoded['message'] ?? '')) : '';
-        if ($message === '') {
-            $message = 'Brevo API returned HTTP ' . $status . '.';
-        }
-        throw new RuntimeException($message);
-    }
+    return brevoExecuteSmtpSend($payload);
 }
 
 function maybeSendResumeEnquiryEmail(
@@ -762,9 +926,10 @@ function maybeSendResumeEnquiryEmail(
         throw new RuntimeException('Form base URL is not configured.');
     }
 
-    sendResumeEnquiryEmailViaBrevo($email, $name, [
+    $messageId = sendResumeEnquiryEmailViaBrevo($email, $name, [
         'name' => $name,
         'email' => $email,
+        'enquiryId' => $enquiryId,
         'enquiryType' => $enquiryType,
         'resumeUrl' => $resumeUrl,
     ]);
@@ -776,7 +941,11 @@ function maybeSendResumeEnquiryEmail(
         $force
             ? 'Edit Enquiry Email resent so the customer can return to their saved form.'
             : 'Edit Enquiry Email sent so the customer can return to their saved form.',
-        ['resent' => $force]
+        [
+            'resent' => $force,
+            'brevo_message_id' => $messageId !== '' ? $messageId : null,
+            'email_kind' => 'resume',
+        ]
     );
 
     if ($moveMondayAfterSend) {
@@ -1164,13 +1333,8 @@ function buildQuoteEmailText(array $data): string
  * @param array<string, mixed> $quoteData
  * @param array{content?:string,filename?:string}|null $pdfAttachment Raw PDF bytes + filename
  */
-function sendQuoteEmailViaBrevo(string $toEmail, string $toName, array $quoteData, ?array $pdfAttachment = null): void
+function sendQuoteEmailViaBrevo(string $toEmail, string $toName, array $quoteData, ?array $pdfAttachment = null): string
 {
-    $apiKey = brevoApiKey();
-    if ($apiKey === '') {
-        throw new RuntimeException('Brevo API key is not configured.');
-    }
-
     $sender = brevoSenderConfig();
     $payload = [
         'sender' => $sender,
@@ -1201,52 +1365,17 @@ function sendQuoteEmailViaBrevo(string $toEmail, string $toName, array $quoteDat
         ]];
     }
 
-    $ch = curl_init('https://api.brevo.com/v3/smtp/email');
-    if ($ch === false) {
-        throw new RuntimeException('Could not initialize cURL for Brevo.');
-    }
+    $payload = brevoWithEnquiryTracking($payload, (int) ($quoteData['enquiryId'] ?? 0), 'quote');
 
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_POST => true,
-        CURLOPT_HTTPHEADER => [
-            'accept: application/json',
-            'api-key: ' . $apiKey,
-            'content-type: application/json',
-        ],
-        CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-    ]);
-
-    $raw = curl_exec($ch);
-    $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    if ($raw === false) {
-        $err = curl_error($ch);
-        curl_close($ch);
-        throw new RuntimeException('Brevo API request failed: ' . $err);
-    }
-    curl_close($ch);
-
-    $decoded = json_decode($raw, true);
-    if ($status >= 400) {
-        $message = is_array($decoded) ? trim((string)($decoded['message'] ?? '')) : '';
-        if ($message === '') {
-            $message = 'Brevo API returned HTTP ' . $status . '.';
-        }
-        throw new RuntimeException($message);
-    }
+    return brevoExecuteSmtpSend($payload);
 }
 
 /**
  * @param array<string, mixed> $data
  * @param array{content?:string,filename?:string}|null $pdfAttachment
  */
-function sendInvoiceEmailViaBrevo(string $toEmail, string $toName, array $data, ?array $pdfAttachment = null): void
+function sendInvoiceEmailViaBrevo(string $toEmail, string $toName, array $data, ?array $pdfAttachment = null): string
 {
-    $apiKey = brevoApiKey();
-    if ($apiKey === '') {
-        throw new RuntimeException('Brevo API key is not configured.');
-    }
-
     $toEmail = trim($toEmail);
     if ($toEmail === '' || ! filter_var($toEmail, FILTER_VALIDATE_EMAIL)) {
         throw new RuntimeException('A valid customer email is required to send the invoice.');
@@ -1287,39 +1416,9 @@ function sendInvoiceEmailViaBrevo(string $toEmail, string $toName, array $data, 
         ]];
     }
 
-    $ch = curl_init('https://api.brevo.com/v3/smtp/email');
-    if ($ch === false) {
-        throw new RuntimeException('Could not initialize cURL for Brevo.');
-    }
+    $payload = brevoWithEnquiryTracking($payload, (int) ($data['enquiryId'] ?? 0), 'invoice');
 
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_POST => true,
-        CURLOPT_HTTPHEADER => [
-            'accept: application/json',
-            'api-key: ' . $apiKey,
-            'content-type: application/json',
-        ],
-        CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-    ]);
-
-    $raw = curl_exec($ch);
-    $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    if ($raw === false) {
-        $err = curl_error($ch);
-        curl_close($ch);
-        throw new RuntimeException('Brevo API request failed: ' . $err);
-    }
-    curl_close($ch);
-
-    $decoded = json_decode($raw, true);
-    if ($status >= 400) {
-        $message = is_array($decoded) ? trim((string) ($decoded['message'] ?? '')) : '';
-        if ($message === '') {
-            $message = 'Brevo API returned HTTP ' . $status . '.';
-        }
-        throw new RuntimeException($message);
-    }
+    return brevoExecuteSmtpSend($payload);
 }
 
 /**
@@ -1747,7 +1846,7 @@ function buildQuoteEmailDataFromSubmission(array $post, string $name, string $em
  * otherwise send the Brevo HTML quote email only.
  *
  * @param array<string, mixed> $quoteData
- * @return array{channel:string,xero?:array<string,mixed>}
+ * @return array{channel:string,brevo_message_id?:string,xero?:array<string,mixed>}
  */
 function sendQuoteToClient(string $toEmail, string $toName, array $quoteData): array
 {
@@ -1772,10 +1871,11 @@ function sendQuoteToClient(string $toEmail, string $toName, array $quoteData): a
         if ($quoteNumber !== '') {
             $quoteData['xeroQuoteNumber'] = $quoteNumber;
         }
-        sendQuoteEmailViaBrevo($toEmail, $toName, $quoteData, $result['pdf'] ?? null);
+        $messageId = sendQuoteEmailViaBrevo($toEmail, $toName, $quoteData, $result['pdf'] ?? null);
 
         return [
             'channel' => 'xero',
+            'brevo_message_id' => $messageId,
             'xero' => [
                 'contact' => $result['contact'],
                 'quote' => $result['quote'],
@@ -1783,9 +1883,9 @@ function sendQuoteToClient(string $toEmail, string $toName, array $quoteData): a
         ];
     }
 
-    sendQuoteEmailViaBrevo($toEmail, $toName, $quoteData);
+    $messageId = sendQuoteEmailViaBrevo($toEmail, $toName, $quoteData);
 
-    return ['channel' => 'brevo'];
+    return ['channel' => 'brevo', 'brevo_message_id' => $messageId];
 }
 
 function buildOfficeUnrepliedAutoReplyHtml(): string

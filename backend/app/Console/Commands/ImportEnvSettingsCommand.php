@@ -35,6 +35,7 @@ class ImportEnvSettingsCommand extends Command
         'BREVO_API_KEY' => 'brevo_api_key',
         'BREVO_EMAIL_ENABLED' => 'brevo_email_enabled',
         'BREVO_RESUME_EMAIL_ENABLED' => 'brevo_resume_email_enabled',
+        'BREVO_WEBHOOK_SECRET' => 'brevo_webhook_secret',
         'BREVO_SENDER_EMAIL' => 'brevo_sender_email',
         'BREVO_SENDER_NAME' => 'brevo_sender_name',
         'BREVO_CONTACT_EMAIL' => 'brevo_contact_email',

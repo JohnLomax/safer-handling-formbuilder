@@ -1116,6 +1116,162 @@ function enquiryLoggerEvent(int $enquiryId, string $eventType, string $message, 
 }
 
 /**
+ * Mark a customer email as opened (Brevo webhook). Updates the matching sent event
+ * metadata and logs email_opened on first open.
+ *
+ * @param array<string, mixed> $extra
+ * @return array{updated:bool,firstOpen:bool,kind:string}
+ */
+function enquiryLoggerMarkCustomerEmailOpened(
+    int $enquiryId,
+    string $messageId,
+    string $kind = '',
+    array $extra = []
+): array {
+    $pdo = enquiryLoggerPdo();
+    $messageId = function_exists('brevoNormaliseMessageId')
+        ? brevoNormaliseMessageId($messageId)
+        : trim($messageId, " \t<>\"'");
+
+    $kind = trim($kind);
+    $eventType = $kind !== '' && function_exists('brevoEmailKindToSentEventType')
+        ? brevoEmailKindToSentEventType($kind)
+        : null;
+
+    $candidates = [];
+    if ($eventType !== null) {
+        $candidates[] = $eventType;
+    } else {
+        $candidates = [
+            'quote_email_sent',
+            'resume_email_sent',
+            'booking_email_sent',
+            'booking_reminder_sent',
+            'xero_invoice_emailed',
+        ];
+    }
+
+    $placeholders = implode(',', array_fill(0, count($candidates), '?'));
+    $params = array_merge([$enquiryId], $candidates);
+    $stmt = $pdo->prepare(
+        "SELECT id, event_type, metadata
+         FROM enquiry_events
+         WHERE enquiry_id = ?
+           AND event_type IN ($placeholders)
+         ORDER BY id DESC
+         LIMIT 40"
+    );
+    $stmt->execute($params);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+    $match = null;
+    if ($messageId !== '') {
+        foreach ($rows as $row) {
+            $meta = [];
+            $raw = trim((string) ($row['metadata'] ?? ''));
+            if ($raw !== '') {
+                $decoded = json_decode($raw, true);
+                if (is_array($decoded)) {
+                    $meta = $decoded;
+                }
+            }
+            $storedId = function_exists('brevoNormaliseMessageId')
+                ? brevoNormaliseMessageId((string) ($meta['brevo_message_id'] ?? ''))
+                : trim((string) ($meta['brevo_message_id'] ?? ''), " \t<>\"'");
+            if ($storedId !== '' && strcasecmp($storedId, $messageId) === 0) {
+                $match = ['row' => $row, 'meta' => $meta];
+                break;
+            }
+        }
+    }
+
+    if ($match === null && $rows !== []) {
+        $row = $rows[0];
+        $meta = [];
+        $raw = trim((string) ($row['metadata'] ?? ''));
+        if ($raw !== '') {
+            $decoded = json_decode($raw, true);
+            if (is_array($decoded)) {
+                $meta = $decoded;
+            }
+        }
+        $match = ['row' => $row, 'meta' => $meta];
+    }
+
+    if ($match === null) {
+        return ['updated' => false, 'firstOpen' => false, 'kind' => $kind];
+    }
+
+    $meta = $match['meta'];
+    $firstOpen = empty($meta['opened_at']);
+    $openedAt = enquiryLoggerNow();
+    if (! empty($extra['opened_at_ts']) && is_numeric($extra['opened_at_ts'])) {
+        $ts = (int) $extra['opened_at_ts'];
+        if ($ts > 0) {
+            $openedAt = gmdate('Y-m-d H:i:s', $ts);
+        }
+    }
+
+    if ($firstOpen) {
+        $meta['opened_at'] = $openedAt;
+    }
+    $meta['opened_count'] = (int) ($meta['opened_count'] ?? 0) + 1;
+    $meta['last_opened_at'] = $openedAt;
+    if ($messageId !== '') {
+        $meta['brevo_message_id'] = $messageId;
+    }
+    if ($kind !== '') {
+        $meta['email_kind'] = $kind;
+    }
+    foreach (['email', 'subject', 'user_agent', 'device_used'] as $key) {
+        if (! empty($extra[$key])) {
+            $meta[$key] = $extra[$key];
+        }
+    }
+
+    $update = $pdo->prepare('UPDATE enquiry_events SET metadata = :metadata WHERE id = :id');
+    $update->execute([
+        ':metadata' => json_encode($meta, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        ':id' => (int) $match['row']['id'],
+    ]);
+
+    $resolvedKind = $kind;
+    if ($resolvedKind === '' && ! empty($meta['email_kind'])) {
+        $resolvedKind = (string) $meta['email_kind'];
+    }
+    if ($resolvedKind === '') {
+        $resolvedKind = match ((string) $match['row']['event_type']) {
+            'quote_email_sent' => 'quote',
+            'resume_email_sent' => 'resume',
+            'booking_email_sent' => 'booking',
+            'booking_reminder_sent' => 'booking_reminder',
+            'xero_invoice_emailed' => 'invoice',
+            default => '',
+        };
+    }
+
+    if ($firstOpen) {
+        $label = function_exists('brevoEmailKindLabel')
+            ? brevoEmailKindLabel($resolvedKind !== '' ? $resolvedKind : 'email')
+            : 'Email';
+        enquiryLoggerEvent(
+            $enquiryId,
+            'email_opened',
+            $label . ' opened by the customer.',
+            [
+                'email_kind' => $resolvedKind !== '' ? $resolvedKind : null,
+                'brevo_message_id' => $messageId !== '' ? $messageId : null,
+                'opened_at' => $openedAt,
+                'source_event_id' => (int) $match['row']['id'],
+                'source_event_type' => (string) $match['row']['event_type'],
+            ]
+        );
+    }
+
+    return ['updated' => true, 'firstOpen' => $firstOpen, 'kind' => $resolvedKind];
+}
+
+/**
  * Log at most once per $minHours for the same enquiry + event type (+ optional same error).
  */
 function enquiryLoggerEventThrottled(

@@ -1424,9 +1424,10 @@ function xeroEmailInvoiceToCustomer(int $enquiryId): array
     $pdf = xeroDownloadInvoicePdf($invoiceId, $invoiceNumber);
 
     try {
-        sendInvoiceEmailViaBrevo($toEmail, $toName, [
+        $messageId = sendInvoiceEmailViaBrevo($toEmail, $toName, [
             'name' => $toName,
             'email' => $toEmail,
+            'enquiryId' => $enquiryId,
             'invoiceNumber' => $invoiceNumber,
         ], $pdf);
     } catch (Throwable $e) {
@@ -1455,6 +1456,8 @@ function xeroEmailInvoiceToCustomer(int $enquiryId): array
             'to_email' => $toEmail,
             'xero_invoice_id' => $invoiceId,
             'xero_invoice_number' => $invoiceNumber !== '' ? $invoiceNumber : null,
+            'brevo_message_id' => $messageId !== '' ? $messageId : null,
+            'email_kind' => 'invoice',
         ]
     );
 

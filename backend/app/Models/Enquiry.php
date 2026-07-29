@@ -259,4 +259,26 @@ class Enquiry extends Model
             || in_array($this->status, ['quote_sent', 'quote_accepted'], true)
             || $this->hasBookingDetails();
     }
+
+    /**
+     * When the customer last opened a tracked outbound email of this journey type.
+     */
+    public function customerEmailOpenedAt(string $sentEventType): ?\Illuminate\Support\Carbon
+    {
+        $events = $this->relationLoaded('events')
+            ? $this->events
+            : $this->events()->where('event_type', $sentEventType)->latest('id')->limit(10)->get();
+
+        foreach ($events->sortByDesc('id') as $event) {
+            if ($event->event_type !== $sentEventType) {
+                continue;
+            }
+            $openedAt = $event->customerOpenedAt();
+            if ($openedAt !== null) {
+                return $openedAt;
+            }
+        }
+
+        return null;
+    }
 }

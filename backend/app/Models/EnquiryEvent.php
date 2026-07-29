@@ -58,6 +58,7 @@ class EnquiryEvent extends Model
         'quote_email_skipped' => 'Xero Quote skipped',
         'resume_email_sent' => 'Edit Enquiry Email sent',
         'resume_email_failed' => 'Edit Enquiry Email failed',
+        'email_opened' => 'Customer opened email',
         'booking_email_sent' => 'Accept Quote / venue details email sent',
         'booking_email_failed' => 'Accept Quote / venue details email failed',
         'booking_reminder_sent' => 'Accept Quote / venue details reminder sent',
@@ -151,7 +152,29 @@ class EnquiryEvent extends Model
         return str_starts_with($this->event_type, 'quote_email_')
             || str_starts_with($this->event_type, 'resume_email_')
             || str_starts_with($this->event_type, 'booking_email_')
+            || str_starts_with($this->event_type, 'booking_reminder_')
+            || $this->event_type === 'email_opened'
+            || $this->event_type === 'xero_invoice_emailed'
             || str_starts_with($this->event_type, 'lead_notification_');
+    }
+
+    public function wasOpenedByCustomer(): bool
+    {
+        return filled($this->customerOpenedAt());
+    }
+
+    public function customerOpenedAt(): ?\Illuminate\Support\Carbon
+    {
+        $raw = trim((string) (data_get($this->metadata, 'opened_at') ?? ''));
+        if ($raw === '') {
+            return null;
+        }
+
+        try {
+            return \Illuminate\Support\Carbon::parse($raw);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     public function isFailed(): bool
@@ -162,6 +185,7 @@ class EnquiryEvent extends Model
     public function isSuccessful(): bool
     {
         return str_ends_with($this->event_type, '_sent')
+            || $this->event_type === 'email_opened'
             || $this->event_type === 'xero_invoice_created'
             || $this->event_type === 'xero_invoice_emailed'
             || $this->event_type === 'monday_moved_quote_won'

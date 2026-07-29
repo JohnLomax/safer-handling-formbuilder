@@ -256,6 +256,8 @@ class EnquiryProcessRetry
                         'vat' => $quote['TotalTax'] ?? null,
                         'total' => $quote['Total'] ?? null,
                         'status' => 'quote_sent',
+                        'brevo_message_id' => $result['brevo_message_id'] ?? null,
+                        'email_kind' => 'quote',
                     ]
                 );
 
@@ -277,7 +279,13 @@ class EnquiryProcessRetry
                     $enquiry,
                     'quote_email_sent',
                     'Quote confirmation email resent to the customer via Brevo.',
-                    ['retried' => true, 'channel' => 'brevo', 'status' => 'contacted']
+                    [
+                        'retried' => true,
+                        'channel' => 'brevo',
+                        'status' => 'contacted',
+                        'brevo_message_id' => $result['brevo_message_id'] ?? null,
+                        'email_kind' => 'quote',
+                    ]
                 );
             }
         } catch (Throwable $e) {
@@ -358,9 +366,10 @@ class EnquiryProcessRetry
         }
 
         try {
-            sendResumeEnquiryEmailViaBrevo((string) $enquiry->email, (string) $enquiry->name, [
+            $messageId = sendResumeEnquiryEmailViaBrevo((string) $enquiry->email, (string) $enquiry->name, [
                 'name' => (string) $enquiry->name,
                 'email' => (string) $enquiry->email,
+                'enquiryId' => (int) $enquiry->id,
                 'enquiryType' => (string) $enquiry->enquiry_type,
                 'resumeUrl' => $resumeUrl,
             ]);
@@ -369,7 +378,11 @@ class EnquiryProcessRetry
                 $enquiry,
                 'resume_email_sent',
                 'Edit Enquiry Email resent so the customer can return to their saved form.',
-                ['retried' => true]
+                [
+                    'retried' => true,
+                    'email_kind' => 'resume',
+                    'brevo_message_id' => $messageId !== '' ? $messageId : null,
+                ]
             );
 
             try {

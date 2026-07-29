@@ -59,6 +59,7 @@ $brevoQuoteAcceptUrl = '';
 
 $formBaseUrl = '';
 $brevoResumeEmailEnabled = true;
+$brevoWebhookSecret = '';
 
 $officeAutoReplyEnabled = false;
 $officeAutoReplyHours = '8';
@@ -114,6 +115,7 @@ $brevoLogoUrl = (string)($GLOBALS['brevoLogoUrl'] ?? $brevoLogoUrl);
 $brevoQuoteAcceptUrl = (string)($GLOBALS['brevoQuoteAcceptUrl'] ?? $brevoQuoteAcceptUrl);
 $formBaseUrl = (string)($GLOBALS['formBaseUrl'] ?? $formBaseUrl);
 $brevoResumeEmailEnabled = (bool)($GLOBALS['brevoResumeEmailEnabled'] ?? $brevoResumeEmailEnabled);
+$brevoWebhookSecret = (string)($GLOBALS['brevoWebhookSecret'] ?? $brevoWebhookSecret);
 $officeAutoReplyEnabled = (bool)($GLOBALS['officeAutoReplyEnabled'] ?? $officeAutoReplyEnabled);
 $officeAutoReplyHours = (string)($GLOBALS['officeAutoReplyHours'] ?? $officeAutoReplyHours);
 $officeImapHost = (string)($GLOBALS['officeImapHost'] ?? $officeImapHost);

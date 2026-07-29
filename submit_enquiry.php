@@ -944,6 +944,8 @@ try {
                                 'vat' => $quote['TotalTax'] ?? null,
                                 'total' => $quote['Total'] ?? null,
                                 'status' => 'quote_sent',
+                                'brevo_message_id' => $quoteSendResult['brevo_message_id'] ?? null,
+                                'email_kind' => 'quote',
                             ]
                         );
                         require_once __DIR__ . '/monday_helpers.php';
@@ -966,7 +968,12 @@ try {
                             $enquiryId,
                             'quote_email_sent',
                             'Automatic quote confirmation email sent via Brevo.',
-                            ['channel' => 'brevo', 'status' => 'contacted']
+                            [
+                                'channel' => 'brevo',
+                                'status' => 'contacted',
+                                'brevo_message_id' => $quoteSendResult['brevo_message_id'] ?? null,
+                                'email_kind' => 'quote',
+                            ]
                         );
                     }
                 });

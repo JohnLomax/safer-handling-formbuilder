@@ -426,6 +426,10 @@ function appConfigValue(string $envKey, string $globalKey, string $default = '')
  */
 function mondayAppConfig(): array
 {
+    // Laravel admin paths often require monday_helpers without config.php.
+    // Always refresh DB settings into $GLOBALS before reading Monday config.
+    applyAppSettingsToGlobals();
+
     $groupName = appConfigValue('MONDAY_GROUP_NAME', 'mondayGroupName', 'New Enquiries');
     if ($groupName === '') {
         $groupName = 'New Enquiries';

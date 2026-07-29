@@ -111,6 +111,7 @@ class EnquiryController extends Controller
         ]);
 
         $root = dirname(base_path());
+        require_once $root.'/config.php';
         require_once $root.'/enquiry_logger.php';
         require_once $root.'/monday_helpers.php';
 

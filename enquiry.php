@@ -22,6 +22,7 @@ if ($kajabiCoursesUrl === '') {
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Safer Handling Enquiry Form</title>
+  <meta name="description" content="Enquire with Safer Handling for training, equipment, or consultancy. Choose your course, get a live quote, and submit your preferred date online." />
   <link rel="icon" type="image/png" href="assets/safer-handling-logo.png" />
   <style>
     :root {
@@ -52,8 +53,10 @@ if ($kajabiCoursesUrl === '') {
 
     .container {
       max-width: 940px;
+      width: 100%;
       margin: 42px auto;
       padding: 0 18px 44px;
+      box-sizing: border-box;
     }
 
     .card {
@@ -65,6 +68,8 @@ if ($kajabiCoursesUrl === '') {
         0 2px 10px rgba(11, 71, 117, 0.07);
       /* Keep visible so scroll/focus on invalid fields is not clipped. */
       overflow: visible;
+      max-width: 100%;
+      min-width: 0;
     }
 
     .brand-header {
@@ -117,6 +122,8 @@ if ($kajabiCoursesUrl === '') {
     form {
       padding: 24px;
       background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+      max-width: 100%;
+      min-width: 0;
     }
 
     .section {
@@ -126,6 +133,9 @@ if ($kajabiCoursesUrl === '') {
       padding: 20px;
       margin-bottom: 22px;
       box-shadow: 0 4px 14px rgba(0, 138, 252, 0.06);
+      max-width: 100%;
+      min-width: 0;
+      overflow-x: clip;
     }
 
     .section h2 {
@@ -133,12 +143,14 @@ if ($kajabiCoursesUrl === '') {
       margin-bottom: 6px;
       font-size: 1.25rem;
       color: #0255a4;
+      overflow-wrap: anywhere;
     }
 
     .section-intro {
       margin: 0 0 14px;
       color: var(--text-mid);
       font-size: 0.95rem;
+      overflow-wrap: anywhere;
     }
 
     .sub-section {
@@ -147,7 +159,9 @@ if ($kajabiCoursesUrl === '') {
       padding: 16px;
       margin: 14px 0;
       background: #fff;
+      max-width: 100%;
       min-width: 0;
+      overflow-x: clip;
     }
 
     .sub-section h3 {
@@ -166,8 +180,21 @@ if ($kajabiCoursesUrl === '') {
     input[type="text"],
     input[type="email"],
     input[type="number"],
-    textarea {
+    input[type="tel"],
+    input[type="date"],
+    input[type="file"],
+    textarea,
+    select {
       width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
+    }
+
+    input[type="text"],
+    input[type="email"],
+    input[type="number"],
+    textarea {
       padding: 11px 12px;
       border: 1px solid #b9d4ef;
       border-radius: 10px;
@@ -179,7 +206,6 @@ if ($kajabiCoursesUrl === '') {
 
     input[type="date"],
     select {
-      width: 100%;
       padding: 11px 40px 11px 12px;
       border: 1px solid #b9d4ef;
       border-radius: 10px;
@@ -209,12 +235,15 @@ if ($kajabiCoursesUrl === '') {
 
     .datetime-block {
       margin-top: 14px;
-      max-width: 430px;
+      max-width: min(430px, 100%);
+      width: 100%;
       padding: 12px 14px;
       border: 1px solid #d5e7f8;
       border-radius: 14px;
       background: linear-gradient(160deg, #fafdff 0%, #f2f9ff 100%);
       box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+      box-sizing: border-box;
+      min-width: 0;
     }
 
     .datetime-block label {
@@ -534,25 +563,71 @@ if ($kajabiCoursesUrl === '') {
     }
 
     .pricing-card {
-      margin-top: 12px;
-      border: 1px solid #d7e9f8;
-      border-radius: 10px;
-      background: #f8fcff;
-      padding: 12px;
+      margin-top: 14px;
+      border: 2px solid #8ec2ea;
+      border-radius: 12px;
+      background: linear-gradient(180deg, #eef7ff 0%, #f8fcff 100%);
+      padding: 16px 18px;
+      box-shadow: 0 6px 18px rgba(2, 85, 164, 0.1);
+      max-width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
     }
 
     .pricing-card h4 {
-      margin: 0 0 10px;
-      color: #195783;
-      font-size: 0.98rem;
+      margin: 0 0 12px;
+      color: #0255a4;
+      font-size: 1.2rem;
+      font-weight: 800;
+      letter-spacing: 0.01em;
     }
 
     .pricing-grid {
       display: grid;
       grid-template-columns: 1fr;
-      gap: 6px;
+      gap: 10px;
+      font-size: 1.02rem;
+      font-weight: 700;
+      color: #16324a;
+      line-height: 1.45;
+    }
+
+    .pricing-grid > div strong {
+      display: block;
+      margin-bottom: 2px;
       font-size: 0.92rem;
-      color: #204f73;
+      font-weight: 800;
+      color: #195783;
+    }
+
+    .pricing-grid #trainersRequired,
+    .pricing-grid #totalWithVatPrice {
+      display: inline-block;
+      margin-top: 2px;
+      font-size: 1.28rem;
+      font-weight: 800;
+      color: #0255a4;
+      letter-spacing: 0.01em;
+      max-width: 100%;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+    .pricing-grid #totalWithVatPrice {
+      font-size: 1.35rem;
+      color: #0f4a78;
+    }
+
+    .choice span {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .address-lookup-block,
+    .address-fields-grid,
+    .address-fields-grid > div {
+      max-width: 100%;
+      min-width: 0;
     }
 
     .thank-you-view {
@@ -631,21 +706,79 @@ if ($kajabiCoursesUrl === '') {
     }
 
     @media (max-width: 680px) {
+      .container {
+        margin: 12px auto;
+        padding: 0 10px 28px;
+      }
+
       .brand-header {
         flex-direction: column;
         align-items: flex-start;
+        gap: 14px;
+        padding: 18px 16px;
       }
 
       .logo {
-        max-width: 75%;
+        max-width: 70%;
+        width: 180px;
+      }
+
+      .title-wrap h1 {
+        font-size: 1.35rem;
+      }
+
+      .title-wrap p {
+        font-size: 0.92rem;
       }
 
       form {
-        padding: 18px;
+        padding: 14px;
       }
 
-      .section {
-        padding: 16px;
+      .section,
+      .sub-section {
+        padding: 14px;
+        margin-bottom: 16px;
+      }
+
+      .section h2 {
+        font-size: 1.12rem;
+      }
+
+      .datetime-block {
+        max-width: 100%;
+        padding: 12px;
+      }
+
+      .datetime-choice {
+        max-width: 100%;
+        box-sizing: border-box;
+        white-space: normal;
+      }
+
+      .postcode-lookup-row {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .postcode-lookup-row input[type="text"],
+      .postcode-lookup-row button {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+      }
+
+      .pricing-card {
+        padding: 14px;
+      }
+
+      .pricing-grid #trainersRequired,
+      .pricing-grid #totalWithVatPrice {
+        font-size: 1.12rem;
+      }
+
+      .pricing-grid #totalWithVatPrice {
+        font-size: 1.18rem;
       }
 
       .stepper-btn {
@@ -657,6 +790,38 @@ if ($kajabiCoursesUrl === '') {
       .attendees-row {
         gap: 6px;
         padding: 8px;
+      }
+
+      .actions button,
+      .btn-primary,
+      .btn-secondary {
+        width: 100%;
+        max-width: 100%;
+      }
+
+      .thank-you-view {
+        padding: 24px 14px 28px;
+      }
+    }
+
+    @media (max-width: 400px) {
+      .container {
+        padding: 0 8px 20px;
+      }
+
+      form,
+      .section,
+      .sub-section {
+        padding: 12px;
+      }
+
+      input[type="text"],
+      input[type="email"],
+      input[type="number"],
+      input[type="date"],
+      textarea,
+      select {
+        font-size: 16px; /* avoid iOS zoom on focus */
       }
     }
   </style>

@@ -126,13 +126,21 @@ function bookingH(string $value): string
       color: var(--text-dark);
       line-height: 1.45;
     }
-    .container { max-width: 820px; margin: 42px auto; padding: 0 18px 44px; }
+    .container {
+      max-width: 820px;
+      width: 100%;
+      margin: 42px auto;
+      padding: 0 18px 44px;
+      box-sizing: border-box;
+    }
     .card {
       background: var(--brand-white);
       border: 1px solid #cfe4f8;
       border-radius: 18px;
       box-shadow: 0 18px 45px rgba(0, 138, 252, 0.13), 0 2px 10px rgba(11, 71, 117, 0.07);
       overflow: visible;
+      max-width: 100%;
+      min-width: 0;
     }
     .brand-header {
       background: #0255a4;
@@ -146,37 +154,51 @@ function bookingH(string $value): string
       overflow: hidden;
     }
     .logo { width: 220px; max-width: 42%; display: block; }
-    .title-wrap h1 { margin: 0; font-size: 1.55rem; line-height: 1.15; }
-    .title-wrap p { margin: 8px 0 0; opacity: 0.98; font-size: 0.98rem; }
-    form, .message-panel { padding: 24px; }
+    .title-wrap { min-width: 0; }
+    .title-wrap h1 { margin: 0; font-size: 1.55rem; line-height: 1.15; overflow-wrap: anywhere; }
+    .title-wrap p { margin: 8px 0 0; opacity: 0.98; font-size: 0.98rem; overflow-wrap: anywhere; }
+    form, .message-panel {
+      padding: 24px;
+      max-width: 100%;
+      min-width: 0;
+    }
     .section {
       border: 1px solid var(--border-soft);
       border-radius: 14px;
       background: linear-gradient(180deg, #ffffff 0%, #fcfeff 100%);
       padding: 20px;
       margin-bottom: 22px;
+      max-width: 100%;
+      min-width: 0;
+      overflow-x: clip;
     }
-    .section h2 { margin: 0 0 6px; font-size: 1.2rem; color: #0255a4; }
-    .section-intro { margin: 0 0 14px; color: var(--text-mid); font-size: 0.95rem; }
+    .section h2 { margin: 0 0 6px; font-size: 1.2rem; color: #0255a4; overflow-wrap: anywhere; }
+    .section-intro { margin: 0 0 14px; color: var(--text-mid); font-size: 0.95rem; overflow-wrap: anywhere; }
     .alert {
       border-radius: 12px;
       padding: 14px 16px;
       margin-bottom: 18px;
       font-weight: 600;
+      max-width: 100%;
+      overflow-wrap: anywhere;
     }
     .alert-info { background: #eef7ff; border: 1px solid #b9d4ef; color: #20567e; }
     .alert-warn { background: #fff8e8; border: 1px solid #f0d48a; color: #8a5b00; }
     .alert-error { background: #fff7f7; border: 1px solid #f1c0c0; color: #b91c1c; }
     .alert-success { background: #f1f9eb; border: 1px solid #c5e3ad; color: #3f6d1c; }
-    label { display: block; font-weight: 700; margin: 12px 0 7px; color: #20567e; }
-    .hint { display: block; margin-top: 6px; color: var(--text-mid); font-size: 0.88rem; font-weight: 500; }
+    label { display: block; font-weight: 700; margin: 12px 0 7px; color: #20567e; overflow-wrap: anywhere; }
+    .hint { display: block; margin-top: 6px; color: var(--text-mid); font-size: 0.88rem; font-weight: 500; overflow-wrap: anywhere; }
     input[type="text"],
     input[type="email"],
     input[type="tel"],
     input[type="date"],
     input[type="file"],
-    textarea {
+    textarea,
+    select {
       width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
       padding: 11px 12px;
       border: 1px solid #b9d4ef;
       border-radius: 10px;
@@ -206,9 +228,12 @@ function bookingH(string $value): string
       border: 1px solid #dcebf8;
       border-radius: 10px;
       background: #fff;
+      max-width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
     }
-    .checkbox-row input { margin-top: 3px; }
-    .checkbox-row label { margin: 0; font-weight: 600; color: #16324a; }
+    .checkbox-row input { margin-top: 3px; flex-shrink: 0; }
+    .checkbox-row label { margin: 0; font-weight: 600; color: #16324a; min-width: 0; overflow-wrap: anywhere; }
     .datetime-choice {
       margin-top: 10px;
       display: inline-flex;
@@ -222,6 +247,9 @@ function bookingH(string $value): string
       font-size: 0.9rem;
       color: #2f618a;
       cursor: pointer;
+      max-width: 100%;
+      box-sizing: border-box;
+      white-space: normal;
     }
     .datetime-choice input {
       margin: 0;
@@ -229,6 +257,7 @@ function bookingH(string $value): string
       height: 16px;
       accent-color: var(--brand-blue);
       cursor: pointer;
+      flex-shrink: 0;
     }
     .terms-box {
       max-height: 220px;
@@ -240,6 +269,9 @@ function bookingH(string $value): string
       font-size: 0.9rem;
       color: #2e5d84;
       white-space: pre-wrap;
+      max-width: 100%;
+      box-sizing: border-box;
+      overflow-wrap: anywhere;
     }
     .delegate-note {
       background: #fff8e8;
@@ -249,6 +281,9 @@ function bookingH(string $value): string
       margin: 12px 0 8px;
       color: #8a5b00;
       font-size: 0.92rem;
+      max-width: 100%;
+      box-sizing: border-box;
+      overflow-wrap: anywhere;
     }
     .actions { margin-top: 8px; }
     button {
@@ -261,12 +296,79 @@ function bookingH(string $value): string
       background: #0255a4;
       color: #fff;
       box-shadow: 0 8px 18px rgba(2, 85, 164, 0.32);
+      max-width: 100%;
     }
     button:disabled { opacity: 0.7; cursor: not-allowed; }
     .hidden { display: none; }
-    .thank-you-view { padding: 34px 24px 38px; text-align: center; }
+    .thank-you-view { padding: 34px 24px 38px; text-align: center; max-width: 100%; box-sizing: border-box; }
     .thank-you-view h2 { color: #0255a4; margin: 18px 0 8px; }
-    .thank-you-view > p { margin: 0 auto; max-width: 560px; color: #2a5e84; }
+    .thank-you-view > p { margin: 0 auto; max-width: 560px; color: #2a5e84; overflow-wrap: anywhere; }
+
+    @media (max-width: 680px) {
+      .container {
+        margin: 12px auto;
+        padding: 0 10px 28px;
+      }
+      .brand-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 14px;
+        padding: 18px 16px;
+      }
+      .logo {
+        max-width: 70%;
+        width: 180px;
+      }
+      .title-wrap h1 {
+        font-size: 1.28rem;
+      }
+      .title-wrap p {
+        font-size: 0.92rem;
+      }
+      form,
+      .message-panel {
+        padding: 14px;
+      }
+      .section {
+        padding: 14px;
+        margin-bottom: 16px;
+      }
+      .section h2 {
+        font-size: 1.1rem;
+      }
+      .checkbox-row,
+      .delegate-note,
+      .terms-box {
+        padding: 12px;
+      }
+      .actions button,
+      .btn-primary {
+        width: 100%;
+      }
+      .thank-you-view {
+        padding: 24px 14px 28px;
+      }
+    }
+
+    @media (max-width: 400px) {
+      .container {
+        padding: 0 8px 20px;
+      }
+      form,
+      .message-panel,
+      .section {
+        padding: 12px;
+      }
+      input[type="text"],
+      input[type="email"],
+      input[type="tel"],
+      input[type="date"],
+      input[type="file"],
+      textarea,
+      select {
+        font-size: 16px;
+      }
+    }
 <?= saferHandlingInformFollowEngageWebCss() ?>
   </style>
 </head>

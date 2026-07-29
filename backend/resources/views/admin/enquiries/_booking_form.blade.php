@@ -31,24 +31,65 @@
         </div>
     </div>
 
-    <div>
+    @php
+        $defaultNotSure = (bool) old(
+            'dateNotSure',
+            ! empty($booking['dateNotSure'])
+                || (
+                    $enquiry->date_not_sure
+                    && trim((string) ($booking['preferredDate'] ?? '')) === ''
+                    && ! preg_match('/^\d{4}-\d{2}-\d{2}/', (string) $enquiry->preferred_date_time)
+                )
+        );
+        $preferredDateValue = old(
+            'preferredDate',
+            $defaultNotSure
+                ? ''
+                : (
+                    $booking['preferredDate']
+                        ?? (preg_match('/^\d{4}-\d{2}-\d{2}/', (string) $enquiry->preferred_date_time, $m) ? $m[0] : '')
+                )
+        );
+    @endphp
+    <div
+        x-data="{
+            notSure: {{ $defaultNotSure ? 'true' : 'false' }},
+            sync() {
+                if (this.notSure) {
+                    this.$refs.preferredDate.value = '';
+                    this.$refs.preferredDate.disabled = true;
+                    this.$refs.preferredDate.required = false;
+                } else {
+                    this.$refs.preferredDate.disabled = false;
+                    this.$refs.preferredDate.required = true;
+                }
+            }
+        }"
+        x-init="sync()"
+        class="space-y-2"
+    >
         <x-input-label for="preferredDate" value="Preferred date" />
-        @php
-            $preferredDateValue = old(
-                'preferredDate',
-                $booking['preferredDate']
-                    ?? (preg_match('/^\d{4}-\d{2}-\d{2}/', (string) $enquiry->preferred_date_time, $m) ? $m[0] : '')
-            );
-        @endphp
         <x-text-input
             id="preferredDate"
             name="preferredDate"
             type="date"
             class="mt-1 block w-full"
+            x-ref="preferredDate"
             :value="$preferredDateValue"
-            required
+            x-on:input="if ($event.target.value) { notSure = false; sync(); }"
         />
-        <p class="mt-1 text-xs text-sh-mid">Shown on the customer Accept &amp; add venue form. Within 2 days of this date, customers cannot change it online.</p>
+        <label class="mt-2 flex items-center gap-2 text-sm text-sh-text">
+            <input
+                type="checkbox"
+                name="dateNotSure"
+                value="1"
+                class="rounded border-sh-border text-brand focus:ring-brand/30"
+                x-model="notSure"
+                x-on:change="sync()"
+            />
+            <span>Not sure on date yet</span>
+        </label>
+        <p class="mt-1 text-xs text-sh-mid">Customers can leave this as “not sure yet”. You can set or update the preferred date here at any time — shown on the Accept &amp; add venue form. Within 2 days of a set date, customers cannot change it online.</p>
     </div>
 
     <div>

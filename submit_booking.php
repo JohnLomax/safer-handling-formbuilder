@@ -57,6 +57,16 @@ $organisation = trim((string)($_POST['organisation'] ?? ''));
 $email = trim((string)($_POST['email'] ?? ''));
 $phone = trim((string)($_POST['phone'] ?? ''));
 $preferredDate = enquiryPreferredDateOnly((string)($_POST['preferredDate'] ?? ($_POST['preferredDateTime'] ?? '')));
+$dateNotSureRaw = $_POST['dateNotSure'] ?? null;
+$dateNotSure = $dateNotSureRaw !== null
+    && $dateNotSureRaw !== ''
+    && $dateNotSureRaw !== '0'
+    && $dateNotSureRaw !== 0
+    && $dateNotSureRaw !== false
+    && strtolower((string)$dateNotSureRaw) !== 'false';
+if ($dateNotSure) {
+    $preferredDate = '';
+}
 $venueAddress = trim((string)($_POST['venueAddress'] ?? ''));
 $studentNames = trim((string)($_POST['studentNames'] ?? ''));
 $studentEmails = trim((string)($_POST['studentEmails'] ?? ''));
@@ -72,7 +82,7 @@ $termsAccepted = isset($_POST['termsAccepted']);
 $existingPreferredDate = enquiryPreferredDateOnly((string)($enquiry['preferred_date_time'] ?? ''));
 if ($existingPreferredDate !== '' && enquiryPreferredDateIsLocked($existingPreferredDate)) {
     // Within 2 days of the stored preferred date — ignore client changes.
-    if ($preferredDate !== '' && $preferredDate !== $existingPreferredDate) {
+    if (($preferredDate !== '' && $preferredDate !== $existingPreferredDate) || $dateNotSure) {
         http_response_code(422);
         $supportEmail = function_exists('brevoContactEmail') ? brevoContactEmail() : 'training@safer-handling.co.uk';
         echo json_encode([
@@ -84,13 +94,13 @@ if ($existingPreferredDate !== '' && enquiryPreferredDateIsLocked($existingPrefe
         exit;
     }
     $preferredDate = $existingPreferredDate;
+    $dateNotSure = false;
 }
 
 $required = [
     'Booker name' => $bookerName,
     'Email address' => $email,
     'Phone number' => $phone,
-    'Preferred date' => $preferredDate,
     'Training venue address' => $venueAddress,
     'Invoice name' => $invoiceName,
     'Invoice email' => $invoiceEmail,
@@ -106,6 +116,15 @@ foreach ($required as $label => $value) {
         ]);
         exit;
     }
+}
+
+if (!$dateNotSure && $preferredDate === '') {
+    http_response_code(422);
+    echo json_encode([
+        'success' => false,
+        'message' => 'Preferred date is required, or choose “Not sure on date yet”.',
+    ]);
+    exit;
 }
 
 if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -273,6 +292,7 @@ $details = [
     'email' => $email,
     'phone' => $phone,
     'preferredDate' => $preferredDate,
+    'dateNotSure' => $dateNotSure,
     'venueAddress' => $venueAddress,
     'studentNames' => $studentNames,
     'studentEmails' => $studentEmails,
@@ -290,7 +310,7 @@ $details = [
 ];
 
 try {
-    enquiryLoggerUpdatePreferredDate($enquiryId, $preferredDate);
+    enquiryLoggerUpdatePreferredDate($enquiryId, $preferredDate, $dateNotSure);
     enquiryLoggerSaveBookingDetails($enquiryId, $details);
     enquiryLoggerMarkQuoteAccepted($enquiryId);
     enquiryLoggerEvent(
@@ -300,6 +320,7 @@ try {
         [
             'organisation' => $organisation,
             'preferred_date' => $preferredDate,
+            'date_not_sure' => $dateNotSure,
             'delegate_count' => count($delegates),
             'has_upload' => $uploadedFileMeta !== null,
             'status' => 'quote_accepted',

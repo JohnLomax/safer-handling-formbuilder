@@ -582,10 +582,12 @@ function enquiryPreferredDateIsLocked(?string $preferredDateTime, ?\DateTimeImmu
     return $days !== null && $days <= 2;
 }
 
-function enquiryLoggerUpdatePreferredDate(int $enquiryId, string $preferredDateOnly): void
+function enquiryLoggerUpdatePreferredDate(int $enquiryId, string $preferredDateOnly = '', bool $dateNotSure = false): void
 {
     $dateOnly = enquiryPreferredDateOnly($preferredDateOnly);
-    if ($dateOnly === '') {
+    if ($dateNotSure) {
+        $dateOnly = '';
+    } elseif ($dateOnly === '') {
         throw new RuntimeException('Preferred date is invalid.');
     }
 
@@ -594,13 +596,14 @@ function enquiryLoggerUpdatePreferredDate(int $enquiryId, string $preferredDateO
     $stmt = $pdo->prepare(
         'UPDATE enquiries SET
             preferred_date_time = :preferred_date_time,
-            date_not_sure = 0,
+            date_not_sure = :date_not_sure,
             updated_at = :updated_at
          WHERE id = :id'
     );
     $stmt->execute([
         ':id' => $enquiryId,
         ':preferred_date_time' => $dateOnly,
+        ':date_not_sure' => $dateNotSure ? 1 : 0,
         ':updated_at' => $now,
     ]);
 }

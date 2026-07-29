@@ -745,7 +745,8 @@ function maybeSendResumeEnquiryEmail(
     string $name,
     string $email,
     string $enquiryType,
-    bool $force = false
+    bool $force = false,
+    bool $moveMondayAfterSend = true
 ): bool {
     if (!brevoResumeEmailEnabled() || brevoApiKey() === '') {
         return false;
@@ -778,8 +779,10 @@ function maybeSendResumeEnquiryEmail(
         ['resent' => $force]
     );
 
-    require_once __DIR__ . '/monday_helpers.php';
-    mondayMoveEnquiryToBeingContactedAfterEditEmail($enquiryId);
+    if ($moveMondayAfterSend) {
+        require_once __DIR__ . '/monday_helpers.php';
+        mondayMoveEnquiryToBeingContactedAfterEditEmail($enquiryId);
+    }
 
     return true;
 }

@@ -17,6 +17,7 @@ $prefill = [
     'invoiceEmail' => '',
     'invoiceAddress' => '',
     'preferredDate' => '',
+    'dateNotSure' => false,
 ];
 $errorMessage = '';
 $alreadySubmitted = false;
@@ -49,7 +50,8 @@ if ($enquiryIdParam === null || $token === '') {
         $preferredDate = enquiryPreferredDateOnly(
             (string)($enquiry['preferred_date_time'] ?? ($formData['preferredDate'] ?? ($formData['preferredDateTime'] ?? '')))
         );
-        if ($preferredDate === '' && !empty($enquiry['date_not_sure'])) {
+        $dateNotSure = !empty($enquiry['date_not_sure']) || ($preferredDate === '' && !empty($formData['dateNotSure']));
+        if ($dateNotSure) {
             $preferredDate = '';
         }
 
@@ -63,21 +65,28 @@ if ($enquiryIdParam === null || $token === '') {
             'invoiceEmail' => trim((string)($enquiry['email'] ?? '')),
             'invoiceAddress' => implode("\n", $addressParts),
             'preferredDate' => $preferredDate,
+            'dateNotSure' => $dateNotSure,
         ];
 
         if ($alreadySubmitted && is_array($bookingMeta['details'] ?? null)) {
             $saved = $bookingMeta['details'];
-            foreach (array_keys($prefill) as $key) {
+            foreach (['bookerName', 'organisation', 'email', 'phone', 'venueAddress', 'invoiceName', 'invoiceEmail', 'invoiceAddress'] as $key) {
                 if (isset($saved[$key]) && trim((string)$saved[$key]) !== '') {
                     $prefill[$key] = (string)$saved[$key];
                 }
             }
-            $prefill['preferredDate'] = enquiryPreferredDateOnly(
-                (string)($saved['preferredDate'] ?? ($prefill['preferredDate'] ?? ''))
-            ) ?: $prefill['preferredDate'];
+            $savedPreferred = enquiryPreferredDateOnly((string)($saved['preferredDate'] ?? ''));
+            $savedNotSure = !empty($saved['dateNotSure']) || !empty($enquiry['date_not_sure']);
+            if ($savedPreferred !== '') {
+                $prefill['preferredDate'] = $savedPreferred;
+                $prefill['dateNotSure'] = false;
+            } elseif ($savedNotSure) {
+                $prefill['preferredDate'] = '';
+                $prefill['dateNotSure'] = true;
+            }
         }
 
-        $preferredDateLocked = enquiryPreferredDateIsLocked($prefill['preferredDate']);
+        $preferredDateLocked = !$prefill['dateNotSure'] && enquiryPreferredDateIsLocked($prefill['preferredDate']);
         $supportEmail = function_exists('brevoContactEmail') ? brevoContactEmail() : 'training@safer-handling.co.uk';
         if ($supportEmail === '') {
             $supportEmail = 'training@safer-handling.co.uk';
@@ -200,6 +209,27 @@ function bookingH(string $value): string
     }
     .checkbox-row input { margin-top: 3px; }
     .checkbox-row label { margin: 0; font-weight: 600; color: #16324a; }
+    .datetime-choice {
+      margin-top: 10px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border: 1px dashed #c5dbef;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.7);
+      font-weight: 600;
+      font-size: 0.9rem;
+      color: #2f618a;
+      cursor: pointer;
+    }
+    .datetime-choice input {
+      margin: 0;
+      width: 16px;
+      height: 16px;
+      accent-color: var(--brand-blue);
+      cursor: pointer;
+    }
     .terms-box {
       max-height: 220px;
       overflow: auto;
@@ -315,11 +345,22 @@ function bookingH(string $value): string
                 type="date"
                 id="preferredDate"
                 name="preferredDate"
-                required
+                <?= $prefill['dateNotSure'] ? '' : 'required' ?>
+                <?= $prefill['dateNotSure'] ? 'disabled' : '' ?>
                 value="<?= bookingH($prefill['preferredDate']) ?>"
                 min="<?= bookingH((new DateTimeImmutable('today', new DateTimeZone('Europe/London')))->format('Y-m-d')) ?>"
               />
-              <span class="hint">Confirm or update your preferred training date.</span>
+              <label class="datetime-choice" for="dateNotSure">
+                <input
+                  type="checkbox"
+                  id="dateNotSure"
+                  name="dateNotSure"
+                  value="1"
+                  <?= !empty($prefill['dateNotSure']) ? 'checked' : '' ?>
+                />
+                <span>Not sure on date yet</span>
+              </label>
+              <span class="hint">Confirm a preferred training date, or tick “Not sure on date yet” if you still need to decide.</span>
             <?php endif; ?>
 
             <label for="venueAddress">Training Venue Address *</label>
@@ -442,17 +483,35 @@ TERMS
       var form = document.getElementById("bookingForm");
       var submitBtn = document.getElementById("submitBtn");
       var thankYouView = document.getElementById("thankYouView");
+      var preferredDateInput = document.getElementById("preferredDate");
+      var dateNotSureInput = document.getElementById("dateNotSure");
 
       function setError(el, on) {
         if (!el) return;
         if (el.type === "checkbox") {
-          var row = el.closest(".checkbox-row");
+          var row = el.closest(".checkbox-row") || el.closest(".datetime-choice");
           if (row) {
             row.classList.toggle("field-error", !!on);
           }
           return;
         }
         el.classList.toggle("field-error", !!on);
+      }
+
+      function syncPreferredDateUiState() {
+        if (!preferredDateInput || !dateNotSureInput) {
+          return;
+        }
+        if (dateNotSureInput.checked) {
+          preferredDateInput.value = "";
+          preferredDateInput.disabled = true;
+          preferredDateInput.required = false;
+          setError(preferredDateInput, false);
+          setError(dateNotSureInput, false);
+        } else {
+          preferredDateInput.disabled = false;
+          preferredDateInput.required = true;
+        }
       }
 
       function requiredValue(id) {
@@ -529,18 +588,29 @@ TERMS
       function validate() {
         var ok = true;
         var requiredIds = [
-          "bookerName", "email", "phone", "preferredDate", "venueAddress",
+          "bookerName", "email", "phone", "venueAddress",
           "invoiceName", "invoiceEmail", "invoiceAddress"
         ];
         requiredIds.forEach(function (id) {
           var el = document.getElementById(id);
-          // Locked preferred date uses a hidden input — still validate it has a value.
           var missing = !requiredValue(id);
           if (el && el.type !== "hidden") {
             setError(el, missing);
           }
           if (missing) ok = false;
         });
+
+        var dateNotSure = dateNotSureInput && dateNotSureInput.checked;
+        if (preferredDateInput) {
+          var missingPreferred = !dateNotSure && !requiredValue("preferredDate");
+          if (preferredDateInput.type !== "hidden") {
+            setError(preferredDateInput, missingPreferred);
+          }
+          if (dateNotSureInput) {
+            setError(dateNotSureInput, false);
+          }
+          if (missingPreferred) ok = false;
+        }
 
         var venueReq = document.getElementById("venueRequirements");
         var terms = document.getElementById("termsAccepted");
@@ -578,6 +648,20 @@ TERMS
         }
 
         return ok;
+      }
+
+      if (dateNotSureInput) {
+        dateNotSureInput.addEventListener("change", syncPreferredDateUiState);
+        syncPreferredDateUiState();
+      }
+      if (preferredDateInput && preferredDateInput.type !== "hidden") {
+        preferredDateInput.addEventListener("input", function () {
+          if (preferredDateInput.value.trim() && dateNotSureInput && dateNotSureInput.checked) {
+            dateNotSureInput.checked = false;
+            syncPreferredDateUiState();
+          }
+          setError(preferredDateInput, !preferredDateInput.value.trim() && !(dateNotSureInput && dateNotSureInput.checked));
+        });
       }
 
       form.addEventListener("submit", function (event) {

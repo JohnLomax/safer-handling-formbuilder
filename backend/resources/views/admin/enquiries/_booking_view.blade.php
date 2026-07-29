@@ -29,9 +29,12 @@
         <p class="mt-1 font-medium text-sh-text">
             @php
                 $bookingPreferred = trim((string) ($booking['preferredDate'] ?? ''));
+                $bookingNotSure = ! empty($booking['dateNotSure']) || $enquiry->date_not_sure;
             @endphp
             @if ($bookingPreferred !== '')
                 {{ $bookingPreferred }}
+            @elseif ($bookingNotSure || $enquiry->preferredDateTimeLabel() === 'Not sure yet')
+                Not sure yet
             @elseif ($enquiry->preferredDateTimeLabel() !== '')
                 {{ $enquiry->preferredDateTimeLabel() }}
             @else

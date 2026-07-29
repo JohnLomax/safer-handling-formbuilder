@@ -855,13 +855,21 @@ try {
         && $isQuoteFlow
         && !$quoteAlreadySent;
 
-    // Edit Enquiry Email is for returning to the enquiry form. Skip it when a
-    // quote email is going out — that email’s Accept Quote button is the CTA
-    // and must open /booking, not /enquiry.
-    if ($enquiryId !== null && !$shouldSendQuoteEmail) {
-        enquiryLoggerSafe(function () use ($enquiryId, $name, $email, $enquiryType): void {
+    // Edit Enquiry Email always goes out on initial submit (when enabled) so the
+    // customer can return to their form. Quote / Accept Quote is a separate email.
+    // Skip the Monday “Being Contacted” move when a quote is also being sent —
+    // that flow owns Monday status (Contacted / Quote Sent).
+    if ($enquiryId !== null) {
+        enquiryLoggerSafe(function () use ($enquiryId, $name, $email, $enquiryType, $shouldSendQuoteEmail): void {
             try {
-                maybeSendResumeEnquiryEmail($enquiryId, $name, $email, $enquiryType);
+                maybeSendResumeEnquiryEmail(
+                    $enquiryId,
+                    $name,
+                    $email,
+                    $enquiryType,
+                    false,
+                    !$shouldSendQuoteEmail
+                );
             } catch (Throwable $emailError) {
                 enquiryLoggerEvent(
                     $enquiryId,

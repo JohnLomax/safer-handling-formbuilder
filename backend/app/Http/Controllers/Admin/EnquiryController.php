@@ -95,7 +95,8 @@ class EnquiryController extends Controller
             'email' => ['required', 'email', 'max:200'],
             'phone' => ['required', 'string', 'max:40'],
             'venueAddress' => ['required', 'string', 'max:1000'],
-            'preferredDate' => ['required', 'date_format:Y-m-d'],
+            'preferredDate' => ['nullable', 'date_format:Y-m-d'],
+            'dateNotSure' => ['nullable', 'boolean'],
             'studentNames' => ['nullable', 'string', 'max:5000'],
             'studentEmails' => ['nullable', 'string', 'max:5000'],
             'specialRequests' => ['nullable', 'string', 'max:2000'],
@@ -113,11 +114,14 @@ class EnquiryController extends Controller
         require_once $root.'/enquiry_logger.php';
         require_once $root.'/monday_helpers.php';
 
-        $preferredDate = enquiryPreferredDateOnly((string) $validated['preferredDate']);
-        if ($preferredDate === '') {
+        $dateNotSure = $request->boolean('dateNotSure');
+        $preferredDate = enquiryPreferredDateOnly((string) ($validated['preferredDate'] ?? ''));
+        if ($dateNotSure) {
+            $preferredDate = '';
+        } elseif ($preferredDate === '') {
             return redirect()
                 ->route('admin.enquiries.show', ['enquiry' => $enquiry, 'edit_booking' => 1])
-                ->withErrors(['preferredDate' => 'Preferred date is invalid.'])
+                ->withErrors(['preferredDate' => 'Enter a preferred date, or tick “Not sure on date yet”.'])
                 ->withInput()
                 ->with('open_booking_edit', true);
         }
@@ -208,6 +212,7 @@ class EnquiryController extends Controller
             'email' => trim($validated['email']),
             'phone' => trim($validated['phone']),
             'preferredDate' => $preferredDate,
+            'dateNotSure' => $dateNotSure,
             'venueAddress' => trim($validated['venueAddress']),
             'studentNames' => $studentNames,
             'studentEmails' => $studentEmails,
@@ -225,7 +230,7 @@ class EnquiryController extends Controller
         ];
 
         try {
-            enquiryLoggerUpdatePreferredDate((int) $enquiry->id, $preferredDate);
+            enquiryLoggerUpdatePreferredDate((int) $enquiry->id, $preferredDate, $dateNotSure);
             enquiryLoggerSaveBookingDetails((int) $enquiry->id, $details);
             enquiryLoggerMarkQuoteAccepted((int) $enquiry->id);
             enquiryLoggerEvent(
@@ -237,6 +242,8 @@ class EnquiryController extends Controller
                 [
                     'organisation' => $details['organisation'],
                     'delegate_count' => count($delegates),
+                    'preferred_date' => $preferredDate,
+                    'date_not_sure' => $dateNotSure,
                     'source' => $details['source'],
                     'status' => 'quote_accepted',
                 ]

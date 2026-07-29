@@ -67,6 +67,7 @@ class EnquiryController extends Controller
                 'contacted' => Enquiry::query()->where('status', 'contacted')->count(),
                 'quote_sent' => Enquiry::query()->where('status', 'quote_sent')->count(),
                 'quote_accepted' => Enquiry::query()->where('status', 'quote_accepted')->count(),
+                'quote_won' => Enquiry::query()->where('status', 'quote_won')->count(),
                 'submitted' => Enquiry::query()->where('status', 'submitted')->count(),
                 'failed' => Enquiry::query()->where('status', 'failed')->count(),
             ],

@@ -14,7 +14,7 @@
         <div class="min-h-screen overflow-x-hidden brand-page-bg">
             @include('layouts.navigation')
 
-            <main class="overflow-x-hidden pb-12">
+            <main class="overflow-x-hidden pb-8">
                 @isset($header)
                     <div class="border-b border-sh-border/80 bg-white/75 backdrop-blur-md">
                         <div class="admin-shell !pb-5 !pt-6">
@@ -25,6 +25,13 @@
 
                 {{ $slot }}
             </main>
+
+            <footer class="px-4 pb-8 pt-2 text-center text-xs text-sh-mid sm:px-6 lg:px-8">
+                Created by
+                <a href="https://d3-digital.com" target="_blank" rel="noopener noreferrer" class="font-semibold text-brand-header hover:underline">
+                    D3 Digital
+                </a>
+            </footer>
         </div>
     </body>
 </html>

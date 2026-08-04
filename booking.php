@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/enquiry_logger.php';
 require_once __DIR__ . '/brevo_email.php';
+require_once __DIR__ . '/includes/d3_credit.php';
 
 $enquiryIdParam = enquiryLoggerParseId($_GET['enquiry'] ?? ($_GET['enquiryId'] ?? null));
 $token = trim((string)($_GET['token'] ?? ''));
@@ -370,6 +371,7 @@ function bookingH(string $value): string
       }
     }
 <?= saferHandlingInformFollowEngageWebCss() ?>
+    <?= d3DigitalCreditCss() ?>
   </style>
 </head>
 <body>
@@ -577,6 +579,7 @@ TERMS
         </div>
       <?php endif; ?>
     </div>
+    <?= d3DigitalCreditHtml() ?>
   </div>
 
   <?php if ($errorMessage === '' && !$alreadySubmitted): ?>

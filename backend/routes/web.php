@@ -1,8 +1,10 @@
 <?php
 
+use App\Http\Controllers\Admin\ActivityLogController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\EnquiryController;
 use App\Http\Controllers\Admin\FeedbackController;
+use App\Http\Controllers\Admin\HelpController;
 use App\Http\Controllers\Admin\SettingController;
 use App\Http\Controllers\Admin\TrainingMatrixController;
 use App\Http\Controllers\Admin\UserController;
@@ -49,6 +51,10 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::resource('training-matrix', TrainingMatrixController::class)
         ->parameters(['training-matrix' => 'trainingMatrix'])
         ->except(['show']);
+
+    Route::get('/help', [HelpController::class, 'index'])->name('help.index');
+
+    Route::get('/activity', [ActivityLogController::class, 'index'])->name('activity.index');
 });
 
 Route::get('/dashboard', function () {

@@ -19,6 +19,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'admin' => \App\Http\Middleware\EnsureUserIsAdmin::class,
         ]);
+        $middleware->appendToGroup('web', \App\Http\Middleware\LogInternalUserActivity::class);
     })
     ->withSchedule(function (Schedule $schedule): void {
         // Reminder to accept quote / add venue details 24 hours before preferred date.

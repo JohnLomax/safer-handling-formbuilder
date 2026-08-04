@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/includes/brand_engage.php';
+require_once __DIR__ . '/includes/d3_credit.php';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -238,6 +239,7 @@ require_once __DIR__ . '/includes/brand_engage.php';
         width: 100%;
       }
     }
+    <?= d3DigitalCreditCss() ?>
   </style>
 </head>
 <body>
@@ -277,6 +279,7 @@ require_once __DIR__ . '/includes/brand_engage.php';
         <?= saferHandlingInformFollowEngageWebHtml() ?>
       </section>
     </div>
+    <?= d3DigitalCreditHtml() ?>
   </div>
 
   <script>

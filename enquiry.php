@@ -6,6 +6,7 @@ if (file_exists($configPath)) {
     require_once $configPath;
 }
 require_once __DIR__ . '/includes/brand_engage.php';
+require_once __DIR__ . '/includes/d3_credit.php';
 
 $kajabiCoursesUrl = trim((string) appConfigValue(
     'KAJABI_COURSES_URL',
@@ -824,6 +825,7 @@ if ($kajabiCoursesUrl === '') {
         font-size: 16px; /* avoid iOS zoom on focus */
       }
     }
+    <?= d3DigitalCreditCss() ?>
   </style>
 </head>
 <body>
@@ -1133,6 +1135,7 @@ if ($kajabiCoursesUrl === '') {
         <?= saferHandlingInformFollowEngageWebHtml() ?>
       </section>
     </div>
+    <?= d3DigitalCreditHtml() ?>
   </div>
 
   <script>

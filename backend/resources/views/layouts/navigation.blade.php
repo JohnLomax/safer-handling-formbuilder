@@ -46,8 +46,16 @@
                         Profile
                     </x-dropdown-link>
 
+                    <x-dropdown-link :href="route('admin.help.index')">
+                        Help
+                    </x-dropdown-link>
+
                     <x-dropdown-link :href="route('admin.settings.edit')">
                         Integration settings
+                    </x-dropdown-link>
+
+                    <x-dropdown-link :href="route('admin.activity.index')">
+                        Activity log
                     </x-dropdown-link>
 
                     <form method="POST" action="{{ route('logout') }}">
@@ -99,8 +107,16 @@
                     Profile
                 </x-responsive-nav-link>
 
+                <x-responsive-nav-link :href="route('admin.help.index')" :active="request()->routeIs('admin.help.*')">
+                    Help
+                </x-responsive-nav-link>
+
                 <x-responsive-nav-link :href="route('admin.settings.edit')" :active="request()->routeIs('admin.settings.*')">
                     Integration settings
+                </x-responsive-nav-link>
+
+                <x-responsive-nav-link :href="route('admin.activity.index')" :active="request()->routeIs('admin.activity.*')">
+                    Activity log
                 </x-responsive-nav-link>
 
                 <form method="POST" action="{{ route('logout') }}">

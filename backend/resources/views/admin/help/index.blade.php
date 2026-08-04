@@ -536,7 +536,7 @@
                         </div>
                     </div>
                     <p class="text-sm text-sh-mid">
-                        <strong class="text-sh-text">Read</strong> appears after Brevo reports the customer opened the email. Set the Brevo webhook secret in Integration settings and register the webhook URL in Brevo for Opened events.
+                        <strong class="text-sh-text">Read</strong> appears after Brevo reports the customer opened the email. In Integration settings use <strong>Register in Brevo</strong>, or manually add the webhook under Brevo → account name → Integrations → Webhooks (Transactional email → Opened).
                     </p>
                 </section>
 

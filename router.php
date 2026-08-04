@@ -76,7 +76,7 @@ if (in_array($path, $formEndpoints, true)) {
     return true;
 }
 
-// Public form static assets (e.g. /assets/logo.png)
+// Public form static assets (e.g. /assets/logo.png), then Laravel public assets
 if (str_starts_with($path, '/assets/')) {
     $asset = $root . $path;
     if (is_file($asset)) {
@@ -84,7 +84,7 @@ if (str_starts_with($path, '/assets/')) {
     }
 }
 
-// Laravel public static files (Vite build, favicon, etc.)
+// Laravel public static files (Vite build, help videos, favicon, etc.)
 $laravelFile = $laravelPublic . $path;
 if ($path !== '/' && is_file($laravelFile)) {
     $ext = strtolower(pathinfo($laravelFile, PATHINFO_EXTENSION));
@@ -100,6 +100,8 @@ if ($path !== '/' && is_file($laravelFile)) {
             'gif' => 'image/gif',
             'webp' => 'image/webp',
             'ico' => 'image/x-icon',
+            'mp4' => 'video/mp4',
+            'webm' => 'video/webm',
             'woff' => 'font/woff',
             'woff2' => 'font/woff2',
             'map' => 'application/json; charset=utf-8',
@@ -108,6 +110,32 @@ if ($path !== '/' && is_file($laravelFile)) {
         };
         if ($mime !== null) {
             header('Content-Type: ' . $mime);
+        }
+        // Support video seeking when served through the PHP router.
+        if (in_array($ext, ['mp4', 'webm'], true)) {
+            $size = filesize($laravelFile);
+            header('Accept-Ranges: bytes');
+            $range = $_SERVER['HTTP_RANGE'] ?? '';
+            if (is_string($range) && preg_match('/bytes=(\d*)-(\d*)/', $range, $matches)) {
+                $start = $matches[1] !== '' ? (int) $matches[1] : 0;
+                $end = $matches[2] !== '' ? (int) $matches[2] : ($size - 1);
+                $end = min($end, $size - 1);
+                if ($start <= $end) {
+                    $length = $end - $start + 1;
+                    http_response_code(206);
+                    header("Content-Range: bytes {$start}-{$end}/{$size}");
+                    header('Content-Length: '.$length);
+                    $fh = fopen($laravelFile, 'rb');
+                    if ($fh !== false) {
+                        fseek($fh, $start);
+                        echo fread($fh, $length);
+                        fclose($fh);
+                    }
+
+                    return true;
+                }
+            }
+            header('Content-Length: '.$size);
         }
         readfile($laravelFile);
         return true;

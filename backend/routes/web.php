@@ -44,6 +44,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
 
     Route::get('/settings', [SettingController::class, 'edit'])->name('settings.edit');
     Route::put('/settings', [SettingController::class, 'update'])->name('settings.update');
+    Route::post('/settings/brevo/register-webhook', [SettingController::class, 'registerBrevoWebhook'])->name('settings.brevo.register-webhook');
     Route::get('/settings/xero/connect', [SettingController::class, 'connectXero'])->name('settings.xero.connect');
     Route::get('/settings/xero/callback', [SettingController::class, 'xeroCallback'])->name('settings.xero.callback');
     Route::post('/settings/xero/disconnect', [SettingController::class, 'disconnectXero'])->name('settings.xero.disconnect');

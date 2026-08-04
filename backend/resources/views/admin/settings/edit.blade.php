@@ -6,8 +6,11 @@
     <div class="admin-shell">
         @include('admin.partials.alerts')
 
-        {{-- Outside the settings form so Disconnect does not nest <form> tags and break panel spacing --}}
+        {{-- Outside the settings form so nested actions do not nest <form> tags --}}
         <form id="xero-disconnect-form" method="POST" action="{{ route('admin.settings.xero.disconnect') }}" class="hidden">
+            @csrf
+        </form>
+        <form id="brevo-register-webhook-form" method="POST" action="{{ route('admin.settings.brevo.register-webhook') }}" class="hidden">
             @csrf
         </form>
 
@@ -98,14 +101,82 @@
                     <label for="brevo_resume_email_enabled" class="text-sm text-sh-mid">Send Edit Enquiry Emails after the full form is submitted</label>
                 </div>
 
-                <div>
-                    <x-input-label for="brevo_webhook_secret" value="Brevo webhook secret (email opens)" />
-                    <x-text-input id="brevo_webhook_secret" name="brevo_webhook_secret" type="password" class="mt-1 block w-full font-mono text-sm" :value="old('brevo_webhook_secret', $settings['brevo_webhook_secret'] ?? '')" autocomplete="off" />
-                    <p class="mt-1 text-xs text-sh-mid">
-                        Optional. In Brevo → Transactional → Webhooks, add
-                        <code class="rounded bg-sh-surface px-1">{{ rtrim(config('app.url'), '/') }}/api/brevo/webhooks?token=YOUR_SECRET</code>
-                        for <strong>Opened</strong> / <strong>Unique opened</strong>. Leave blank when saving to keep the existing secret.
-                    </p>
+                <div class="rounded-[12px] border border-[#9fc8ed] bg-[#eef7ff] p-4 space-y-3">
+                    <div>
+                        <h4 class="text-sm font-semibold text-brand-header">Email open tracking webhook</h4>
+                        <p class="mt-1 text-xs text-sh-mid">
+                            Easiest: use <strong>Register in Brevo</strong> below (uses your Brevo API key).
+                            Or add it manually in Brevo:
+                        </p>
+                        <ol class="mt-2 list-decimal space-y-1 ps-5 text-xs text-sh-mid">
+                            <li>Click your account name (top right) → <strong>Integrations</strong> → <strong>Webhooks</strong></li>
+                            <li>Click <strong>Add webhook</strong> → choose <strong>Outbound webhook</strong></li>
+                            <li>Paste the URL below</li>
+                            <li>Event category: <strong>Transactional email</strong> — keep <strong>Opened</strong> / <strong>Unique opened</strong> on</li>
+                            <li>Click <strong>Activate webhook</strong></li>
+                        </ol>
+                        <p class="mt-2 text-xs text-sh-mid">
+                            Direct link (if available on your account):
+                            <a href="https://app.brevo.com/integrations/webhooks" class="link-brand" target="_blank" rel="noopener noreferrer">app.brevo.com/integrations/webhooks</a>
+                            or older SMTP page
+                            <a href="https://app-smtp.brevo.com/webhook" class="link-brand" target="_blank" rel="noopener noreferrer">app-smtp.brevo.com/webhook</a>.
+                        </p>
+                    </div>
+
+                    @error('brevo_webhook')
+                        <p class="text-xs font-medium text-red-700">{{ $message }}</p>
+                    @enderror
+
+                    <div>
+                        <x-input-label for="brevo_webhook_url_display" value="Webhook URL" />
+                        <div class="mt-1 flex flex-col gap-2 sm:flex-row sm:items-stretch">
+                            <input
+                                id="brevo_webhook_url_display"
+                                type="text"
+                                readonly
+                                class="block w-full rounded-[10px] border border-[#b7d3ee] bg-white px-3 py-2 font-mono text-xs text-sh-text"
+                                value="{{ $brevoWebhookUrl }}"
+                            />
+                            <button
+                                type="button"
+                                class="btn-brand-outline shrink-0 text-xs"
+                                onclick="navigator.clipboard.writeText(document.getElementById('brevo_webhook_url_display').value)"
+                            >
+                                Copy URL
+                            </button>
+                        </div>
+                        @if (! $brevoWebhookSecretConfigured)
+                            <p class="mt-1 text-xs text-amber-800">
+                                Tip: enter a secret below and click Save first — or use Register in Brevo and a secret will be created automatically.
+                            </p>
+                        @endif
+                    </div>
+
+                    <div>
+                        <x-input-label for="brevo_webhook_secret" value="Webhook secret" />
+                        <x-text-input
+                            id="brevo_webhook_secret"
+                            name="brevo_webhook_secret"
+                            type="text"
+                            class="mt-1 block w-full font-mono text-sm"
+                            :value="old('brevo_webhook_secret', $settings['brevo_webhook_secret'] ?? '')"
+                            autocomplete="off"
+                            placeholder="e.g. a long random string"
+                        />
+                        <p class="mt-1 text-xs text-sh-mid">Leave blank when saving to keep the existing secret.</p>
+                    </div>
+
+                    <div>
+                        <button
+                            type="submit"
+                            form="brevo-register-webhook-form"
+                            class="btn-brand text-xs"
+                            onclick="return confirm('Register this open-tracking webhook in Brevo now?');"
+                        >
+                            Register in Brevo
+                        </button>
+                        <p class="mt-1 text-xs text-sh-mid">Creates a transactional webhook for Opened + Unique opened using your saved Brevo API key.</p>
+                    </div>
                 </div>
 
                 <div>

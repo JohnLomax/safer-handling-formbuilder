@@ -68,8 +68,16 @@ class SettingController extends Controller
             $redirectUri = $liveRedirectUri;
         }
 
+        $brevoWebhookSecret = trim((string) ($settings['brevo_webhook_secret'] ?? ''));
+        $brevoWebhookUrl = rtrim((string) config('app.url'), '/').'/api/brevo/webhooks';
+        if ($brevoWebhookSecret !== '') {
+            $brevoWebhookUrl .= '?token='.rawurlencode($brevoWebhookSecret);
+        }
+
         return view('admin.settings.edit', [
             'settings' => $settings,
+            'brevoWebhookSecretConfigured' => $brevoWebhookSecret !== '',
+            'brevoWebhookUrl' => $brevoWebhookUrl,
             'xeroRedirectUri' => $redirectUri,
             'xeroLiveRedirectUri' => $liveRedirectUri,
             'xeroConnected' => trim((string) ($settings['xero_refresh_token'] ?? '')) !== ''
@@ -163,6 +171,57 @@ class SettingController extends Controller
         }
 
         return redirect()->route('admin.settings.edit')->with('status', 'Configuration saved.');
+    }
+
+    public function registerBrevoWebhook(): RedirectResponse
+    {
+        $apiKey = trim((string) (getenv('BREVO_API_KEY') ?: Setting::getValue('brevo_api_key', '')));
+        if ($apiKey === '') {
+            return redirect()
+                ->route('admin.settings.edit')
+                ->withErrors(['brevo_webhook' => 'Add and save a Brevo API key before registering the webhook.']);
+        }
+
+        $secret = trim((string) Setting::getValue('brevo_webhook_secret', ''));
+        if ($secret === '') {
+            $secret = bin2hex(random_bytes(24));
+            Setting::setValue('brevo_webhook_secret', $secret);
+        }
+
+        $url = rtrim((string) config('app.url'), '/').'/api/brevo/webhooks?token='.rawurlencode($secret);
+
+        try {
+            $response = Http::withHeaders([
+                'api-key' => $apiKey,
+                'accept' => 'application/json',
+                'content-type' => 'application/json',
+            ])->post('https://api.brevo.com/v3/webhooks', [
+                'type' => 'transactional',
+                'channel' => 'email',
+                'description' => 'Safer Handling enquiry email open tracking',
+                'url' => $url,
+                'events' => ['opened', 'uniqueOpened'],
+                'batched' => false,
+            ]);
+        } catch (Throwable $e) {
+            return redirect()
+                ->route('admin.settings.edit')
+                ->withErrors(['brevo_webhook' => 'Could not reach Brevo: '.$e->getMessage()]);
+        }
+
+        if ($response->successful()) {
+            $id = $response->json('id');
+
+            return redirect()
+                ->route('admin.settings.edit')
+                ->with('status', 'Brevo webhook registered successfully'.($id ? ' (ID '.$id.')' : '').'. Opened events will mark emails as Read.');
+        }
+
+        $message = (string) ($response->json('message') ?? $response->body() ?: 'Brevo rejected the webhook request.');
+
+        return redirect()
+            ->route('admin.settings.edit')
+            ->withErrors(['brevo_webhook' => $message]);
     }
 
     public function connectXero(): RedirectResponse

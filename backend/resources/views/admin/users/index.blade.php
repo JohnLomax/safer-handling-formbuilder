@@ -75,13 +75,7 @@
             </div>
             <button type="button" class="btn-icon" x-on:click="$dispatch('close-modal', 'user-create-modal')">&times;</button>
         </div>
-        <div class="admin-modal-body">
-            @include('admin.users._form', ['mode' => 'create'])
-        </div>
-        <div class="admin-modal-footer">
-            <button type="button" class="btn-brand-outline" x-on:click="$dispatch('close-modal', 'user-create-modal')">Cancel</button>
-            <button type="submit" form="user-create-form" class="btn-brand">Create user</button>
-        </div>
+        @include('admin.users._form', ['mode' => 'create'])
     </x-modal>
 
     @if ($editUser)
@@ -93,13 +87,7 @@
                 </div>
                 <button type="button" class="btn-icon" x-on:click="$dispatch('close-modal', 'user-edit-modal')">&times;</button>
             </div>
-            <div class="admin-modal-body">
-                @include('admin.users._form', ['mode' => 'edit', 'user' => $editUser])
-            </div>
-            <div class="admin-modal-footer">
-                <button type="button" class="btn-brand-outline" x-on:click="$dispatch('close-modal', 'user-edit-modal')">Cancel</button>
-                <button type="submit" form="user-edit-form" class="btn-brand">Save changes</button>
-            </div>
+            @include('admin.users._form', ['mode' => 'edit', 'user' => $editUser])
         </x-modal>
     @endif
 </x-app-layout>

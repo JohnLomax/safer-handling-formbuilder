@@ -36,14 +36,34 @@ $maxWidth = [
             return !!(el && el.getAttribute('data-open') === 'true')
         },
     }"
-    x-init="$watch('show', value => {
-        if (value) {
-            document.body.classList.add('overflow-y-hidden');
-            {{ $attributes->has('focusable') ? 'setTimeout(() => firstFocusable().focus(), 100)' : '' }}
-        } else {
-            document.body.classList.remove('overflow-y-hidden');
-        }
-    })"
+    x-init="
+        const syncDisabled = (value) => {
+            $el.querySelectorAll('input, select, textarea, button').forEach((el) => {
+                if (el.dataset.modalKeepEnabled === 'true') return;
+                if (value) {
+                    if (el.dataset.wasDisabled === '1') {
+                        el.disabled = true;
+                    } else {
+                        el.disabled = false;
+                    }
+                    delete el.dataset.wasDisabled;
+                } else {
+                    el.dataset.wasDisabled = el.disabled ? '1' : '0';
+                    el.disabled = true;
+                }
+            });
+        };
+        syncDisabled(show);
+        $watch('show', value => {
+            syncDisabled(value);
+            if (value) {
+                document.body.classList.add('overflow-y-hidden');
+                {{ $attributes->has('focusable') ? 'setTimeout(() => firstFocusable().focus(), 100)' : '' }}
+            } else {
+                document.body.classList.remove('overflow-y-hidden');
+            }
+        });
+    "
     x-on:open-modal.window="$event.detail == '{{ $name }}' ? show = true : null"
     x-on:close-modal.window="$event.detail == '{{ $name }}' ? show = false : null"
     x-on:close.stop="show = false"

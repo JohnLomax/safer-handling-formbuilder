@@ -4,9 +4,27 @@ declare(strict_types=1);
 /**
  * Safer Handling Forge CRM booking-intake webhook.
  *
- * Sends a full booking snapshot when accept-form + venue details are saved.
+ * Sends a full booking snapshot to Forge. `booking.booking_status` (and
+ * `booking.delivery_stage`) use Forge Booking Delivery Stage values:
+ *
+ *   provisional_book  — reserve / limited data, not formally agreed
+ *   confirmed_book    — formal Accept Quote / booking process completed
+ *   on_hold           — paused until confirmed_book or cancelled
+ *   to_rearrange      — needs new dates (session dates cleared in payload)
+ *   cancelled         — not proceeding
+ *
+ * Invoicing / Kajabi are not delivery stages — those events keep confirmed_book.
  * Payloads are staged for admin review in Forge — they are not applied live.
  */
+
+/** @var list<string> */
+const FORGE_DELIVERY_STAGES = [
+    'provisional_book',
+    'confirmed_book',
+    'on_hold',
+    'to_rearrange',
+    'cancelled',
+];
 
 function forgeEnabled(): bool
 {
@@ -43,9 +61,57 @@ function forgeExternalRef(int $enquiryId): string
 }
 
 /**
- * Map local enquiry / booking state to the Forge booking_status label.
- * Accept-form → Accepted; after Xero invoice is sent → Invoice Sent;
- * after Kajabi enrollment → Quote Won.
+ * Normalise legacy Forge labels and aliases to delivery-stage snake_case.
+ */
+function forgeNormaliseDeliveryStage(?string $status): string
+{
+    $raw = strtolower(trim((string) $status));
+    if ($raw === '') {
+        return '';
+    }
+
+    $aliases = [
+        'pending' => 'provisional_book',
+        'provisional' => 'provisional_book',
+        'provisional_book' => 'provisional_book',
+        'prov_booking_delivery' => 'provisional_book',
+        'accepted' => 'confirmed_book',
+        'confirmed' => 'confirmed_book',
+        'confirmed_book' => 'confirmed_book',
+        'booking_delivery' => 'confirmed_book',
+        'invoice sent' => 'confirmed_book',
+        'invoice_sent' => 'confirmed_book',
+        'quote won' => 'confirmed_book',
+        'quote_won' => 'confirmed_book',
+        'kajabi_enrolled' => 'confirmed_book',
+        'on_hold' => 'on_hold',
+        'on hold' => 'on_hold',
+        'to_rearrange' => 'to_rearrange',
+        'to rearrange' => 'to_rearrange',
+        'cancelled' => 'cancelled',
+        'canceled' => 'cancelled',
+    ];
+
+    if (isset($aliases[$raw])) {
+        return $aliases[$raw];
+    }
+
+    $snake = str_replace([' ', '-'], '_', $raw);
+    if (in_array($snake, FORGE_DELIVERY_STAGES, true)) {
+        return $snake;
+    }
+
+    return $snake;
+}
+
+/**
+ * Map local enquiry / booking state to a Forge delivery stage.
+ *
+ * Scenarios (webhook booking_status / delivery_stage):
+ * - Limited reserve / not formally agreed → provisional_book
+ * - Accept Quote / terms accepted → confirmed_book
+ * - Invoice sent / Kajabi enroll → stay confirmed_book (not separate stages)
+ * - Explicit overrides: on_hold, to_rearrange, cancelled
  */
 function forgeBookingStatusLabel(
     ?string $enquiryStatus,
@@ -53,32 +119,48 @@ function forgeBookingStatusLabel(
     bool $invoiceSent = false,
     bool $quoteWon = false
 ): string {
-    $status = strtolower(trim((string)$enquiryStatus));
+    $status = strtolower(trim((string) $enquiryStatus));
+    $normalised = forgeNormaliseDeliveryStage($status);
 
-    if ($quoteWon || $status === 'kajabi_enrolled') {
-        return 'Quote Won';
+    if (in_array($normalised, ['on_hold', 'to_rearrange', 'cancelled'], true)) {
+        return $normalised;
     }
 
-    if ($invoiceSent || $status === 'quote_won' || $status === 'invoice_sent') {
-        return 'Invoice Sent';
-    }
-
+    // Formal agreement / post-accept delivery — including invoice & Kajabi.
     if (
         $termsAccepted
-        || in_array($status, ['quote_accepted', 'accepted'], true)
+        || $invoiceSent
+        || $quoteWon
+        || in_array($status, ['quote_accepted', 'accepted', 'quote_won', 'invoice_sent', 'kajabi_enrolled'], true)
+        || $normalised === 'confirmed_book'
     ) {
-        return 'Accepted';
+        return 'confirmed_book';
     }
 
-    if (in_array($status, ['quote_sent', 'pending'], true)) {
-        return 'Pending';
+    // Pre-agreement reserve / limited data.
+    if (
+        in_array($status, ['quote_sent', 'pending', 'submitted', 'contacted', 'in_progress'], true)
+        || $normalised === 'provisional_book'
+        || $status === ''
+    ) {
+        return 'provisional_book';
     }
 
-    if ($status === '') {
-        return $termsAccepted ? 'Accepted' : 'Pending';
-    }
+    return $normalised !== '' ? $normalised : 'provisional_book';
+}
 
-    return ucwords(str_replace('_', ' ', $status));
+/**
+ * Rank for avoiding accidental regressions (higher = further along / stronger).
+ */
+function forgeDeliveryStageRank(string $stage): int
+{
+    return match (forgeNormaliseDeliveryStage($stage)) {
+        'provisional_book' => 10,
+        'on_hold', 'to_rearrange' => 20,
+        'confirmed_book' => 30,
+        'cancelled' => 100,
+        default => 0,
+    };
 }
 
 function forgeSessionDateId(int $enquiryId, int $index = 1): string
@@ -255,18 +337,23 @@ function forgeBuildBookingPayload(
     $invoiceSent = !empty($bookingDetails['invoiceSent'])
         || trim((string)($enquiry['xero_invoice_sent_at'] ?? '')) !== ''
         || trim((string)($enquiry['status'] ?? '')) === 'quote_won';
+    $quoteWon = !empty($bookingDetails['quoteWon'])
+        || trim((string)($enquiry['status'] ?? '')) === 'quote_won';
 
-    $bookingStatus = trim((string)$bookingStatusOverride);
+    $bookingStatus = forgeNormaliseDeliveryStage((string) $bookingStatusOverride);
     if ($bookingStatus === '') {
         $bookingStatus = forgeBookingStatusLabel(
             $enquiry['status'] ?? null,
             $termsAccepted,
-            $invoiceSent
+            $invoiceSent,
+            $quoteWon
         );
     }
 
     $booking = [
+        // Forge Booking Delivery Stage (same value in both keys for compatibility).
         'booking_status' => $bookingStatus,
+        'delivery_stage' => $bookingStatus,
         'organisation_name' => $organisation,
         'course_code' => $courseCode,
         'expected_delegates' => $expectedDelegates,
@@ -291,8 +378,12 @@ function forgeBuildBookingPayload(
     }
 
     $sessionDates = [];
+    // to_rearrange / cancelled: clear session date-times so Forge shows nothing active to rearrange/cancel.
+    $clearSessions = in_array($bookingStatus, ['to_rearrange', 'cancelled'], true);
     $dateNotSure = !empty($enquiry['date_not_sure']);
-    $parsedDate = $dateNotSure ? null : forgeParsePreferredDateTime($enquiry['preferred_date_time'] ?? null);
+    $parsedDate = ($clearSessions || $dateNotSure)
+        ? null
+        : forgeParsePreferredDateTime($enquiry['preferred_date_time'] ?? null);
     if ($parsedDate !== null) {
         $session = [
             'id' => forgeSessionDateId($enquiryId, 1),
@@ -451,9 +542,14 @@ function enquiryLoggerMarkForgeSynced(
 }
 
 /**
- * Send booking snapshot to Forge after accept form + venue details are saved.
- * Never throws out of the helper for expected skip paths; throws on HTTP/config errors
- * so callers can log a warning without rolling back the local booking save.
+ * Send booking snapshot to Forge.
+ *
+ * - confirmed_book: venue + terms accepted (formal Accept Quote / admin booking)
+ * - provisional_book: limited reserve data without formal terms (org/booker present)
+ * - on_hold / to_rearrange / cancelled: explicit overrides (edit of an existing Forge booking)
+ *
+ * Never throws for expected skip paths; throws on HTTP/config errors so callers can warn
+ * without rolling back the local booking save.
  *
  * @param array<string, mixed> $bookingDetails
  * @return array<string, mixed>|null Forge 202 response body, or null when skipped
@@ -471,8 +567,19 @@ function forgeMaybeSyncBooking(
 
     $venueAddress = trim((string)($bookingDetails['venueAddress'] ?? ''));
     $termsAccepted = !empty($bookingDetails['termsAccepted']);
-    if ($venueAddress === '' || !$termsAccepted) {
-        return null;
+    $organisation = trim((string)($bookingDetails['organisation'] ?? ''));
+    $bookerName = trim((string)($bookingDetails['bookerName'] ?? ''));
+    $override = forgeNormaliseDeliveryStage($bookingStatusOverride);
+    $isLifecycleOverride = in_array($override, ['on_hold', 'to_rearrange', 'cancelled'], true);
+
+    // Formal booking needs venue + terms. Provisional reserve needs limited identifying data.
+    if (!$isLifecycleOverride) {
+        if ($termsAccepted && $venueAddress === '') {
+            return null;
+        }
+        if (!$termsAccepted && $organisation === '' && $bookerName === '' && $venueAddress === '') {
+            return null;
+        }
     }
 
     $token = forgeWebhookToken();
@@ -501,25 +608,52 @@ function forgeMaybeSyncBooking(
         return null;
     }
 
+    $alreadySynced = trim((string)($enquiry['forge_synced_at'] ?? '')) !== '';
+    // Lifecycle holds/cancels only apply to bookings already in Forge.
+    if ($isLifecycleOverride && !$alreadySynced) {
+        enquiryLoggerEvent(
+            $enquiryId,
+            'forge_booking_sync_skipped',
+            'Forge '.$override.' was requested, but this enquiry has not been pushed to Forge yet.'
+        );
+
+        return null;
+    }
+
     // First successful Forge push is create; later booking edits are edit.
-    $action = trim((string)($enquiry['forge_synced_at'] ?? '')) !== '' ? 'edit' : 'create';
+    $action = $alreadySynced ? 'edit' : 'create';
+
+    if ($override === '' && !$termsAccepted) {
+        $override = 'provisional_book';
+    } elseif ($override === '' && $termsAccepted) {
+        $override = 'confirmed_book';
+    }
+
+    $previousStatus = forgeNormaliseDeliveryStage((string)($enquiry['forge_booking_status'] ?? ''));
+    // Do not silently regress confirmed_book → provisional_book on later edits.
+    if (
+        $override === 'provisional_book'
+        && $previousStatus === 'confirmed_book'
+        && !$isLifecycleOverride
+    ) {
+        $override = 'confirmed_book';
+    }
 
     $payload = forgeBuildBookingPayload(
         $enquiryId,
         $bookingDetails,
         $enquiry,
         $action,
-        $bookingStatusOverride
+        $override
     );
-    $bookingStatus = trim((string)($payload['booking']['booking_status'] ?? ''));
-    $previousStatus = trim((string)($enquiry['forge_booking_status'] ?? ''));
+    $bookingStatus = forgeNormaliseDeliveryStage((string)($payload['booking']['booking_status'] ?? ''));
 
-    // Skip no-op status edits once Forge already has this status.
+    // Skip no-op status edits once Forge already has this delivery stage.
     if (
         $action === 'edit'
         && $bookingStatusOverride !== null
         && $previousStatus !== ''
-        && strcasecmp($previousStatus, $bookingStatus) === 0
+        && $previousStatus === $bookingStatus
     ) {
         return [
             'status' => 'pending',
@@ -545,6 +679,7 @@ function forgeMaybeSyncBooking(
                 'action' => $action,
                 'external_ref' => $payload['external_ref'],
                 'booking_status' => $bookingStatus !== '' ? $bookingStatus : null,
+                'delivery_stage' => $bookingStatus !== '' ? $bookingStatus : null,
                 'response' => $snippet,
             ]
         );
@@ -556,13 +691,16 @@ function forgeMaybeSyncBooking(
     $eventId = is_array($json) && isset($json['event_id']) ? (string)$json['event_id'] : null;
     enquiryLoggerMarkForgeSynced($enquiryId, $action, $eventId, $bookingStatus);
 
+    $stageLabels = [
+        'provisional_book' => 'provisional_book (reserve / not formally agreed)',
+        'confirmed_book' => 'confirmed_book (formally booked)',
+        'on_hold' => 'on_hold',
+        'to_rearrange' => 'to_rearrange',
+        'cancelled' => 'cancelled',
+    ];
     $syncMessage = 'Booking snapshot sent to Forge for admin review.';
-    if ($bookingStatus === 'Accepted') {
-        $syncMessage = 'Booking snapshot sent to Forge with status Accepted.';
-    } elseif ($bookingStatus === 'Invoice Sent') {
-        $syncMessage = 'Booking snapshot sent to Forge with status Invoice Sent.';
-    } elseif ($bookingStatus === 'Quote Won') {
-        $syncMessage = 'Booking snapshot sent to Forge with status Quote Won.';
+    if (isset($stageLabels[$bookingStatus])) {
+        $syncMessage = 'Booking snapshot sent to Forge with delivery stage '.$stageLabels[$bookingStatus].'.';
     }
 
     enquiryLoggerEvent(
@@ -575,6 +713,7 @@ function forgeMaybeSyncBooking(
             'event_id' => $eventId,
             'status' => is_array($json) ? ($json['status'] ?? 'pending') : 'pending',
             'booking_status' => $bookingStatus !== '' ? $bookingStatus : null,
+            'delivery_stage' => $bookingStatus !== '' ? $bookingStatus : null,
             'previous_booking_status' => $previousStatus !== '' ? $previousStatus : null,
             'change_count' => is_array($json) ? ($json['change_count'] ?? null) : null,
             'target_not_found' => is_array($json) ? ($json['target_not_found'] ?? null) : null,
@@ -586,12 +725,12 @@ function forgeMaybeSyncBooking(
     if (
         $bookingStatus !== ''
         && $previousStatus !== ''
-        && strcasecmp($previousStatus, $bookingStatus) !== 0
+        && $previousStatus !== $bookingStatus
     ) {
         enquiryLoggerEvent(
             $enquiryId,
             'forge_status_updated',
-            'Forge client booking status updated from ' . $previousStatus . ' to ' . $bookingStatus . '.',
+            'Forge delivery stage updated from ' . $previousStatus . ' to ' . $bookingStatus . '.',
             [
                 'external_ref' => $payload['external_ref'],
                 'event_id' => $eventId,
@@ -606,7 +745,7 @@ function forgeMaybeSyncBooking(
 }
 
 /**
- * After accept-form completion, push so Forge shows Accepted (Pending → Accepted).
+ * After accept-form completion, push so Forge shows confirmed_book.
  *
  * @param array<string, mixed> $bookingDetails
  * @return array<string, mixed>|null
@@ -631,11 +770,6 @@ function forgeMaybeMarkBookingAccepted(int $enquiryId, array $bookingDetails = [
         return null;
     }
 
-    // Invoice-sent wins over Accepted — do not regress status.
-    if (trim((string)($row['xero_invoice_sent_at'] ?? '')) !== '') {
-        return forgeMaybeMarkInvoiceSent($enquiryId, $bookingDetails);
-    }
-
     if ($bookingDetails === []) {
         $raw = trim((string)($row['booking_details_json'] ?? ''));
         if ($raw !== '') {
@@ -649,22 +783,19 @@ function forgeMaybeMarkBookingAccepted(int $enquiryId, array $bookingDetails = [
         return null;
     }
 
-    $current = trim((string)($row['forge_booking_status'] ?? ''));
-    if (
-        strcasecmp($current, 'Accepted') === 0
-        || strcasecmp($current, 'Invoice Sent') === 0
-        || strcasecmp($current, 'Quote Won') === 0
-    ) {
+    $current = forgeNormaliseDeliveryStage((string)($row['forge_booking_status'] ?? ''));
+    if (in_array($current, ['confirmed_book', 'cancelled'], true)) {
         return null;
     }
 
     $bookingDetails['termsAccepted'] = true;
 
-    return forgeMaybeSyncBooking($enquiryId, $bookingDetails, 'Accepted');
+    return forgeMaybeSyncBooking($enquiryId, $bookingDetails, 'confirmed_book');
 }
 
 /**
- * After Xero invoice is sent, push an edit so Forge moves Accepted → Invoice Sent.
+ * After Xero invoice is sent, refresh Forge snapshot but keep confirmed_book
+ * (invoicing is not a Booking Delivery Stage).
  *
  * @param array<string, mixed> $bookingDetails
  * @return array<string, mixed>|null
@@ -702,18 +833,18 @@ function forgeMaybeMarkInvoiceSent(int $enquiryId, array $bookingDetails = []): 
         enquiryLoggerEvent(
             $enquiryId,
             'forge_booking_sync_skipped',
-            'Xero invoice sent, but Forge status could not be updated because booking details are missing.'
+            'Xero invoice sent, but Forge could not be updated because booking details are missing.'
         );
 
         return null;
     }
 
-    $current = trim((string)($row['forge_booking_status'] ?? ''));
-    if (strcasecmp($current, 'Invoice Sent') === 0 || strcasecmp($current, 'Quote Won') === 0) {
+    $current = forgeNormaliseDeliveryStage((string)($row['forge_booking_status'] ?? ''));
+    if ($current === 'cancelled') {
         return [
             'status' => 'pending',
             'action' => 'edit',
-            'booking_status' => $current !== '' ? $current : 'Invoice Sent',
+            'booking_status' => 'cancelled',
             'skipped' => true,
         ];
     }
@@ -721,11 +852,12 @@ function forgeMaybeMarkInvoiceSent(int $enquiryId, array $bookingDetails = []): 
     $bookingDetails['termsAccepted'] = true;
     $bookingDetails['invoiceSent'] = true;
 
-    return forgeMaybeSyncBooking($enquiryId, $bookingDetails, 'Invoice Sent');
+    // Stay on confirmed_book — invoice timing is independent of delivery stage.
+    return forgeMaybeSyncBooking($enquiryId, $bookingDetails, 'confirmed_book');
 }
 
 /**
- * After Kajabi enrollment completes, push an edit so Forge moves Invoice Sent → Quote Won.
+ * After Kajabi enrollment, refresh Forge snapshot but keep confirmed_book.
  *
  * @param array<string, mixed> $bookingDetails
  * @return array<string, mixed>|null
@@ -763,24 +895,72 @@ function forgeMaybeMarkQuoteWon(int $enquiryId, array $bookingDetails = []): ?ar
         enquiryLoggerEvent(
             $enquiryId,
             'forge_booking_sync_skipped',
-            'Kajabi enrollment completed, but Forge status could not be updated to Quote Won because booking details are missing.'
+            'Kajabi enrollment completed, but Forge could not be updated because booking details are missing.'
         );
 
         return null;
     }
 
-    $current = trim((string)($row['forge_booking_status'] ?? ''));
-    if (strcasecmp($current, 'Quote Won') === 0) {
+    $current = forgeNormaliseDeliveryStage((string)($row['forge_booking_status'] ?? ''));
+    if ($current === 'cancelled') {
         return [
             'status' => 'pending',
             'action' => 'edit',
-            'booking_status' => 'Quote Won',
+            'booking_status' => 'cancelled',
             'skipped' => true,
         ];
     }
 
     $bookingDetails['termsAccepted'] = true;
     $bookingDetails['invoiceSent'] = true;
+    $bookingDetails['quoteWon'] = true;
 
-    return forgeMaybeSyncBooking($enquiryId, $bookingDetails, 'Quote Won');
+    return forgeMaybeSyncBooking($enquiryId, $bookingDetails, 'confirmed_book');
+}
+
+/**
+ * Push an explicit Forge delivery-stage change (on_hold, to_rearrange, cancelled, etc.).
+ *
+ * @param array<string, mixed> $bookingDetails
+ * @return array<string, mixed>|null
+ */
+function forgeMaybeMarkDeliveryStage(
+    int $enquiryId,
+    string $stage,
+    array $bookingDetails = []
+): ?array {
+    $stage = forgeNormaliseDeliveryStage($stage);
+    if (!in_array($stage, FORGE_DELIVERY_STAGES, true)) {
+        return null;
+    }
+
+    require_once __DIR__ . '/enquiry_logger.php';
+
+    if (!forgeEnabled()) {
+        return null;
+    }
+
+    enquiryLoggerEnsureForgeColumns();
+    $pdo = enquiryLoggerPdo();
+    $stmt = $pdo->prepare(
+        'SELECT forge_synced_at, forge_booking_status, booking_details_json
+         FROM enquiries WHERE id = :id LIMIT 1'
+    );
+    $stmt->execute([':id' => $enquiryId]);
+    $row = $stmt->fetch();
+    if (!$row) {
+        return null;
+    }
+
+    if ($bookingDetails === []) {
+        $raw = trim((string)($row['booking_details_json'] ?? ''));
+        if ($raw !== '') {
+            $decoded = json_decode($raw, true);
+            if (is_array($decoded)) {
+                $bookingDetails = $decoded;
+            }
+        }
+    }
+
+    return forgeMaybeSyncBooking($enquiryId, $bookingDetails, $stage);
 }

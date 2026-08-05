@@ -878,11 +878,11 @@ function kajabiMaybeUpdateForgeQuoteWon(int $enquiryId): ?array
         enquiryLoggerEvent(
             $enquiryId,
             'forge_booking_sync_failed',
-            'Kajabi enrollment completed, but Forge status could not be updated to Quote Won.',
+            'Kajabi enrollment completed, but Forge booking snapshot could not be updated.',
             [
                 'channel' => 'forge',
                 'error' => $e->getMessage(),
-                'booking_status' => 'Quote Won',
+                'booking_status' => 'confirmed_book',
             ]
         );
 

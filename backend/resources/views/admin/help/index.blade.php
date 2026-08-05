@@ -320,6 +320,7 @@
                         <a href="#emails"><span class="help-nav-dot"></span>Emails & read status</a>
                         <a href="#booking"><span class="help-nav-dot"></span>Booking & terms</a>
                         <a href="#integrations"><span class="help-nav-dot"></span>Integrations</a>
+                        <a href="#forge-delivery-stages"><span class="help-nav-dot"></span>Forge delivery stages</a>
                         <a class="is-section" href="#training-matrix"><span class="help-nav-dot"></span>Training Matrix</a>
                         <a href="#adding-to-form"><span class="help-nav-dot"></span>Adding to the form / skill matrix</a>
                         <a href="#matrix-fields"><span class="help-nav-dot"></span>Matrix fields</a>
@@ -550,7 +551,7 @@
                     <ul class="list-disc text-sm text-sh-mid">
                         <li>Within 2 days of a set preferred date, customers cannot change the date online.</li>
                         <li>Staff can always update booking details from the enquiry page.</li>
-                        <li>Saving booking syncs to Monday (Quote Accepted), can create a draft Xero invoice, and may push Forge.</li>
+                        <li>Saving booking syncs to Monday (Quote Accepted), can create a draft Xero invoice, and may push Forge as <code>confirmed_book</code>.</li>
                     </ul>
                 </section>
 
@@ -596,8 +597,8 @@
                         <div class="help-feature-card">
                             <div class="help-icon"><x-kajabi-badge compact class="!h-5 !w-5" /></div>
                             <div>
-                                <h4>Kajabi / Forge</h4>
-                                <p>Kajabi enrollment after quote won where configured; Forge receives booking snapshots.</p>
+                                <h4>Kajabi</h4>
+                                <p>Enrollment after quote won where configured.</p>
                             </div>
                         </div>
                         <div class="help-feature-card">
@@ -609,7 +610,111 @@
                                 <p>Sends customer and office emails. Webhook secret enables Read status on opens.</p>
                             </div>
                         </div>
+                        <div class="help-feature-card">
+                            <div class="help-icon" style="background:#f3f9e8;color:#3f6d1c;font-weight:800;font-size:0.7rem;">Fg</div>
+                            <div>
+                                <h4>Forge CRM</h4>
+                                <p>Booking snapshots with delivery stages — see Forge delivery stages below.</p>
+                            </div>
+                        </div>
                     </div>
+                </section>
+
+                <section id="forge-delivery-stages" class="brand-panel help-section help-stack scroll-mt-6">
+                    <div>
+                        <h3 class="text-base font-semibold text-brand-header">Forge delivery stages</h3>
+                        <p class="text-sm text-sh-mid" style="margin-top:0.35rem;">
+                            The Forge booking webhook sends <code class="rounded bg-sh-surface px-1 text-xs">booking.booking_status</code>
+                            and <code class="rounded bg-sh-surface px-1 text-xs">booking.delivery_stage</code> with the same snake_case value.
+                            These are Booking Delivery Stages (not invoice/accounting stages). A booking can stay in
+                            <strong class="text-sh-text">confirmed_book</strong> for months while delivery is planned.
+                        </p>
+                    </div>
+
+                    <div class="help-table-wrap">
+                        <table class="admin-table">
+                            <thead>
+                                <tr>
+                                    <th>Stage</th>
+                                    <th>Meaning</th>
+                                    <th>When this form sends it</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td class="font-medium text-sh-text whitespace-nowrap"><code>provisional_book</code></td>
+                                    <td class="text-sh-mid">
+                                        Reserve / populate with limited data before the customer or admin has formally
+                                        completed Accept Quote. Trainers should treat this as not formally agreed —
+                                        often incomplete info, not a confirmed delivery brief.
+                                        (In Monday naming you may also think of this as <em>prov_booking_delivery</em>.)
+                                    </td>
+                                    <td class="text-sh-mid">
+                                        Forge push with booker/org/venue data but <strong>without</strong> terms accepted.
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td class="font-medium text-sh-text whitespace-nowrap"><code>confirmed_book</code></td>
+                                    <td class="text-sh-mid">
+                                        Formal booking: Accept Quote / venue details and terms completed.
+                                        This is the main delivery stage after the old “Accepted” webhook status.
+                                        (In Monday naming you may also think of this as <em>booking_delivery</em>.)
+                                    </td>
+                                    <td class="text-sh-mid">
+                                        Customer or staff completes Accept Quote (venue + terms). Also kept when a
+                                        Xero invoice is emailed or Kajabi enrolls — those are <em>not</em> separate delivery stages.
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td class="font-medium text-sh-text whitespace-nowrap"><code>on_hold</code></td>
+                                    <td class="text-sh-mid">
+                                        Do not progress until moved to <code>confirmed_book</code> or <code>cancelled</code>.
+                                        Important visibility for Admin, Trainers, and Session Planning.
+                                    </td>
+                                    <td class="text-sh-mid">
+                                        Explicit stage update on an enquiry already synced to Forge (not auto from the form today).
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td class="font-medium text-sh-text whitespace-nowrap"><code>to_rearrange</code></td>
+                                    <td class="text-sh-mid">
+                                        Similar to on hold, but clearly for rearranging dates. Session date/times are
+                                        cleared in the webhook payload so it is obvious which sessions need new dates.
+                                    </td>
+                                    <td class="text-sh-mid">
+                                        Explicit stage update; webhook sends empty <code>session_dates</code>.
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td class="font-medium text-sh-text whitespace-nowrap"><code>cancelled</code></td>
+                                    <td class="text-sh-mid">
+                                        Not proceeding. If the booking had reached provisional or confirmed, cancel
+                                        anything still active. Session dates are cleared in the payload.
+                                    </td>
+                                    <td class="text-sh-mid">
+                                        Explicit stage update on an enquiry already synced to Forge.
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div>
+                        <h4 class="text-sm font-semibold text-brand-header">Scenario → webhook status</h4>
+                        <ul class="mt-2 list-disc text-sm text-sh-mid">
+                            <li><strong class="text-sh-text">Accept Quote / admin booking save</strong> (terms + venue) → <code>confirmed_book</code> (create or edit)</li>
+                            <li><strong class="text-sh-text">Limited reserve</strong> (data without terms) → <code>provisional_book</code></li>
+                            <li><strong class="text-sh-text">Xero invoice emailed to customer</strong> → stays <code>confirmed_book</code> (snapshot may refresh; invoicing is not a delivery stage)</li>
+                            <li><strong class="text-sh-text">Kajabi enrollment / quote won</strong> → stays <code>confirmed_book</code></li>
+                            <li><strong class="text-sh-text">Post-delivery checks</strong> (close-out checklist in Forge) → phase 2; not driven by this form webhook yet</li>
+                        </ul>
+                    </div>
+
+                    <p class="text-sm text-sh-mid">
+                        Configure the Forge webhook URL and token under
+                        <a href="{{ route('admin.settings.edit') }}" class="link-brand">Integration settings</a>.
+                        Successful pushes appear on the enquiry journey timeline as Forge sync events.
+                    </p>
                 </section>
 
                 <section id="training-matrix" class="brand-panel help-section help-stack scroll-mt-6">

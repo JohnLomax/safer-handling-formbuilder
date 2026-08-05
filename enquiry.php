@@ -333,6 +333,39 @@ if ($kajabiCoursesUrl === '') {
       padding: 8px 10px;
     }
 
+    .course-description-panel {
+      margin: 4px 0 14px;
+      border: 2px solid #8ec2ea;
+      border-radius: 12px;
+      background: linear-gradient(180deg, #eef7ff 0%, #f8fcff 100%);
+      padding: 16px 18px;
+      box-shadow: 0 6px 18px rgba(2, 85, 164, 0.1);
+      max-width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
+    }
+
+    .course-description-panel[hidden] {
+      display: none !important;
+    }
+
+    .course-description-panel h4 {
+      margin: 0 0 10px;
+      color: #0255a4;
+      font-size: 1.2rem;
+      font-weight: 800;
+      letter-spacing: 0.01em;
+    }
+
+    .course-description-text {
+      margin: 0;
+      font-size: 1.02rem;
+      font-weight: 600;
+      line-height: 1.5;
+      color: #16324a;
+      white-space: pre-wrap;
+    }
+
     .stepper-btn {
       flex-shrink: 0;
       width: 40px;
@@ -769,8 +802,13 @@ if ($kajabiCoursesUrl === '') {
         min-width: 0;
       }
 
-      .pricing-card {
+      .pricing-card,
+      .course-description-panel {
         padding: 14px;
+      }
+
+      .course-description-panel h4 {
+        font-size: 1.1rem;
       }
 
       .pricing-grid #trainersRequired,
@@ -1008,6 +1046,11 @@ if ($kajabiCoursesUrl === '') {
               <option value="">Select format first</option>
             </select>
 
+            <div id="courseDescriptionPanel" class="course-description-panel" hidden>
+              <h4>Course description</h4>
+              <p id="courseDescriptionText" class="course-description-text"></p>
+            </div>
+
             <label for="matrixAttendees">Attendees</label>
             <div class="attendees-row" id="matrixAttendeesStepper">
               <button type="button" class="stepper-btn" id="matrixAttendeesMinus" aria-label="Decrease attendees" disabled>
@@ -1182,6 +1225,8 @@ if ($kajabiCoursesUrl === '') {
       var orgCourseSelect = document.getElementById("orgCourse");
       var courseFormatSelect = document.getElementById("courseFormat");
       var formatSubOptionSelect = document.getElementById("formatSubOption");
+      var courseDescriptionPanel = document.getElementById("courseDescriptionPanel");
+      var courseDescriptionText = document.getElementById("courseDescriptionText");
       var matrixAttendeesInput = document.getElementById("matrixAttendees");
       var matrixAttendeesMinus = document.getElementById("matrixAttendeesMinus");
       var matrixAttendeesPlus = document.getElementById("matrixAttendeesPlus");
@@ -1770,6 +1815,26 @@ if ($kajabiCoursesUrl === '') {
             );
           }) || null
         );
+      }
+
+      function updateCourseDescriptionPanel() {
+        if (!courseDescriptionPanel || !courseDescriptionText) {
+          return;
+        }
+
+        var pkg = getSelectedPackage();
+        var description = pkg && typeof pkg.courseDescription === "string"
+          ? pkg.courseDescription.trim()
+          : "";
+
+        if (!description) {
+          courseDescriptionText.textContent = "";
+          courseDescriptionPanel.hidden = true;
+          return;
+        }
+
+        courseDescriptionText.textContent = description;
+        courseDescriptionPanel.hidden = false;
       }
 
       function getMatrixGroupRows() {
@@ -2545,6 +2610,8 @@ if ($kajabiCoursesUrl === '') {
         } else {
           applyMatrixSpinnerConstraints([]);
         }
+
+        updateCourseDescriptionPanel();
 
         refreshOrganisationDateGuidance();
         if (selectedSector && selectedCourse && selectedFormat && selectedSubOption && matrixAttendeesInput.value) {

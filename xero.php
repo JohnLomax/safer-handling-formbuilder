@@ -1573,15 +1573,19 @@ function xeroProgressAfterInvoiceSentToCustomer(
         require_once __DIR__ . '/forge_webhook.php';
         forgeMaybeMarkInvoiceSent($enquiryId, $bookingDetails);
     } catch (Throwable $e) {
-        enquiryLoggerEvent(
-            $enquiryId,
-            'forge_booking_sync_failed',
-            'Invoice was sent to the customer, but Forge status could not be updated to Invoice Sent.',
-            [
-                'error' => $e->getMessage(),
-                'xero_invoice_id' => $invoiceId,
-            ]
-        );
+        // forgeMaybeSyncBooking already writes a plain-English journey failure.
+        if (!forgeExceptionAlreadyLogged($e)) {
+            enquiryLoggerEvent(
+                $enquiryId,
+                'forge_booking_sync_failed',
+                forgeFailureReasonFromException($e),
+                [
+                    'error' => $e->getMessage(),
+                    'xero_invoice_id' => $invoiceId,
+                    'trigger' => 'invoice_sent',
+                ]
+            );
+        }
     }
 
     $kajabi = null;

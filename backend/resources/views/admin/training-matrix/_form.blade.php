@@ -34,6 +34,10 @@
             'title' => 'Monday course value',
             'body' => "The exact course value written to monday.com when an enquiry is synced.\n\nThis should match the Monday dropdown/status option text for that course.",
         ],
+        'course_description' => [
+            'title' => 'Course description',
+            'body' => "Optional longer description of this course option.\n\nUse this for internal notes or customer-facing detail about what the course covers.",
+        ],
         'format' => [
             'title' => 'Format',
             'body' => "How the training is delivered, such as Face to Face, Virtual, or Blended.\n\nShown as a format choice after the customer picks a course.",
@@ -167,6 +171,21 @@
             <x-field-help-button :title="$help('course_value')['title']" :body="$help('course_value')['body']" />
         </div>
         <x-text-input id="{{ $formId }}_course_value" name="course_value" type="text" class="mt-1 block w-full" :value="$value('course_value')" required />
+    </div>
+
+    <div>
+        <div class="flex items-center gap-1.5">
+            <x-input-label for="{{ $formId }}_course_description" value="Course description" />
+            <x-field-help-button :title="$help('course_description')['title']" :body="$help('course_description')['body']" />
+        </div>
+        <textarea
+            id="{{ $formId }}_course_description"
+            name="course_description"
+            rows="3"
+            class="mt-1 block w-full rounded-[10px] border border-[#b7d3ee] px-3 py-2 text-sm text-sh-text shadow-sm placeholder:text-sh-mid/70 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30"
+            placeholder="Optional summary of what this course covers"
+        >{{ $value('course_description') }}</textarea>
+        <x-input-error :messages="$errors->get('course_description')" class="mt-2" />
     </div>
 
     <div class="grid gap-4 md:grid-cols-2">

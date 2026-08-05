@@ -61,6 +61,107 @@ function forgeExternalRef(int $enquiryId): string
 }
 
 /**
+ * Human-readable Forge delivery stage for journey messages.
+ */
+function forgeDeliveryStageLabel(string $stage): string
+{
+    return match (forgeNormaliseDeliveryStage($stage)) {
+        'provisional_book' => 'provisional book (reserved, not formally agreed)',
+        'confirmed_book' => 'confirmed book (formally booked)',
+        'on_hold' => 'on hold',
+        'to_rearrange' => 'to rearrange',
+        'cancelled' => 'cancelled',
+        default => $stage !== '' ? str_replace('_', ' ', $stage) : 'unknown',
+    };
+}
+
+/**
+ * Plain-English reason when Forge HTTP responds with a non-202 status.
+ */
+function forgeFailureReasonFromHttp(int $status, string $snippet = ''): string
+{
+    $base = match (true) {
+        $status === 0 => 'Forge did not respond. Check the webhook URL and network connection.',
+        $status === 401, $status === 403 => 'Forge rejected the request. The webhook token may be wrong or expired.',
+        $status === 404 => 'Forge could not find the webhook endpoint. Check the webhook URL in Settings.',
+        $status === 408, $status === 504 => 'Forge took too long to respond. Try again in a moment.',
+        $status === 422 => 'Forge rejected the booking data as invalid.',
+        $status === 429 => 'Forge asked us to slow down (too many requests). Try again shortly.',
+        $status >= 500 && $status <= 599 => 'Forge had a server problem and could not accept the booking snapshot.',
+        default => 'Forge did not accept the booking snapshot (HTTP ' . $status . ').',
+    };
+
+    $clean = trim(preg_replace('/\s+/', ' ', $snippet) ?? '');
+    if ($clean !== '' && strlen($clean) <= 220 && !str_starts_with($clean, '<')) {
+        return $base . ' Details from Forge: ' . $clean;
+    }
+
+    return $base;
+}
+
+/**
+ * Plain-English reason from a transport / config exception.
+ */
+function forgeFailureReasonFromException(Throwable $e): string
+{
+    $msg = trim($e->getMessage());
+
+    if (str_contains($msg, 'URL or token is not configured')) {
+        return 'Forge is not fully configured. Add the webhook URL and token under Settings → Integrations.';
+    }
+    if (str_contains($msg, 'encode Forge booking payload')) {
+        return 'The booking data could not be prepared for Forge. Check the booking details and try again.';
+    }
+    if (str_contains($msg, 'initialise Forge webhook request')) {
+        return 'Could not start the connection to Forge. Try again shortly.';
+    }
+    if (str_contains($msg, 'Forge webhook request failed')) {
+        $detail = trim(str_replace('Forge webhook request failed:', '', $msg));
+        if ($detail !== '' && $detail !== 'unknown error') {
+            return 'Could not reach Forge (' . $detail . '). Check the webhook URL and network connection.';
+        }
+
+        return 'Could not reach Forge. Check the webhook URL and network connection.';
+    }
+    if (preg_match('/Forge webhook returned HTTP\s+(\d+)\s*:?\s*(.*)$/i', $msg, $matches)) {
+        return forgeFailureReasonFromHttp((int) $matches[1], trim((string) ($matches[2] ?? '')));
+    }
+    if (str_starts_with($msg, 'FORGE_LOGGED:')) {
+        return trim(substr($msg, strlen('FORGE_LOGGED:')));
+    }
+    if ($msg !== '') {
+        return 'Forge sync failed: ' . $msg;
+    }
+
+    return 'Forge sync failed for an unknown reason.';
+}
+
+/**
+ * @param array<string, mixed> $metadata
+ */
+function forgeLogJourneyEvent(int $enquiryId, string $eventType, string $message, array $metadata = []): void
+{
+    require_once __DIR__ . '/enquiry_logger.php';
+    enquiryLoggerEvent($enquiryId, $eventType, $message, $metadata);
+}
+
+/**
+ * Log a failure, then throw so callers can show a warning without double-logging.
+ *
+ * @param array<string, mixed> $metadata
+ */
+function forgeFailAndThrow(int $enquiryId, string $plainMessage, array $metadata = []): never
+{
+    forgeLogJourneyEvent($enquiryId, 'forge_booking_sync_failed', $plainMessage, $metadata);
+    throw new RuntimeException('FORGE_LOGGED: ' . $plainMessage);
+}
+
+function forgeExceptionAlreadyLogged(Throwable $e): bool
+{
+    return str_starts_with($e->getMessage(), 'FORGE_LOGGED:');
+}
+
+/**
  * Normalise legacy Forge labels and aliases to delivery-stage snake_case.
  */
 function forgeNormaliseDeliveryStage(?string $status): string
@@ -575,9 +676,23 @@ function forgeMaybeSyncBooking(
     // Formal booking needs venue + terms. Provisional reserve needs limited identifying data.
     if (!$isLifecycleOverride) {
         if ($termsAccepted && $venueAddress === '') {
+            forgeLogJourneyEvent(
+                $enquiryId,
+                'forge_booking_sync_skipped',
+                'Forge was not updated because the venue address is missing. Add the venue, then save the booking again.',
+                ['reason' => 'missing_venue', 'terms_accepted' => true]
+            );
+
             return null;
         }
         if (!$termsAccepted && $organisation === '' && $bookerName === '' && $venueAddress === '') {
+            forgeLogJourneyEvent(
+                $enquiryId,
+                'forge_booking_sync_skipped',
+                'Forge was not updated because there is not enough booking information yet (organisation, booker, or venue).',
+                ['reason' => 'incomplete_booking_data']
+            );
+
             return null;
         }
     }
@@ -585,10 +700,11 @@ function forgeMaybeSyncBooking(
     $token = forgeWebhookToken();
     $url = forgeWebhookUrl();
     if ($token === '' || $url === '') {
-        enquiryLoggerEvent(
+        forgeLogJourneyEvent(
             $enquiryId,
             'forge_booking_sync_skipped',
-            'Forge webhook is enabled but URL or token is not configured.'
+            'Forge is turned on, but the webhook URL or token is missing in Settings. Nothing was sent.',
+            ['reason' => 'missing_config']
         );
 
         return null;
@@ -605,16 +721,25 @@ function forgeMaybeSyncBooking(
     $stmt->execute([':id' => $enquiryId]);
     $enquiry = $stmt->fetch();
     if (!$enquiry) {
+        forgeLogJourneyEvent(
+            $enquiryId,
+            'forge_booking_sync_failed',
+            'Forge could not be updated because this enquiry could not be found in the database.',
+            ['reason' => 'enquiry_not_found']
+        );
+
         return null;
     }
 
     $alreadySynced = trim((string)($enquiry['forge_synced_at'] ?? '')) !== '';
     // Lifecycle holds/cancels only apply to bookings already in Forge.
     if ($isLifecycleOverride && !$alreadySynced) {
-        enquiryLoggerEvent(
+        forgeLogJourneyEvent(
             $enquiryId,
             'forge_booking_sync_skipped',
-            'Forge '.$override.' was requested, but this enquiry has not been pushed to Forge yet.'
+            'Forge could not be set to ' . forgeDeliveryStageLabel($override)
+                . ' because this enquiry has not been sent to Forge yet.',
+            ['reason' => 'lifecycle_before_first_sync', 'requested_stage' => $override]
         );
 
         return null;
@@ -655,6 +780,19 @@ function forgeMaybeSyncBooking(
         && $previousStatus !== ''
         && $previousStatus === $bookingStatus
     ) {
+        forgeLogJourneyEvent(
+            $enquiryId,
+            'forge_booking_sync_skipped',
+            'Forge already has this booking as ' . forgeDeliveryStageLabel($bookingStatus)
+                . '. No update was sent because nothing changed.',
+            [
+                'reason' => 'same_stage_noop',
+                'action' => $action,
+                'booking_status' => $bookingStatus,
+                'delivery_stage' => $bookingStatus,
+            ]
+        );
+
         return [
             'status' => 'pending',
             'action' => $action,
@@ -663,18 +801,35 @@ function forgeMaybeSyncBooking(
         ];
     }
 
-    $response = forgeHttpPostBooking($payload);
+    try {
+        $response = forgeHttpPostBooking($payload);
+    } catch (Throwable $e) {
+        forgeFailAndThrow(
+            $enquiryId,
+            forgeFailureReasonFromException($e),
+            [
+                'reason' => 'transport_error',
+                'action' => $action,
+                'external_ref' => $payload['external_ref'] ?? null,
+                'booking_status' => $bookingStatus !== '' ? $bookingStatus : null,
+                'delivery_stage' => $bookingStatus !== '' ? $bookingStatus : null,
+                'error' => $e->getMessage(),
+            ]
+        );
+    }
+
     $status = (int)$response['status'];
     $json = $response['json'];
 
     if ($status !== 202) {
         $detail = is_array($json) ? trim((string)($json['detail'] ?? $json['message'] ?? '')) : '';
         $snippet = $detail !== '' ? $detail : substr($response['body'], 0, 300);
-        enquiryLoggerEvent(
+        $plain = forgeFailureReasonFromHttp($status, $snippet);
+        forgeFailAndThrow(
             $enquiryId,
-            'forge_booking_sync_failed',
-            'Booking details were saved, but Forge webhook failed.',
+            $plain,
             [
+                'reason' => 'http_error',
                 'http_status' => $status,
                 'action' => $action,
                 'external_ref' => $payload['external_ref'],
@@ -683,27 +838,17 @@ function forgeMaybeSyncBooking(
                 'response' => $snippet,
             ]
         );
-        throw new RuntimeException(
-            'Forge webhook returned HTTP ' . $status . ($snippet !== '' ? ': ' . $snippet : '')
-        );
     }
 
     $eventId = is_array($json) && isset($json['event_id']) ? (string)$json['event_id'] : null;
     enquiryLoggerMarkForgeSynced($enquiryId, $action, $eventId, $bookingStatus);
 
-    $stageLabels = [
-        'provisional_book' => 'provisional_book (reserve / not formally agreed)',
-        'confirmed_book' => 'confirmed_book (formally booked)',
-        'on_hold' => 'on_hold',
-        'to_rearrange' => 'to_rearrange',
-        'cancelled' => 'cancelled',
-    ];
     $syncMessage = 'Booking snapshot sent to Forge for admin review.';
-    if (isset($stageLabels[$bookingStatus])) {
-        $syncMessage = 'Booking snapshot sent to Forge with delivery stage '.$stageLabels[$bookingStatus].'.';
+    if ($bookingStatus !== '') {
+        $syncMessage = 'Booking snapshot sent to Forge as ' . forgeDeliveryStageLabel($bookingStatus) . '.';
     }
 
-    enquiryLoggerEvent(
+    forgeLogJourneyEvent(
         $enquiryId,
         'forge_booking_synced',
         $syncMessage,
@@ -727,10 +872,14 @@ function forgeMaybeSyncBooking(
         && $previousStatus !== ''
         && $previousStatus !== $bookingStatus
     ) {
-        enquiryLoggerEvent(
+        forgeLogJourneyEvent(
             $enquiryId,
             'forge_status_updated',
-            'Forge delivery stage updated from ' . $previousStatus . ' to ' . $bookingStatus . '.',
+            'Forge delivery stage changed from '
+                . forgeDeliveryStageLabel($previousStatus)
+                . ' to '
+                . forgeDeliveryStageLabel($bookingStatus)
+                . '.',
             [
                 'external_ref' => $payload['external_ref'],
                 'event_id' => $eventId,
@@ -830,10 +979,11 @@ function forgeMaybeMarkInvoiceSent(int $enquiryId, array $bookingDetails = []): 
         }
     }
     if ($bookingDetails === []) {
-        enquiryLoggerEvent(
+        forgeLogJourneyEvent(
             $enquiryId,
             'forge_booking_sync_skipped',
-            'Xero invoice sent, but Forge could not be updated because booking details are missing.'
+            'The invoice was sent, but Forge was not updated because booking details are missing on this enquiry.',
+            ['reason' => 'missing_booking_details', 'trigger' => 'invoice_sent']
         );
 
         return null;
@@ -841,6 +991,13 @@ function forgeMaybeMarkInvoiceSent(int $enquiryId, array $bookingDetails = []): 
 
     $current = forgeNormaliseDeliveryStage((string)($row['forge_booking_status'] ?? ''));
     if ($current === 'cancelled') {
+        forgeLogJourneyEvent(
+            $enquiryId,
+            'forge_booking_sync_skipped',
+            'The invoice was sent, but Forge was left unchanged because this booking is already cancelled in Forge.',
+            ['reason' => 'cancelled_booking', 'trigger' => 'invoice_sent', 'booking_status' => 'cancelled']
+        );
+
         return [
             'status' => 'pending',
             'action' => 'edit',
@@ -892,10 +1049,11 @@ function forgeMaybeMarkQuoteWon(int $enquiryId, array $bookingDetails = []): ?ar
         }
     }
     if ($bookingDetails === []) {
-        enquiryLoggerEvent(
+        forgeLogJourneyEvent(
             $enquiryId,
             'forge_booking_sync_skipped',
-            'Kajabi enrollment completed, but Forge could not be updated because booking details are missing.'
+            'Kajabi enrollment completed, but Forge was not updated because booking details are missing on this enquiry.',
+            ['reason' => 'missing_booking_details', 'trigger' => 'kajabi_enroll']
         );
 
         return null;
@@ -903,6 +1061,13 @@ function forgeMaybeMarkQuoteWon(int $enquiryId, array $bookingDetails = []): ?ar
 
     $current = forgeNormaliseDeliveryStage((string)($row['forge_booking_status'] ?? ''));
     if ($current === 'cancelled') {
+        forgeLogJourneyEvent(
+            $enquiryId,
+            'forge_booking_sync_skipped',
+            'Kajabi enrollment completed, but Forge was left unchanged because this booking is already cancelled in Forge.',
+            ['reason' => 'cancelled_booking', 'trigger' => 'kajabi_enroll', 'booking_status' => 'cancelled']
+        );
+
         return [
             'status' => 'pending',
             'action' => 'edit',

@@ -599,6 +599,13 @@
                                         <x-kajabi-badge compact />
                                     @elseif ($event->isXeroEvent())
                                         <x-xero-badge compact />
+                                    @elseif ($event->isForgeEvent())
+                                        <span @class([
+                                            'inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[9px] font-bold leading-none',
+                                            'bg-[#ecfdf3] text-[#047857]' => $isSuccessHighlight,
+                                            'bg-[#fef2f2] text-[#b91c1c]' => $event->isFailed() && ! $isResolvedFailure,
+                                            'bg-[#eef6ff] text-brand-header' => ! $isSuccessHighlight && ! ($event->isFailed() && ! $isResolvedFailure),
+                                        ])>F</span>
                                     @elseif ($event->isEmailEvent())
                                         <span @class([
                                             'text-[10px] font-bold leading-none',

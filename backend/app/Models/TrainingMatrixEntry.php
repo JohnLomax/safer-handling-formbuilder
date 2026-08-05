@@ -10,6 +10,7 @@ class TrainingMatrixEntry extends Model
         'sector',
         'course',
         'course_value',
+        'course_description',
         'format',
         'sub_option',
         'min_attendees',
@@ -47,6 +48,11 @@ class TrainingMatrixEntry extends Model
             'maxCap' => $this->max_cap,
             'pricing' => $this->pricing ?? [],
         ];
+
+        $description = trim((string) ($this->course_description ?? ''));
+        if ($description !== '') {
+            $row['courseDescription'] = $description;
+        }
 
         if ($this->default_attendees !== null) {
             $row['defaultAttendees'] = $this->default_attendees;

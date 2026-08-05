@@ -115,6 +115,17 @@ class EnquiryEvent extends Model
         return ($metadata['channel'] ?? null) === 'kajabi';
     }
 
+    public function isForgeEvent(): bool
+    {
+        if (str_starts_with($this->event_type, 'forge_')) {
+            return true;
+        }
+
+        $metadata = is_array($this->metadata) ? $this->metadata : [];
+
+        return ($metadata['channel'] ?? null) === 'forge';
+    }
+
     public function isXeroEvent(): bool
     {
         if ($this->isKajabiEvent()) {
@@ -193,7 +204,8 @@ class EnquiryEvent extends Model
             || $this->event_type === 'monday_courses_ongoing_created'
             || $this->event_type === 'monday_courses_ongoing_synced'
             || $this->event_type === 'kajabi_enrolled'
-            || $this->event_type === 'kajabi_account_created';
+            || $this->event_type === 'kajabi_account_created'
+            || $this->event_type === 'forge_booking_synced';
     }
 
     public function isManualRetrySuccess(): bool
@@ -213,6 +225,7 @@ class EnquiryEvent extends Model
             in_array($this->event_type, ['monday_courses_ongoing_created', 'monday_courses_ongoing_synced', 'monday_courses_ongoing_failed', 'monday_courses_ongoing_recreated'], true) => 'monday_courses_ongoing',
             in_array($this->event_type, ['monday_booking_synced', 'monday_booking_sync_failed'], true) => 'monday_booking',
             in_array($this->event_type, ['kajabi_enrolled', 'kajabi_enroll_failed', 'kajabi_enroll_skipped'], true) => 'kajabi_enroll',
+            in_array($this->event_type, ['forge_booking_synced', 'forge_booking_sync_failed', 'forge_booking_sync_skipped', 'forge_status_updated'], true) => 'forge_booking',
             default => null,
         };
     }

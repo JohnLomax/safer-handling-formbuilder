@@ -354,7 +354,16 @@ try {
         require_once __DIR__ . '/forge_webhook.php';
         forgeMaybeSyncBooking($enquiryId, $details);
     } catch (Throwable $forgeError) {
-        $forgeWarning = 'Forge booking sync failed: ' . $forgeError->getMessage();
+        require_once __DIR__ . '/forge_webhook.php';
+        if (!forgeExceptionAlreadyLogged($forgeError)) {
+            enquiryLoggerEvent(
+                $enquiryId,
+                'forge_booking_sync_failed',
+                forgeFailureReasonFromException($forgeError),
+                ['error' => $forgeError->getMessage(), 'trigger' => 'booking_submit']
+            );
+        }
+        $forgeWarning = 'Forge booking sync failed: ' . forgeFailureReasonFromException($forgeError);
     }
 
     $payload = [

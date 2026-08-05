@@ -875,20 +875,25 @@ function kajabiMaybeUpdateForgeQuoteWon(int $enquiryId): ?array
 
         return forgeMaybeMarkQuoteWon($enquiryId);
     } catch (Throwable $e) {
-        enquiryLoggerEvent(
-            $enquiryId,
-            'forge_booking_sync_failed',
-            'Kajabi enrollment completed, but Forge booking snapshot could not be updated.',
-            [
-                'channel' => 'forge',
-                'error' => $e->getMessage(),
-                'booking_status' => 'confirmed_book',
-            ]
-        );
+        require_once __DIR__.'/forge_webhook.php';
+        // forgeMaybeSyncBooking already writes a plain-English journey failure.
+        if (!forgeExceptionAlreadyLogged($e)) {
+            enquiryLoggerEvent(
+                $enquiryId,
+                'forge_booking_sync_failed',
+                forgeFailureReasonFromException($e),
+                [
+                    'channel' => 'forge',
+                    'error' => $e->getMessage(),
+                    'booking_status' => 'confirmed_book',
+                    'trigger' => 'kajabi_enroll',
+                ]
+            );
+        }
 
         return [
             'ok' => false,
-            'error' => $e->getMessage(),
+            'error' => forgeFailureReasonFromException($e),
         ];
     }
 }

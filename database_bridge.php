@@ -291,12 +291,21 @@ function appTrainingMatrixRows(): array
     }
 
     try {
-        $stmt = $pdo->query(
-            'SELECT sector, course, course_value, format, sub_option, min_attendees, max_cap, default_attendees, pricing
+        $sql = 'SELECT sector, course, course_value, course_description, format, sub_option, min_attendees, max_cap, default_attendees, pricing
              FROM training_matrix_entries
              WHERE is_active = 1
-             ORDER BY sort_order ASC, id ASC'
-        );
+             ORDER BY sort_order ASC, id ASC';
+        try {
+            $stmt = $pdo->query($sql);
+        } catch (Throwable $e) {
+            // Older DBs before course_description migration.
+            $stmt = $pdo->query(
+                'SELECT sector, course, course_value, format, sub_option, min_attendees, max_cap, default_attendees, pricing
+                 FROM training_matrix_entries
+                 WHERE is_active = 1
+                 ORDER BY sort_order ASC, id ASC'
+            );
+        }
         if ($stmt === false) {
             return $cache;
         }
@@ -317,6 +326,11 @@ function appTrainingMatrixRows(): array
                 'maxCap' => $row['max_cap'] !== null ? (int)$row['max_cap'] : null,
                 'pricing' => $pricing,
             ];
+
+            $courseDescription = trim((string)($row['course_description'] ?? ''));
+            if ($courseDescription !== '') {
+                $item['courseDescription'] = $courseDescription;
+            }
 
             if ($row['default_attendees'] !== null) {
                 $item['defaultAttendees'] = (int)$row['default_attendees'];

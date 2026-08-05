@@ -275,7 +275,16 @@ class EnquiryController extends Controller
                 require_once $root.'/forge_webhook.php';
                 forgeMaybeSyncBooking((int) $enquiry->id, $details);
             } catch (Throwable $forgeError) {
-                $warnings[] = 'Forge booking sync failed: '.$forgeError->getMessage();
+                require_once $root.'/forge_webhook.php';
+                if (! forgeExceptionAlreadyLogged($forgeError)) {
+                    enquiryLoggerEvent(
+                        (int) $enquiry->id,
+                        'forge_booking_sync_failed',
+                        forgeFailureReasonFromException($forgeError),
+                        ['error' => $forgeError->getMessage(), 'trigger' => 'admin_booking_save']
+                    );
+                }
+                $warnings[] = 'Forge booking sync failed: '.forgeFailureReasonFromException($forgeError);
             }
 
             $enquiry->refresh();

@@ -80,7 +80,7 @@
         </div>
         <div class="admin-modal-footer">
             <button type="button" class="btn-brand-outline" x-on:click="$dispatch('close-modal', 'user-create-modal')">Cancel</button>
-            <button type="submit" form="user-form" class="btn-brand">Create user</button>
+            <button type="submit" form="user-create-form" class="btn-brand">Create user</button>
         </div>
     </x-modal>
 
@@ -98,7 +98,7 @@
             </div>
             <div class="admin-modal-footer">
                 <button type="button" class="btn-brand-outline" x-on:click="$dispatch('close-modal', 'user-edit-modal')">Cancel</button>
-                <button type="submit" form="user-form" class="btn-brand">Save changes</button>
+                <button type="submit" form="user-edit-form" class="btn-brand">Save changes</button>
             </div>
         </x-modal>
     @endif

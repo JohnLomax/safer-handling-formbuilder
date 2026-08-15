@@ -21,11 +21,12 @@
                 <table class="admin-table admin-table-fixed">
                     <thead>
                         <tr>
-                            <th class="w-[14%]">Sector</th>
-                            <th class="w-[32%]">Course</th>
-                            <th class="w-[12%]">Format</th>
-                            <th class="w-[12%]">Style</th>
-                            <th class="w-[10%]">Attendees</th>
+                            <th class="w-[12%]">Sector</th>
+                            <th class="w-[22%]">Course</th>
+                            <th class="w-[18%]">Course code</th>
+                            <th class="w-[10%]">Format</th>
+                            <th class="w-[10%]">Style</th>
+                            <th class="w-[8%]">Attendees</th>
                             <th class="w-[10%]">Status</th>
                             <th class="w-[10%]">Actions</th>
                         </tr>
@@ -35,6 +36,7 @@
                             <tr>
                                 <td class="admin-table-cell-truncate font-medium text-sh-text" title="{{ $entry->sector }}">{{ $entry->sector }}</td>
                                 <td class="admin-table-cell-truncate text-sh-mid" title="{{ $entry->course }}">{{ $entry->course }}</td>
+                                <td class="admin-table-cell-truncate font-mono text-xs text-sh-text" title="{{ $entry->course_value }}">{{ $entry->course_value ?: '—' }}</td>
                                 <td class="admin-table-cell-truncate text-sh-mid" title="{{ $entry->format }}">{{ $entry->format }}</td>
                                 <td class="admin-table-cell-truncate text-sh-mid" title="{{ $entry->sub_option }}">{{ $entry->sub_option }}</td>
                                 <td class="text-sh-mid">
@@ -64,7 +66,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="7" class="px-4 py-10 text-center text-sm text-sh-mid">No training matrix rows yet.</td>
+                                <td colspan="8" class="px-4 py-10 text-center text-sm text-sh-mid">No training matrix rows yet.</td>
                             </tr>
                         @endforelse
                     </tbody>

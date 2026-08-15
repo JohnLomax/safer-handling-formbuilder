@@ -46,7 +46,7 @@ function forgeWebhookUrl(): string
     return appConfigValue(
         'FORGE_WEBHOOK_URL',
         'forgeWebhookUrl',
-        'https://saferhandling.forgecrm.co.uk/safer_production/webhooks/bookings/'
+        'https://portal.saferhandling.co.uk/safer_production/webhooks/bookings/'
     );
 }
 

@@ -51,7 +51,7 @@ class SettingsSeeder extends Seeder
             'xero_branding_theme_id' => '',
             'xero_webhook_key' => '',
             'forge_enabled' => '0',
-            'forge_webhook_url' => 'https://saferhandling.forgecrm.co.uk/safer_production/webhooks/bookings/',
+            'forge_webhook_url' => 'https://portal.saferhandling.co.uk/safer_production/webhooks/bookings/',
             'forge_webhook_token' => '',
         ];
 

@@ -85,7 +85,7 @@ $xeroVatRate = '20';
 $xeroBrandingThemeId = '';
 
 $forgeEnabled = false;
-$forgeWebhookUrl = 'https://saferhandling.forgecrm.co.uk/safer_production/webhooks/bookings/';
+$forgeWebhookUrl = 'https://portal.saferhandling.co.uk/safer_production/webhooks/bookings/';
 $forgeWebhookToken = '';
 
 require_once __DIR__ . '/database_bridge.php';

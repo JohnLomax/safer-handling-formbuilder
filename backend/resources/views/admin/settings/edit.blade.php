@@ -409,7 +409,7 @@
 
                 <div>
                     <x-input-label for="forge_webhook_url" value="Webhook URL" />
-                    <x-text-input id="forge_webhook_url" name="forge_webhook_url" type="url" class="mt-1 block w-full font-mono text-sm" :value="old('forge_webhook_url', $settings['forge_webhook_url'] ?? 'https://saferhandling.forgecrm.co.uk/safer_production/webhooks/bookings/')" />
+                    <x-text-input id="forge_webhook_url" name="forge_webhook_url" type="url" class="mt-1 block w-full font-mono text-sm" :value="old('forge_webhook_url', $settings['forge_webhook_url'] ?? 'https://portal.saferhandling.co.uk/safer_production/webhooks/bookings/')" />
                 </div>
 
                 <div>

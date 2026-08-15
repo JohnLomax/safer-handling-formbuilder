@@ -413,7 +413,7 @@ function applyAppSettingsToGlobals(): void
     $GLOBALS['forgeEnabled'] = appSettingBool('forge_enabled', (bool)($GLOBALS['forgeEnabled'] ?? false));
     $GLOBALS['forgeWebhookUrl'] = appSetting(
         'forge_webhook_url',
-        (string)($GLOBALS['forgeWebhookUrl'] ?? 'https://saferhandling.forgecrm.co.uk/safer_production/webhooks/bookings/')
+        (string)($GLOBALS['forgeWebhookUrl'] ?? 'https://portal.saferhandling.co.uk/safer_production/webhooks/bookings/')
     );
     $GLOBALS['forgeWebhookToken'] = appSetting('forge_webhook_token', (string)($GLOBALS['forgeWebhookToken'] ?? ''));
 }

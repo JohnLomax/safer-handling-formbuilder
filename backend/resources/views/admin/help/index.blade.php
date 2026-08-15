@@ -721,8 +721,9 @@
                     <p class="text-sm text-sh-mid">
                         <strong class="text-sh-text">Course codes:</strong>
                         Forge receives <code class="rounded bg-sh-surface px-1 text-xs">booking.course_code</code> from the
-                        Training Matrix <em>Monday / Forge course value</em> field. That value must match the Monday course
-                        option and the course code configured in Forge — keep all three aligned.
+                        Training Matrix <em>Monday / Forge course value</em> field — <strong>not</strong> the customer-facing
+                        Course label. The same value is written to Monday’s <em>Specific Course</em> column.
+                        That value must match the Monday course option and the course code configured in Forge.
                         See <a href="#matrix-fields" class="link-brand">Matrix fields</a>.
                     </p>
                 </section>
@@ -808,8 +809,9 @@
                                 <tr>
                                     <td class="font-medium text-sh-text">Monday / Forge course value</td>
                                     <td class="text-sh-mid">
-                                        Exact course code written to monday.com and sent to Forge as
-                                        <code class="rounded bg-sh-surface px-1 text-xs">booking.course_code</code>.
+                                        Exact course code written to Monday’s <em>Specific Course</em> column and sent to Forge as
+                                        <code class="rounded bg-sh-surface px-1 text-xs">booking.course_code</code>
+                                        (never the customer-facing Course label).
                                         It must match the Monday course option <strong>and</strong> the Forge course code —
                                         keep the same value in the Training Matrix, Monday, and Forge.
                                     </td>

@@ -355,6 +355,19 @@ function forgeOrgAddressFields(array $formData): array
 }
 
 /**
+ * Resolve Monday / Forge course value (not the customer-facing course label).
+ *
+ * @param array<string, mixed> $enquiry
+ * @param array<string, mixed> $formData
+ */
+function forgeResolveCourseCode(array $enquiry, array $formData = []): string
+{
+    require_once __DIR__ . '/training_matrix_helpers.php';
+
+    return trainingMatrixResolveCourseValue($enquiry, $formData);
+}
+
+/**
  * @param array<string, mixed> $bookingDetails
  * @param array<string, mixed> $enquiry
  * @return array<string, mixed>
@@ -381,10 +394,7 @@ function forgeBuildBookingPayload(
         $organisation = trim((string)($enquiry['organisation_company'] ?? ''));
     }
 
-    $courseCode = trim((string)($enquiry['org_course'] ?? ''));
-    if ($courseCode === '') {
-        $courseCode = trim((string)($enquiry['trainer_course_select'] ?? ''));
-    }
+    $courseCode = forgeResolveCourseCode($enquiry, $formData);
 
     $delegatesIn = is_array($bookingDetails['delegates'] ?? null) ? $bookingDetails['delegates'] : [];
     $delegates = [];

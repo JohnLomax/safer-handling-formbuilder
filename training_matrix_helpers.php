@@ -25,6 +25,118 @@ function trainingMatrixMatchesOrgCourse(array $item, string $orgCourse): bool
 }
 
 /**
+ * True when value matches a Training Matrix courseValue (Monday / Forge code).
+ */
+function trainingMatrixIsCourseValue(string $value): bool
+{
+    $value = trim($value);
+    if ($value === '') {
+        return false;
+    }
+    foreach (trainingMatrixAll() as $item) {
+        if (trim((string)($item['courseValue'] ?? '')) === $value) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * True when value matches a customer-facing Course label.
+ */
+function trainingMatrixIsCourseLabel(string $value): bool
+{
+    $value = trim($value);
+    if ($value === '') {
+        return false;
+    }
+    foreach (trainingMatrixAll() as $item) {
+        if (trim((string)($item['course'] ?? '')) === $value) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Resolve Monday / Forge course value (not the customer-facing Course label).
+ *
+ * Prefers mondaySpecificCourse / specificCourse when they are course values,
+ * then trainer course select, then the matrix row for the org package.
+ *
+ * @param array<string, mixed> $enquiry
+ * @param array<string, mixed> $formData
+ */
+function trainingMatrixResolveCourseValue(array $enquiry = [], array $formData = []): string
+{
+    $acceptCandidate = static function (string $candidate): string {
+        $candidate = trim($candidate);
+        if ($candidate === '') {
+            return '';
+        }
+        if (trainingMatrixIsCourseValue($candidate)) {
+            return $candidate;
+        }
+        // Bare Course label must not be sent to Monday Specific Course or Forge course_code.
+        if (trainingMatrixIsCourseLabel($candidate)) {
+            return '';
+        }
+
+        // Trainer / non-matrix codes: keep as-is.
+        return $candidate;
+    };
+
+    foreach ([
+        $formData['mondaySpecificCourse'] ?? '',
+        $formData['specificCourse'] ?? '',
+    ] as $raw) {
+        $resolved = $acceptCandidate((string)$raw);
+        if ($resolved !== '') {
+            return $resolved;
+        }
+    }
+
+    $trainerCourse = trim((string)($enquiry['trainer_course_select'] ?? $formData['trainerCourseSelect'] ?? ''));
+    if ($trainerCourse !== '') {
+        $resolved = $acceptCandidate($trainerCourse);
+        if ($resolved !== '') {
+            return $resolved;
+        }
+
+        return $trainerCourse;
+    }
+
+    $sector = trim((string)($formData['sector'] ?? $enquiry['sector'] ?? ''));
+    $orgCourse = trim((string)($enquiry['org_course'] ?? $formData['orgCourse'] ?? ''));
+    $format = trim((string)($formData['courseFormat'] ?? $enquiry['course_format'] ?? ''));
+    if ($format === '') {
+        $format = trim((string)($formData['deliveryPreference'] ?? ''));
+    }
+    $subOption = trim((string)($formData['formatSubOption'] ?? $enquiry['format_sub_option'] ?? ''));
+    if ($subOption === '') {
+        $subOption = trim((string)($formData['courseStyle'] ?? ''));
+    }
+
+    if ($sector !== '' && $orgCourse !== '' && $format !== '' && $subOption !== '') {
+        $row = trainingMatrixFindRow($sector, $orgCourse, $format, $subOption);
+        if ($row !== null) {
+            $courseValue = trim((string)($row['courseValue'] ?? ''));
+            if ($courseValue !== '') {
+                return $courseValue;
+            }
+        }
+    }
+
+    if ($orgCourse !== '' && trainingMatrixIsCourseValue($orgCourse)) {
+        return $orgCourse;
+    }
+
+    return '';
+}
+
+/**
  * @return array<string, mixed>|null
  */
 function trainingMatrixFindRow(string $sector, string $orgCourse, string $format, string $subOption): ?array

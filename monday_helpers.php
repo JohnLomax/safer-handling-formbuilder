@@ -139,17 +139,7 @@ function mondayOrganisationCourseMatrix(): array
  */
 function mondayIsOrganisationCourseDisplayName(string $value): bool
 {
-    $value = trim($value);
-    if ($value === '') {
-        return false;
-    }
-    foreach (mondayOrganisationCourseMatrix() as $row) {
-        if ($value === $row['course']) {
-            return true;
-        }
-    }
-
-    return false;
+    return trainingMatrixIsCourseLabel($value);
 }
 
 /**
@@ -182,12 +172,33 @@ function mondayResolveOrganisationSpecificCourse(
 }
 
 /**
+ * Monday "Specific Course" value: always the Training Matrix courseValue
+ * (same as Forge booking.course_code), never the customer-facing Course label.
+ *
+ * @param array<string, mixed> $data  org/trainer payload or form fields
+ */
+function mondayResolveSpecificCourseValue(array $data): string
+{
+    return trainingMatrixResolveCourseValue([], $data);
+}
+
+/**
  * Maps form course codes to active Monday "Specific Course" dropdown labels.
  * Labels must match the board column exactly (see change_column_values docs).
+ * Pass-through of the Monday / Forge course value (not the Course label).
  */
 function mondayResolveSpecificCourseLabel(string $value): string
 {
-    return trim($value);
+    $value = trim($value);
+    if ($value === '') {
+        return '';
+    }
+    // If a Course label slipped through, refuse it unless it is also a courseValue.
+    if (trainingMatrixIsCourseLabel($value) && !trainingMatrixIsCourseValue($value)) {
+        return '';
+    }
+
+    return $value;
 }
 
 function mondayAddressHasContent(array $address): bool

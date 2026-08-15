@@ -359,7 +359,7 @@ GQL;
 
     $trainerNotes = [
         'I want to become a trainer.',
-        'Specific Course: ' . $trainerData['specificCourse'],
+        'Specific Course: ' . mondayResolveSpecificCourseValue($trainerData),
     ];
     if ($trainerData['bookedThroughCompany'] === 'Yes') {
         $trainerNotes[] = 'Booked through a company: Yes';
@@ -380,10 +380,11 @@ GQL;
     if ($deliveryPrefColumnId !== null) {
         $columnValues[$deliveryPrefColumnId] = toMondayColumnValue($deliveryPrefColumnType, 'Face to face (Full-day)');
     }
-    if ($specificCourseColumnId !== null) {
+    $trainerSpecificCourse = mondayResolveSpecificCourseValue($trainerData);
+    if ($specificCourseColumnId !== null && $trainerSpecificCourse !== '') {
         $columnValues[$specificCourseColumnId] = toMondayColumnValue(
             $specificCourseColumnType,
-            mondayResolveSpecificCourseLabel($trainerData['specificCourse'])
+            mondayResolveSpecificCourseLabel($trainerSpecificCourse)
         );
     }
     // Form "Attendees" → Monday "Number of Attendees" (or "Attendees" if that is the only column).
@@ -620,10 +621,11 @@ GQL;
             $columnValues[$sectorColumnId] = mondaySingleSelectColumnPayload($sectorColumnType, $sectorLabel);
         }
     }
-    if ($specificCourseColumnId !== null && ($orgData['specificCourse'] ?? '') !== '') {
+    $orgSpecificCourse = mondayResolveSpecificCourseValue($orgData);
+    if ($specificCourseColumnId !== null && $orgSpecificCourse !== '') {
         $columnValues[$specificCourseColumnId] = toMondayColumnValue(
             $specificCourseColumnType,
-            mondayResolveSpecificCourseLabel((string)$orgData['specificCourse'])
+            mondayResolveSpecificCourseLabel($orgSpecificCourse)
         );
     }
     if ($attendeesColumnId !== null && ($orgData['attendees'] ?? '') !== '') {
@@ -835,7 +837,11 @@ try {
         $resolvedOrganisation = trainingMatrixResolveOrganisationSubmission($_POST);
         updateMondayOrganisationSubmission($email, array_merge(
             $resolvedOrganisation,
-            mondayAddressFromPost($_POST)
+            mondayAddressFromPost($_POST),
+            [
+                // Prefer explicit Monday / Forge course value from the form hidden field.
+                'mondaySpecificCourse' => trim((string)($_POST['mondaySpecificCourse'] ?? '')),
+            ]
         ));
         if ($enquiryId !== null) {
             enquiryLoggerSafe(function () use ($enquiryId): void {

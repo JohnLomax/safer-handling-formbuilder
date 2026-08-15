@@ -228,10 +228,14 @@ GQL;
     }
 
     $columnValues = [];
-    if ($trainerCourse !== '' && $specificCourseColumnId !== null) {
+    $resolvedCourse = mondayResolveSpecificCourseValue([
+        'specificCourse' => $trainerCourse,
+        'trainerCourseSelect' => $trainerCourse,
+    ]);
+    if ($resolvedCourse !== '' && $specificCourseColumnId !== null) {
         $columnValues[$specificCourseColumnId] = toMondayColumnValue(
             $specificCourseColumnType,
-            mondayResolveSpecificCourseLabel($trainerCourse)
+            mondayResolveSpecificCourseLabel($resolvedCourse)
         );
     }
     if ($trainerAttendees !== '' && $attendeesColumnId !== null) {

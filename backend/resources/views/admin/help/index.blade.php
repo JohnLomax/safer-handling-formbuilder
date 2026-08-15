@@ -650,7 +650,9 @@
                                         (In Monday naming you may also think of this as <em>prov_booking_delivery</em>.)
                                     </td>
                                     <td class="text-sh-mid">
-                                        Forge push with booker/org/venue data but <strong>without</strong> terms accepted.
+                                        When the customer completes the public enquiry form (organisation or trainer
+                                        quote flow), <strong>before</strong> Accept Quote / terms. Creates the first
+                                        Forge booking snapshot as a reserve.
                                     </td>
                                 </tr>
                                 <tr>
@@ -702,8 +704,9 @@
                     <div>
                         <h4 class="text-sm font-semibold text-brand-header">Scenario → webhook status</h4>
                         <ul class="mt-2 list-disc text-sm text-sh-mid">
+                            <li><strong class="text-sh-text">Enquiry form completed</strong> (organisation / trainer quote flow, before Accept Quote) → <code>provisional_book</code> (first create)</li>
                             <li><strong class="text-sh-text">Accept Quote / admin booking save</strong> (terms + venue) → <code>confirmed_book</code> (create or edit)</li>
-                            <li><strong class="text-sh-text">Limited reserve</strong> (data without terms) → <code>provisional_book</code></li>
+                            <li><strong class="text-sh-text">Invoice emailed / Kajabi enroll</strong> → stay <code>confirmed_book</code> (refresh snapshot when needed)</li>
                             <li><strong class="text-sh-text">Xero invoice emailed to customer</strong> → stays <code>confirmed_book</code> (snapshot may refresh; invoicing is not a delivery stage)</li>
                             <li><strong class="text-sh-text">Kajabi enrollment / quote won</strong> → stays <code>confirmed_book</code></li>
                             <li><strong class="text-sh-text">Post-delivery checks</strong> (close-out checklist in Forge) → phase 2; not driven by this form webhook yet</li>
@@ -714,6 +717,13 @@
                         Configure the Forge webhook URL and token under
                         <a href="{{ route('admin.settings.edit') }}" class="link-brand">Integration settings</a>.
                         Successful pushes appear on the enquiry journey timeline as Forge sync events.
+                    </p>
+                    <p class="text-sm text-sh-mid">
+                        <strong class="text-sh-text">Course codes:</strong>
+                        Forge receives <code class="rounded bg-sh-surface px-1 text-xs">booking.course_code</code> from the
+                        Training Matrix <em>Monday / Forge course value</em> field. That value must match the Monday course
+                        option and the course code configured in Forge — keep all three aligned.
+                        See <a href="#matrix-fields" class="link-brand">Matrix fields</a>.
                     </p>
                 </section>
 
@@ -796,8 +806,13 @@
                                     <td class="text-sh-mid">Customer-facing course name.</td>
                                 </tr>
                                 <tr>
-                                    <td class="font-medium text-sh-text">Monday course value</td>
-                                    <td class="text-sh-mid">Exact value written to monday.com — must match the Monday option text.</td>
+                                    <td class="font-medium text-sh-text">Monday / Forge course value</td>
+                                    <td class="text-sh-mid">
+                                        Exact course code written to monday.com and sent to Forge as
+                                        <code class="rounded bg-sh-surface px-1 text-xs">booking.course_code</code>.
+                                        It must match the Monday course option <strong>and</strong> the Forge course code —
+                                        keep the same value in the Training Matrix, Monday, and Forge.
+                                    </td>
                                 </tr>
                                 <tr>
                                     <td class="font-medium text-sh-text">Format / Course style</td>

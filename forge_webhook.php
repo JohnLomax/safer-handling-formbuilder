@@ -943,6 +943,75 @@ function forgeMaybeMarkBookingAccepted(int $enquiryId, array $bookingDetails = [
 }
 
 /**
+ * After the public enquiry form is completed (before Accept Quote / terms),
+ * push a provisional_book snapshot to Forge (first sync only).
+ *
+ * @param array<string, mixed> $post Optional fresh form POST (falls back to stored enquiry)
+ * @return array<string, mixed>|null
+ */
+function forgeMaybeMarkProvisionalFromEnquiry(int $enquiryId, array $post = []): ?array
+{
+    require_once __DIR__ . '/enquiry_logger.php';
+
+    if (!forgeEnabled()) {
+        return null;
+    }
+
+    enquiryLoggerEnsureForgeColumns();
+    $pdo = enquiryLoggerPdo();
+    $stmt = $pdo->prepare(
+        'SELECT id, name, email, status, organisation_company, form_data_json,
+                forge_synced_at, forge_booking_status, booking_details_json
+         FROM enquiries WHERE id = :id LIMIT 1'
+    );
+    $stmt->execute([':id' => $enquiryId]);
+    $row = $stmt->fetch();
+    if (!$row) {
+        return null;
+    }
+
+    // First Forge push only — Accept Quote / invoice / Kajabi own later updates.
+    if (trim((string)($row['forge_synced_at'] ?? '')) !== '') {
+        return null;
+    }
+
+    $formData = $post;
+    if ($formData === []) {
+        $rawForm = trim((string)($row['form_data_json'] ?? ''));
+        if ($rawForm !== '') {
+            $decoded = json_decode($rawForm, true);
+            if (is_array($decoded)) {
+                $formData = $decoded;
+            }
+        }
+    }
+
+    $organisation = trim((string)($formData['organisationCompany'] ?? $row['organisation_company'] ?? ''));
+    $bookerName = trim((string)($formData['name'] ?? $row['name'] ?? ''));
+    $bookerEmail = trim((string)($formData['email'] ?? $row['email'] ?? ''));
+    $bookerPhone = trim((string)($formData['phone'] ?? $formData['tmPhone'] ?? ''));
+
+    $addressLines = array_values(array_filter([
+        trim((string)($formData['addressLine1'] ?? $formData['tmAddressLine1'] ?? '')),
+        trim((string)($formData['addressLine2'] ?? $formData['tmAddressLine2'] ?? '')),
+        trim((string)($formData['addressTown'] ?? $formData['tmAddressTown'] ?? '')),
+        trim((string)($formData['addressPostcode'] ?? $formData['tmAddressPostcode'] ?? '')),
+    ], static fn (string $line): bool => $line !== ''));
+
+    $bookingDetails = [
+        'bookerName' => $bookerName,
+        'email' => $bookerEmail,
+        'phone' => $bookerPhone,
+        'organisation' => $organisation,
+        'venueAddress' => $addressLines !== [] ? implode("\n", $addressLines) : '',
+        'termsAccepted' => false,
+        'source' => 'enquiry_form_provisional',
+    ];
+
+    return forgeMaybeSyncBooking($enquiryId, $bookingDetails, 'provisional_book');
+}
+
+/**
  * After Xero invoice is sent, refresh Forge snapshot but keep confirmed_book
  * (invoicing is not a Booking Delivery Stage).
  *

@@ -1043,6 +1043,31 @@ try {
         }
     }
 
+    // First Forge snapshot: provisional_book once the enquiry form is completed
+    // (before Accept Quote / terms). Failures are logged but must not block submit.
+    if ($enquiryId !== null && ($isTrainerFlow || $isOrganisationTrainingFlow)) {
+        try {
+            require_once __DIR__ . '/forge_webhook.php';
+            forgeMaybeMarkProvisionalFromEnquiry($enquiryId, $_POST);
+        } catch (Throwable $forgeError) {
+            require_once __DIR__ . '/forge_webhook.php';
+            if (!forgeExceptionAlreadyLogged($forgeError)) {
+                enquiryLoggerSafe(function () use ($enquiryId, $forgeError): void {
+                    enquiryLoggerEvent(
+                        $enquiryId,
+                        'forge_booking_sync_failed',
+                        forgeFailureReasonFromException($forgeError),
+                        [
+                            'error' => $forgeError->getMessage(),
+                            'trigger' => 'enquiry_submit_provisional',
+                            'booking_status' => 'provisional_book',
+                        ]
+                    );
+                });
+            }
+        }
+    }
+
     $successPayload = [
         'success' => true,
         'message' => 'Enquiry submitted successfully.',

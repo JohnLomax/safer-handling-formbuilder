@@ -31,8 +31,8 @@
             'body' => "The course name customers see on the public enquiry form.\n\nUse the clear customer-facing title, not an internal Monday code.",
         ],
         'course_value' => [
-            'title' => 'Monday course value',
-            'body' => "The exact course value written to monday.com when an enquiry is synced.\n\nThis should match the Monday dropdown/status option text for that course.",
+            'title' => 'Monday / Forge course value',
+            'body' => "The exact course code synced to monday.com and Forge CRM.\n\nThis must match the Monday course option text and the Forge course code for that course — all three systems use the same value.",
         ],
         'course_description' => [
             'title' => 'Course description',
@@ -167,7 +167,7 @@
 
     <div>
         <div class="flex items-center gap-1.5">
-            <x-input-label for="{{ $formId }}_course_value" value="Monday course value" />
+            <x-input-label for="{{ $formId }}_course_value" value="Monday / Forge course value" />
             <x-field-help-button :title="$help('course_value')['title']" :body="$help('course_value')['body']" />
         </div>
         <x-text-input id="{{ $formId }}_course_value" name="course_value" type="text" class="mt-1 block w-full" :value="$value('course_value')" required />

@@ -49,6 +49,14 @@ class EnquiryProcessRetry
             $actions[] = 'kajabi_enroll';
         }
 
+        if ($this->canForgeResync($enquiry)) {
+            $actions[] = 'forge_resync';
+        }
+
+        if ($this->canForgeCancel($enquiry)) {
+            $actions[] = 'forge_cancel';
+        }
+
         return $actions;
     }
 
@@ -216,6 +224,75 @@ class EnquiryProcessRetry
         if (empty($result['enrolled'])) {
             throw new RuntimeException((string) ($result['error'] ?? 'Kajabi enrollment failed.'));
         }
+    }
+
+    public function canForgeResync(Enquiry $enquiry): bool
+    {
+        if (! function_exists('forgeEnabled') || ! forgeEnabled()) {
+            return false;
+        }
+
+        if (trim((string) forgeWebhookUrl()) === '' || trim((string) forgeWebhookToken()) === '') {
+            return false;
+        }
+
+        // Always allow when already synced (refresh / re-queue).
+        if ($enquiry->forge_synced_at !== null) {
+            return true;
+        }
+
+        // First sync: training enquiries with enough identifying data.
+        return $enquiry->enquiry_type === 'training'
+            && (
+                trim((string) $enquiry->organisation_company) !== ''
+                || trim((string) $enquiry->name) !== ''
+                || is_array($enquiry->booking_details_json)
+            );
+    }
+
+    public function canForgeCancel(Enquiry $enquiry): bool
+    {
+        if (! function_exists('forgeEnabled') || ! forgeEnabled()) {
+            return false;
+        }
+
+        if ($enquiry->forge_synced_at === null) {
+            return false;
+        }
+
+        $status = strtolower(trim((string) $enquiry->forge_booking_status));
+
+        return $status !== 'cancelled' && $status !== 'canceled';
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function forgeResync(Enquiry $enquiry): array
+    {
+        if (! $this->canForgeResync($enquiry)) {
+            throw new RuntimeException('Forge resync is not available for this enquiry.');
+        }
+
+        $result = forgeAdminResyncBooking((int) $enquiry->id);
+        $enquiry->refresh();
+
+        return is_array($result) ? $result : [];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function forgeCancel(Enquiry $enquiry): array
+    {
+        if (! $this->canForgeCancel($enquiry)) {
+            throw new RuntimeException('Forge cancel is not available for this enquiry.');
+        }
+
+        $result = forgeAdminCancelBooking((int) $enquiry->id);
+        $enquiry->refresh();
+
+        return is_array($result) ? $result : [];
     }
 
     public function retryQuoteEmail(Enquiry $enquiry): void
@@ -567,11 +644,15 @@ class EnquiryProcessRetry
                 'monday_courses_ongoing' => 'monday_courses_ongoing_created',
                 'monday_booking' => 'monday_booking_synced',
                 'kajabi_enroll' => 'kajabi_enrolled',
+                'forge_booking' => 'forge_booking_synced',
                 default => $processKey.'_sent',
             };
-            if ($this->hasSuccessfulEvent($enquiry, $successType)
-                || ($processKey === 'xero_invoice_sent' && $this->hasSuccessfulEvent($enquiry, 'xero_invoice_emailed'))
-                || ($processKey === 'monday_courses_ongoing' && $this->hasSuccessfulEvent($enquiry, 'monday_courses_ongoing_synced'))) {
+            if ($processKey !== 'forge_booking'
+                && (
+                    $this->hasSuccessfulEvent($enquiry, $successType)
+                    || ($processKey === 'xero_invoice_sent' && $this->hasSuccessfulEvent($enquiry, 'xero_invoice_emailed'))
+                    || ($processKey === 'monday_courses_ongoing' && $this->hasSuccessfulEvent($enquiry, 'monday_courses_ongoing_synced'))
+                )) {
                 throw new RuntimeException('This step has already completed successfully.');
             }
         }
@@ -586,6 +667,7 @@ class EnquiryProcessRetry
             'monday_courses_ongoing_failed' => tap('monday_courses_ongoing', fn () => $this->retryMondayCoursesOngoing($enquiry)),
             'monday_booking_sync_failed' => tap('monday_booking', fn () => $this->retryMondayBookingSync($enquiry)),
             'kajabi_enroll_failed' => tap('kajabi_enroll', fn () => $this->retryKajabiEnroll($enquiry)),
+            'forge_booking_sync_failed' => tap('forge_resync', fn () => $this->forgeResync($enquiry)),
             default => throw new RuntimeException('This journey step cannot be retried.'),
         };
     }
@@ -724,6 +806,7 @@ class EnquiryProcessRetry
         require_once $root.'/brevo_email.php';
         require_once $root.'/xero.php';
         require_once $root.'/kajabi.php';
+        require_once $root.'/forge_webhook.php';
         $booted = true;
     }
 }

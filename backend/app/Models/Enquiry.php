@@ -95,6 +95,24 @@ class Enquiry extends Model
         return $this->monday_synced_at !== null;
     }
 
+    public function isForgeSynced(): bool
+    {
+        return $this->forge_synced_at !== null;
+    }
+
+    public function forgeBookingStatusLabel(): string
+    {
+        return match (strtolower(trim((string) $this->forge_booking_status))) {
+            'provisional_book' => 'Provisional book',
+            'confirmed_book' => 'Confirmed book',
+            'on_hold' => 'On hold',
+            'to_rearrange' => 'To rearrange',
+            'cancelled', 'canceled' => 'Cancelled',
+            '' => '—',
+            default => ucfirst(str_replace('_', ' ', (string) $this->forge_booking_status)),
+        };
+    }
+
     public function statusLabel(): string
     {
         return match ($this->status) {

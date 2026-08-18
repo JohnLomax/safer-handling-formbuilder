@@ -242,6 +242,7 @@ class EnquiryEvent extends Model
             'monday_courses_ongoing_failed',
             'monday_booking_sync_failed',
             'kajabi_enroll_failed',
+            'forge_booking_sync_failed',
         ], true);
     }
 }

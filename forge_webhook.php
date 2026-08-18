@@ -668,7 +668,8 @@ function enquiryLoggerMarkForgeSynced(
 function forgeMaybeSyncBooking(
     int $enquiryId,
     array $bookingDetails = [],
-    ?string $bookingStatusOverride = null
+    ?string $bookingStatusOverride = null,
+    bool $force = false
 ): ?array {
     require_once __DIR__ . '/enquiry_logger.php';
 
@@ -783,9 +784,11 @@ function forgeMaybeSyncBooking(
     );
     $bookingStatus = forgeNormaliseDeliveryStage((string)($payload['booking']['booking_status'] ?? ''));
 
-    // Skip no-op status edits once Forge already has this delivery stage.
+    // Skip no-op status edits once Forge already has this delivery stage
+    // (unless admin forced a resync of the full snapshot).
     if (
-        $action === 'edit'
+        ! $force
+        && $action === 'edit'
         && $bookingStatusOverride !== null
         && $previousStatus !== ''
         && $previousStatus === $bookingStatus
@@ -1207,4 +1210,183 @@ function forgeMaybeMarkDeliveryStage(
     }
 
     return forgeMaybeSyncBooking($enquiryId, $bookingDetails, $stage);
+}
+
+/**
+ * @return array<string, mixed>
+ */
+function forgeAdminLoadBookingDetails(int $enquiryId): array
+{
+    require_once __DIR__ . '/enquiry_logger.php';
+
+    enquiryLoggerEnsureForgeColumns();
+    $pdo = enquiryLoggerPdo();
+    $stmt = $pdo->prepare(
+        'SELECT id, name, email, organisation_company, form_data_json, booking_details_json,
+                forge_synced_at, forge_booking_status, preferred_date_time, date_not_sure
+         FROM enquiries WHERE id = :id LIMIT 1'
+    );
+    $stmt->execute([':id' => $enquiryId]);
+    $row = $stmt->fetch();
+    if (!$row) {
+        throw new RuntimeException('Enquiry not found for Forge sync.');
+    }
+
+    $bookingDetails = [];
+    $rawBooking = trim((string)($row['booking_details_json'] ?? ''));
+    if ($rawBooking !== '') {
+        $decoded = json_decode($rawBooking, true);
+        if (is_array($decoded)) {
+            $bookingDetails = $decoded;
+        }
+    }
+
+    if ($bookingDetails !== []) {
+        return $bookingDetails;
+    }
+
+    $formData = [];
+    $rawForm = trim((string)($row['form_data_json'] ?? ''));
+    if ($rawForm !== '') {
+        $decodedForm = json_decode($rawForm, true);
+        if (is_array($decodedForm)) {
+            $formData = $decodedForm;
+        }
+    }
+
+    $organisation = trim((string)($formData['organisationCompany'] ?? $row['organisation_company'] ?? ''));
+    $bookerName = trim((string)($formData['name'] ?? $row['name'] ?? ''));
+    $bookerEmail = trim((string)($formData['email'] ?? $row['email'] ?? ''));
+    $bookerPhone = trim((string)($formData['phone'] ?? $formData['tmPhone'] ?? ''));
+
+    $addressLines = array_values(array_filter([
+        trim((string)($formData['addressLine1'] ?? $formData['tmAddressLine1'] ?? '')),
+        trim((string)($formData['addressLine2'] ?? $formData['tmAddressLine2'] ?? '')),
+        trim((string)($formData['addressTown'] ?? $formData['tmAddressTown'] ?? '')),
+        trim((string)($formData['addressPostcode'] ?? $formData['tmAddressPostcode'] ?? '')),
+    ], static fn (string $line): bool => $line !== ''));
+
+    $preferred = trim((string)($row['preferred_date_time'] ?? ''));
+    if ($preferred === '' && !empty($row['date_not_sure'])) {
+        $preferred = '';
+    }
+
+    return [
+        'bookerName' => $bookerName,
+        'email' => $bookerEmail,
+        'phone' => $bookerPhone,
+        'organisation' => $organisation,
+        'preferredDate' => $preferred,
+        'dateNotSure' => !empty($row['date_not_sure']),
+        'venueAddress' => $addressLines !== [] ? implode("\n", $addressLines) : '',
+        'termsAccepted' => false,
+        'source' => 'admin_forge_resync',
+    ];
+}
+
+/**
+ * Admin: push / refresh the Forge booking snapshot (create or edit).
+ *
+ * @return array<string, mixed>
+ */
+function forgeAdminResyncBooking(int $enquiryId): array
+{
+    require_once __DIR__ . '/enquiry_logger.php';
+
+    if (!forgeEnabled()) {
+        throw new RuntimeException('Forge integration is disabled in Settings.');
+    }
+
+    $token = forgeWebhookToken();
+    $url = forgeWebhookUrl();
+    if ($token === '' || $url === '') {
+        throw new RuntimeException('Forge webhook URL or token is missing in Settings.');
+    }
+
+    enquiryLoggerEnsureForgeColumns();
+    $pdo = enquiryLoggerPdo();
+    $stmt = $pdo->prepare(
+        'SELECT forge_synced_at, forge_booking_status, booking_details_json, terms_accepted_at, status
+         FROM enquiries WHERE id = :id LIMIT 1'
+    );
+    $stmt->execute([':id' => $enquiryId]);
+    $row = $stmt->fetch();
+    if (!$row) {
+        throw new RuntimeException('Enquiry not found for Forge sync.');
+    }
+
+    $alreadySynced = trim((string)($row['forge_synced_at'] ?? '')) !== '';
+    $current = forgeNormaliseDeliveryStage((string)($row['forge_booking_status'] ?? ''));
+    $bookingDetails = forgeAdminLoadBookingDetails($enquiryId);
+
+    $termsAccepted = !empty($bookingDetails['termsAccepted'])
+        || trim((string)($row['terms_accepted_at'] ?? '')) !== ''
+        || in_array(trim((string)($row['status'] ?? '')), ['quote_accepted', 'quote_won'], true);
+
+    if ($termsAccepted) {
+        $bookingDetails['termsAccepted'] = true;
+    }
+
+    if ($current === 'cancelled') {
+        $stage = 'cancelled';
+    } elseif (in_array($current, ['on_hold', 'to_rearrange'], true)) {
+        $stage = $current;
+    } elseif ($termsAccepted) {
+        $stage = 'confirmed_book';
+    } elseif ($current === 'confirmed_book') {
+        $stage = 'confirmed_book';
+    } else {
+        $stage = 'provisional_book';
+    }
+
+    $result = forgeMaybeSyncBooking($enquiryId, $bookingDetails, $stage, $alreadySynced);
+    if ($result === null) {
+        throw new RuntimeException('Forge sync was skipped. Check the journey log for details.');
+    }
+
+    return $result;
+}
+
+/**
+ * Admin: mark a previously synced Forge booking as cancelled.
+ *
+ * @return array<string, mixed>
+ */
+function forgeAdminCancelBooking(int $enquiryId): array
+{
+    require_once __DIR__ . '/enquiry_logger.php';
+
+    if (!forgeEnabled()) {
+        throw new RuntimeException('Forge integration is disabled in Settings.');
+    }
+
+    $token = forgeWebhookToken();
+    $url = forgeWebhookUrl();
+    if ($token === '' || $url === '') {
+        throw new RuntimeException('Forge webhook URL or token is missing in Settings.');
+    }
+
+    if (!enquiryLoggerForgeAlreadySynced($enquiryId)) {
+        throw new RuntimeException('This enquiry has not been synced to Forge yet. Sync it first before cancelling.');
+    }
+
+    enquiryLoggerEnsureForgeColumns();
+    $pdo = enquiryLoggerPdo();
+    $stmt = $pdo->prepare('SELECT forge_booking_status FROM enquiries WHERE id = :id LIMIT 1');
+    $stmt->execute([':id' => $enquiryId]);
+    $row = $stmt->fetch();
+    $current = forgeNormaliseDeliveryStage((string)($row['forge_booking_status'] ?? ''));
+    if ($current === 'cancelled') {
+        throw new RuntimeException('This booking is already cancelled in Forge.');
+    }
+
+    $result = forgeMaybeMarkDeliveryStage($enquiryId, 'cancelled');
+    if ($result === null) {
+        throw new RuntimeException('Forge cancel was skipped. Check the journey log for details.');
+    }
+    if (!empty($result['skipped'])) {
+        throw new RuntimeException('This booking is already cancelled in Forge.');
+    }
+
+    return $result;
 }

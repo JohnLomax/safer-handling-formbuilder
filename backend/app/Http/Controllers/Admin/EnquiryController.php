@@ -431,6 +431,42 @@ class EnquiryController extends Controller
         );
     }
 
+    public function forgeResync(Enquiry $enquiry, EnquiryProcessRetry $retry): RedirectResponse
+    {
+        try {
+            $wasSynced = $enquiry->forge_synced_at !== null;
+            $result = $retry->forgeResync($enquiry);
+            $enquiry->refresh();
+
+            $stage = trim((string) ($result['booking_status'] ?? $enquiry->forge_booking_status ?? ''));
+            $label = $stage !== '' ? str_replace('_', ' ', $stage) : 'booking snapshot';
+            $verb = $wasSynced ? 'Resynced' : 'Synced';
+
+            return redirect()
+                ->route('admin.enquiries.show', $enquiry)
+                ->with('status', $verb.' to Forge as '.$label.'.');
+        } catch (Throwable $e) {
+            return redirect()
+                ->route('admin.enquiries.show', $enquiry)
+                ->withErrors(['forge' => 'Forge sync failed: '.$e->getMessage()]);
+        }
+    }
+
+    public function forgeCancel(Enquiry $enquiry, EnquiryProcessRetry $retry): RedirectResponse
+    {
+        try {
+            $retry->forgeCancel($enquiry);
+
+            return redirect()
+                ->route('admin.enquiries.show', $enquiry)
+                ->with('status', 'Forge booking marked as cancelled.');
+        } catch (Throwable $e) {
+            return redirect()
+                ->route('admin.enquiries.show', $enquiry)
+                ->withErrors(['forge' => 'Forge cancel failed: '.$e->getMessage()]);
+        }
+    }
+
     public function retryEvent(Enquiry $enquiry, EnquiryEvent $event, EnquiryProcessRetry $retry): RedirectResponse
     {
         if ((int) $event->enquiry_id !== (int) $enquiry->id) {
@@ -444,6 +480,8 @@ class EnquiryController extends Controller
             'booking_email' => 'Accept Quote / venue details email',
             'xero_invoice' => 'Xero draft invoice',
             'kajabi_enroll' => 'Kajabi enrollment',
+            'forge_resync' => 'Forge sync',
+            'forge_cancel' => 'Forge cancel',
         ];
 
         try {

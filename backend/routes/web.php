@@ -35,6 +35,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/enquiries/{enquiry}/retry/xero-invoice', [EnquiryController::class, 'retryXeroInvoice'])->name('enquiries.retry.xero-invoice');
     Route::post('/enquiries/{enquiry}/sync/xero-invoice-sent', [EnquiryController::class, 'syncXeroInvoiceSent'])->name('enquiries.sync.xero-invoice-sent');
     Route::post('/enquiries/{enquiry}/retry/kajabi-enroll', [EnquiryController::class, 'retryKajabiEnroll'])->name('enquiries.retry.kajabi-enroll');
+    Route::post('/enquiries/{enquiry}/forge/resync', [EnquiryController::class, 'forgeResync'])->name('enquiries.forge.resync');
+    Route::post('/enquiries/{enquiry}/forge/cancel', [EnquiryController::class, 'forgeCancel'])->name('enquiries.forge.cancel');
     Route::post('/enquiries/{enquiry}/events/{event}/retry', [EnquiryController::class, 'retryEvent'])->name('enquiries.retry.event');
 
     Route::get('/feedback', [FeedbackController::class, 'index'])->name('feedback.index');

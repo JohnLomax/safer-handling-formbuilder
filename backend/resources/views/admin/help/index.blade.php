@@ -709,6 +709,8 @@
                             <li><strong class="text-sh-text">Invoice emailed / Kajabi enroll</strong> → stay <code>confirmed_book</code> (refresh snapshot when needed)</li>
                             <li><strong class="text-sh-text">Xero invoice emailed to customer</strong> → stays <code>confirmed_book</code> (snapshot may refresh; invoicing is not a delivery stage)</li>
                             <li><strong class="text-sh-text">Kajabi enrollment / quote won</strong> → stays <code>confirmed_book</code></li>
+                            <li><strong class="text-sh-text">Admin Resync</strong> (enquiry page Forge card) → re-queues the current snapshot as create/edit</li>
+                            <li><strong class="text-sh-text">Admin Cancel in Forge</strong> (only after a successful sync) → <code>cancelled</code></li>
                             <li><strong class="text-sh-text">Post-delivery checks</strong> (close-out checklist in Forge) → phase 2; not driven by this form webhook yet</li>
                         </ul>
                     </div>
@@ -716,7 +718,9 @@
                     <p class="text-sm text-sh-mid">
                         Configure the Forge webhook URL and token under
                         <a href="{{ route('admin.settings.edit') }}" class="link-brand">Integration settings</a>.
-                        Successful pushes appear on the enquiry journey timeline as Forge sync events.
+                        On each enquiry, the Forge card shows sync status and — when Forge is enabled —
+                        <strong class="text-sh-text">Sync / Resync</strong> and <strong class="text-sh-text">Cancel in Forge</strong>
+                        (cancel only after the first successful sync). Successful pushes appear on the journey timeline.
                     </p>
                     <p class="text-sm text-sh-mid">
                         <strong class="text-sh-text">Course codes:</strong>

@@ -25,6 +25,12 @@
                         <span class="text-xs font-semibold text-sh-text">Monday</span>
                     </span>
                 @endif
+                @if ($enquiry->isForgeSynced())
+                    <span class="inline-flex items-center gap-1.5 rounded-full border border-sh-border bg-white px-2.5 py-1">
+                        <span class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#0f4a78] text-[10px] font-bold text-white" title="Synced to Forge">F</span>
+                        <span class="text-xs font-semibold text-sh-text">Forge</span>
+                    </span>
+                @endif
                 @if (in_array($enquiry->status, ['quote_sent', 'quote_accepted'], true)
                     || $enquiry->quote_email_sent_at
                     || filled($enquiry->xero_quote_id))
@@ -113,6 +119,22 @@
                         <p class="text-xs text-sh-mid">Enrollment failed</p>
                     @else
                         <p class="mt-1 text-sm font-semibold text-sh-text">Not enrolled</p>
+                        <p class="text-xs text-sh-mid">—</p>
+                    @endif
+                </div>
+                <div class="enquiry-stat">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-sh-mid inline-flex items-center gap-1.5">
+                        <span class="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[#0f4a78] text-[8px] font-bold text-white" aria-hidden="true">F</span>
+                        Forge
+                    </p>
+                    @if ($enquiry->isForgeSynced())
+                        <p class="mt-1 text-sm font-semibold text-sh-text">{{ $enquiry->forgeBookingStatusLabel() }}</p>
+                        <p class="text-xs text-sh-mid">{{ $enquiry->forge_synced_at?->format('d M Y H:i') ?? '—' }}</p>
+                    @elseif ($enquiry->events->contains(fn ($event) => $event->event_type === 'forge_booking_sync_failed'))
+                        <p class="mt-1 text-sm font-semibold text-sh-text">Failed</p>
+                        <p class="text-xs text-sh-mid">Sync failed</p>
+                    @else
+                        <p class="mt-1 text-sm font-semibold text-sh-text">Not synced</p>
                         <p class="text-xs text-sh-mid">—</p>
                     @endif
                 </div>
@@ -365,6 +387,57 @@
                                         </button>
                                     </form>
                                 @endif
+                            </div>
+
+                            <div class="rounded-[12px] border border-sh-border bg-white/70 p-4">
+                                <div class="flex items-center justify-between gap-3">
+                                    <div class="flex items-center gap-2">
+                                        <span class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#0f4a78] text-[10px] font-bold text-white" title="Forge" aria-hidden="true">F</span>
+                                        <span class="text-sm font-semibold text-sh-text">Forge</span>
+                                    </div>
+                                    @if ($enquiry->isForgeSynced())
+                                        @if (strtolower((string) $enquiry->forge_booking_status) === 'cancelled')
+                                            <span class="status-pill status-pill-muted">Cancelled</span>
+                                        @else
+                                            <span class="status-pill status-pill-success">Synced</span>
+                                        @endif
+                                    @elseif ($enquiry->events->contains(fn ($event) => $event->event_type === 'forge_booking_sync_failed'))
+                                        <span class="status-pill status-pill-progress">Failed</span>
+                                    @else
+                                        <span class="status-pill status-pill-muted">Not synced</span>
+                                    @endif
+                                </div>
+                                @if ($enquiry->isForgeSynced())
+                                    <p class="mt-3 text-xs text-sh-mid">
+                                        {{ $enquiry->forgeBookingStatusLabel() }}
+                                        @if ($enquiry->forge_synced_at)
+                                            · {{ $enquiry->forge_synced_at->format('d M Y · H:i') }}
+                                        @endif
+                                    </p>
+                                    @if (filled($enquiry->forge_event_id))
+                                        <p class="mt-1 text-xs text-sh-mid font-mono">{{ $enquiry->forge_event_id }}</p>
+                                    @endif
+                                @else
+                                    <p class="mt-3 text-xs text-sh-mid">Push a booking snapshot to Forge for admin review. Cancel is available after the first successful sync.</p>
+                                @endif
+                                <div class="mt-3 flex flex-wrap gap-2">
+                                    @if (in_array('forge_resync', $retryableActions, true))
+                                        <form method="POST" action="{{ route('admin.enquiries.forge.resync', $enquiry) }}">
+                                            @csrf
+                                            <button type="submit" class="btn-brand-outline text-xs" title="{{ $enquiry->isForgeSynced() ? 'Resend the current booking snapshot to Forge' : 'Send this booking to Forge' }}">
+                                                {{ $enquiry->isForgeSynced() ? 'Resync' : 'Sync to Forge' }}
+                                            </button>
+                                        </form>
+                                    @endif
+                                    @if (in_array('forge_cancel', $retryableActions, true))
+                                        <form method="POST" action="{{ route('admin.enquiries.forge.cancel', $enquiry) }}" onsubmit="return confirm('Cancel this booking in Forge? Trainers will see it as cancelled.');">
+                                            @csrf
+                                            <button type="submit" class="btn-brand-outline text-xs text-red-700 border-red-200 hover:border-red-400 hover:text-red-800" title="Mark this Forge booking as cancelled">
+                                                Cancel in Forge
+                                            </button>
+                                        </form>
+                                    @endif
+                                </div>
                             </div>
 
                             <div class="rounded-[12px] border border-sh-border bg-white/70 p-4">

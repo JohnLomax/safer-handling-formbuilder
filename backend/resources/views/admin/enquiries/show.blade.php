@@ -380,7 +380,13 @@
                                     @if ($enquiry->isKajabiDisabledForCourseCombination())
                                         <span class="status-pill status-pill-muted">Disabled</span>
                                     @elseif ($enquiry->kajabi_enrolled_at)
-                                        <span class="status-pill status-pill-success">Enrolled</span>
+                                        <button
+                                            type="button"
+                                            class="status-pill status-pill-success cursor-pointer"
+                                            x-data
+                                            @click="$dispatch('open-modal', 'kajabi-enrolled-modal')"
+                                            title="View people enrolled in Kajabi"
+                                        >Enrolled</button>
                                     @elseif ($enquiry->events->contains(fn ($event) => $event->event_type === 'kajabi_enroll_failed'))
                                         <span class="status-pill status-pill-progress">Failed</span>
                                     @elseif ($enquiry->xero_invoice_sent_at || $enquiry->status === 'quote_won')
@@ -393,6 +399,7 @@
                                     <p class="mt-3 text-sm text-sh-text">Kajabi is disabled for this course combination</p>
                                     <p class="mt-2 text-xs text-sh-mid">Turn on Enable Kajabi for this Training Matrix row to auto-invite the Legal Briefing course on Quote Won.</p>
                                 @elseif ($enquiry->kajabi_enrolled_at)
+                                    @php $kajabiPeople = $enquiry->kajabiEnrolledPeople(); @endphp
                                     <p class="mt-3 text-xs font-semibold uppercase tracking-wide text-sh-mid">Course</p>
                                     <p class="mt-1 text-sm font-semibold leading-snug text-sh-text">{{ $enquiry->kajabiCourseTitle() }}</p>
                                     <p class="mt-2 text-xs text-sh-mid">
@@ -401,6 +408,18 @@
                                             · Contact <span class="font-mono">{{ $enquiry->kajabi_contact_id }}</span>
                                         @endif
                                     </p>
+                                    <button
+                                        type="button"
+                                        class="btn-brand-outline mt-3 text-xs inline-flex items-center gap-1.5"
+                                        x-data
+                                        @click="$dispatch('open-modal', 'kajabi-enrolled-modal')"
+                                        title="View people enrolled in Kajabi"
+                                    >
+                                        View enrolled people
+                                        @if (count($kajabiPeople) > 0)
+                                            <span class="rounded-full bg-sh-surface px-1.5 py-0.5 text-[10px] font-semibold text-sh-text">{{ count($kajabiPeople) }}</span>
+                                        @endif
+                                    </button>
                                 @else
                                     <p class="mt-3 text-xs text-sh-mid">Creates Kajabi accounts (if needed) and assigns <span class="font-semibold text-sh-text">2026 Legal Briefing on the use of Reasonable Force</span> to each Accept Quote student email when Quote Won runs.</p>
                                 @endif
@@ -929,6 +948,73 @@
                 @endif
             </div>
     </div>
+
+    @if ($enquiry->kajabi_enrolled_at)
+        @php $kajabiEnrolledPeople = $enquiry->kajabiEnrolledPeople(); @endphp
+        <x-modal name="kajabi-enrolled-modal" maxWidth="2xl" focusable>
+            <div class="admin-modal-header">
+                <div class="min-w-0">
+                    <div class="flex items-center gap-2">
+                        <x-kajabi-badge compact />
+                        <h3 class="text-lg font-semibold text-brand-header">Kajabi enrolled</h3>
+                    </div>
+                    <p class="mt-1 text-sm text-sh-mid">{{ $enquiry->kajabiCourseTitle() }}</p>
+                </div>
+                <button type="button" class="btn-icon" x-on:click="$dispatch('close-modal', 'kajabi-enrolled-modal')">&times;</button>
+            </div>
+            <div class="admin-modal-body space-y-4">
+                <div class="rounded-[12px] border border-sh-border bg-white/70 p-4">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-sh-mid">Course</p>
+                    <p class="mt-1 text-sm font-semibold leading-snug text-sh-text">{{ $enquiry->kajabiCourseTitle() }}</p>
+                    <p class="mt-2 text-xs text-sh-mid">
+                        Enrolled {{ $enquiry->kajabi_enrolled_at->format('d M Y · H:i') }}
+                        @if (filled($enquiry->kajabi_contact_id))
+                            · Contact <span class="font-mono">{{ $enquiry->kajabi_contact_id }}</span>
+                        @endif
+                    </p>
+                </div>
+
+                <div>
+                    <p class="text-xs font-semibold uppercase tracking-wide text-sh-mid">
+                        People enrolled
+                        <span class="ml-1 font-medium normal-case tracking-normal text-sh-text">({{ count($kajabiEnrolledPeople) }})</span>
+                    </p>
+                    @if (count($kajabiEnrolledPeople) > 0)
+                        <ul class="mt-3 divide-y divide-sh-border overflow-hidden rounded-[12px] border border-sh-border bg-white">
+                            @foreach ($kajabiEnrolledPeople as $person)
+                                <li class="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                                    <div class="min-w-0">
+                                        <p class="truncate text-sm font-semibold text-sh-text">{{ $person['name'] }}</p>
+                                        <p class="truncate text-xs text-sh-mid">
+                                            <a href="mailto:{{ $person['email'] }}" class="link-brand">{{ $person['email'] }}</a>
+                                        </p>
+                                    </div>
+                                    <div class="shrink-0 text-left sm:text-right">
+                                        @if (! empty($person['contact_id']))
+                                            <p class="font-mono text-xs text-sh-mid">Contact {{ $person['contact_id'] }}</p>
+                                        @endif
+                                        @if (! empty($person['enrolled_at']))
+                                            <p class="text-xs text-sh-mid">{{ $person['enrolled_at']->format('d M Y · H:i') }}</p>
+                                        @endif
+                                        @if (! empty($person['created_contact']))
+                                            <p class="text-[11px] font-semibold text-[#047857]">New Kajabi account</p>
+                                        @elseif (! empty($person['already_had_offer']))
+                                            <p class="text-[11px] font-semibold text-sh-mid">Already had course</p>
+                                        @endif
+                                    </div>
+                                </li>
+                            @endforeach
+                        </ul>
+                    @else
+                        <p class="mt-3 text-sm text-sh-mid">No individual enrollment records were found on the journey timeline for this enquiry.</p>
+                    @endif
+                </div>
+            </div>
+            <div class="admin-modal-footer">
+                <button type="button" class="btn-brand-outline" x-on:click="$dispatch('close-modal', 'kajabi-enrolled-modal')">Close</button>
+            </div>
+        </x-modal>
+    @endif
 
     @if ($enquiry->hasBookingDetails())
         <x-modal name="booking-view-modal" maxWidth="3xl" focusable :show="$openBookingViewModal ?? false">

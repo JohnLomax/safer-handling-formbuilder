@@ -338,6 +338,40 @@ class Enquiry extends Model
         return $default;
     }
 
+    /**
+     * People enrolled in Kajabi for this enquiry (from journey events).
+     *
+     * @return list<array{name:string,email:string,contact_id:?string,enrolled_at:?\Illuminate\Support\Carbon,created_contact:bool,already_had_offer:bool}>
+     */
+    public function kajabiEnrolledPeople(): array
+    {
+        $events = $this->relationLoaded('events')
+            ? $this->events->where('event_type', 'kajabi_enrolled')
+            : $this->events()->where('event_type', 'kajabi_enrolled')->orderBy('id')->get();
+
+        $people = [];
+        foreach ($events->sortBy('id') as $event) {
+            $metadata = is_array($event->metadata) ? $event->metadata : [];
+            $email = strtolower(trim((string) ($metadata['email'] ?? '')));
+            if ($email === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                continue;
+            }
+
+            $name = trim((string) ($metadata['name'] ?? ''));
+            $contactId = trim((string) ($metadata['kajabi_contact_id'] ?? ''));
+            $people[$email] = [
+                'name' => $name !== '' ? $name : $email,
+                'email' => $email,
+                'contact_id' => $contactId !== '' ? $contactId : null,
+                'enrolled_at' => $event->created_at,
+                'created_contact' => (bool) ($metadata['created_contact'] ?? false),
+                'already_had_offer' => (bool) ($metadata['already_had_offer'] ?? false),
+            ];
+        }
+
+        return array_values($people);
+    }
+
     public function canStaffProgressBooking(): bool
     {
         return $this->booking_email_sent_at !== null

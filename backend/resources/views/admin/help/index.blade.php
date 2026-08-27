@@ -357,7 +357,7 @@
                             </div>
                             <div>
                                 <h4>Training Matrix</h4>
-                                <p>Controls organisation course options and live quote pricing on the public form.</p>
+                                <p>Controls organisation course options, live quote pricing, and whether Kajabi auto-invite runs for each combination.</p>
                             </div>
                         </div>
                         <div class="help-feature-card">
@@ -441,7 +441,7 @@
                         <div class="help-step-card">
                             <div class="help-step-num">2</div>
                             <h4>Training & live quote</h4>
-                            <p>Organisation path uses the Training Matrix: sector → course → format → style → attendees → date.</p>
+                            <p>Organisation path uses the Training Matrix: sector → course → format → style → attendees → date. If only one format or course style is available, the form shows it as a prefilled label instead of a dropdown.</p>
                         </div>
                         <div class="help-step-card">
                             <div class="help-step-num">3</div>
@@ -456,7 +456,7 @@
                         <div class="help-step-card">
                             <div class="help-step-num">5</div>
                             <h4>Quote won</h4>
-                            <p>After the invoice is emailed, status moves to Quote Won (Monday / Kajabi may progress too).</p>
+                            <p>After the invoice is emailed, status moves to Quote Won. Monday may progress, and Kajabi invites students when Enable Kajabi is on for that matrix row.</p>
                         </div>
                     </div>
 
@@ -764,9 +764,11 @@
                     </div>
 
                     <ul class="list-disc text-sm text-sh-mid">
-                        <li>Each row is one selectable combination: sector, course, format, course style, attendee limits, and pricing.</li>
+                        <li>Each row is one selectable combination: sector, course, format, course style, attendee limits, pricing, and Kajabi invite setting.</li>
                         <li>Only <strong class="text-sh-text">Active</strong> rows appear on the public form.</li>
                         <li>Customers only see valid matrix combinations.</li>
+                        <li><strong class="text-sh-text">Enable Kajabi</strong> is on by default. When on, Quote Won auto-invites Accept Quote students to the online Legal Briefing course; when off, no invite is sent and the enquiry shows “Kajabi is disabled for this course combination”.</li>
+                        <li>On the public form, if a course has only one format or course style, that value is shown as a fixed label (not a dropdown).</li>
                         <li>Use the (?) help buttons on the matrix form for field-level tips.</li>
                         <li>Lower sort order numbers appear first.</li>
                     </ul>
@@ -824,11 +826,21 @@
                                 </tr>
                                 <tr>
                                     <td class="font-medium text-sh-text">Format / Course style</td>
-                                    <td class="text-sh-mid">Delivery type and sub-option used to pick the correct pricing row.</td>
+                                    <td class="text-sh-mid">
+                                        Delivery type and sub-option used to pick the correct pricing row.
+                                        On the public form, a single available format or style is shown as a prefilled label; multiple options still use a dropdown.
+                                    </td>
                                 </tr>
                                 <tr>
                                     <td class="font-medium text-sh-text">Min / Max / Default attendees</td>
                                     <td class="text-sh-mid">Limits and starting value for the attendee stepper.</td>
+                                </tr>
+                                <tr>
+                                    <td class="font-medium text-sh-text">Enable Kajabi</td>
+                                    <td class="text-sh-mid">
+                                        Defaults to on. When checked, Quote Won automatically invites each Accept Quote student to the Legal Briefing course in Kajabi.
+                                        Uncheck to skip Kajabi for this combination — the enquiry admin page shows that Kajabi is disabled and Enroll in Kajabi is not offered.
+                                    </td>
                                 </tr>
                                 <tr>
                                     <td class="font-medium text-sh-text">Active</td>
@@ -876,6 +888,7 @@
                     </div>
                     <p class="text-sm text-sh-mid">
                         After editing matrix rows, test sector → course → format → style → attendees on the public form and confirm the Live Quote before using it with customers.
+                        Check that a single format/style appears as a label, and that Enable Kajabi on/off matches whether Quote Won sends the Legal Briefing invite for that combination.
                     </p>
                 </section>
 

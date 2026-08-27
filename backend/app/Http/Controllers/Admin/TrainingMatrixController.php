@@ -107,6 +107,7 @@ class TrainingMatrixController extends Controller
             'flat_amount' => ['nullable', 'numeric', 'min:0'],
             'per_delegate_rate' => ['nullable', 'numeric', 'min:0'],
             'is_active' => ['nullable', 'boolean'],
+            'kajabi_enabled' => ['nullable', 'boolean'],
             'sort_order' => ['nullable', 'integer', 'min:0'],
         ];
     }
@@ -129,6 +130,7 @@ class TrainingMatrixController extends Controller
             'default_attendees' => $validated['default_attendees'] ?? null,
             'pricing' => $this->buildPricing($validated),
             'is_active' => $request->boolean('is_active'),
+            'kajabi_enabled' => $request->boolean('kajabi_enabled'),
             'sort_order' => $validated['sort_order'] ?? 0,
         ];
     }

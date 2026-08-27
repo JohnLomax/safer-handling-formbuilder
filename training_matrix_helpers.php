@@ -323,3 +323,139 @@ function trainingMatrixResolveOrganisationSubmission(array $post): array
         'extraNotes' => trim((string)($post['extraNotes'] ?? '')),
     ];
 }
+
+/**
+ * Find a training matrix DB row (active or inactive) for Kajabi gating.
+ *
+ * @param array<string, mixed> $enquiry  Enquiry row or form-like fields
+ * @return array{kajabi_enabled:bool,course:string,course_value:string,sector:string,format:string,sub_option:string}|null
+ */
+function trainingMatrixLookupEntryForEnquiry(array $enquiry): ?array
+{
+    $formData = [];
+    $rawForm = trim((string)($enquiry['form_data_json'] ?? ''));
+    if ($rawForm !== '') {
+        $decoded = json_decode($rawForm, true);
+        if (is_array($decoded)) {
+            $formData = $decoded;
+        }
+    }
+
+    $sector = trim((string)($enquiry['sector'] ?? $formData['sector'] ?? ''));
+    $orgCourse = trim((string)($enquiry['org_course'] ?? $formData['orgCourse'] ?? ''));
+    $format = trim((string)($enquiry['course_format'] ?? $formData['courseFormat'] ?? ''));
+    $subOption = trim((string)($enquiry['format_sub_option'] ?? $formData['formatSubOption'] ?? ''));
+    $courseValue = trim((string)(
+        $formData['mondaySpecificCourse']
+        ?? $formData['specificCourse']
+        ?? $enquiry['trainer_course_select']
+        ?? $formData['trainerCourseSelect']
+        ?? ''
+    ));
+
+    if (!function_exists('appDatabasePdo')) {
+        require_once __DIR__ . '/database_bridge.php';
+    }
+    $pdo = appDatabasePdo();
+    if ($pdo === null) {
+        // Fall back to in-memory active matrix (defaults / cached rows).
+        if ($sector !== '' && $orgCourse !== '' && $format !== '' && $subOption !== '') {
+            $row = trainingMatrixFindRow($sector, $orgCourse, $format, $subOption);
+            if ($row !== null) {
+                return [
+                    'kajabi_enabled' => array_key_exists('kajabiEnabled', $row)
+                        ? (bool)$row['kajabiEnabled']
+                        : true,
+                    'course' => (string)($row['course'] ?? ''),
+                    'course_value' => (string)($row['courseValue'] ?? ''),
+                    'sector' => (string)($row['sector'] ?? ''),
+                    'format' => (string)($row['format'] ?? ''),
+                    'sub_option' => (string)($row['subOption'] ?? ''),
+                ];
+            }
+        }
+
+        return null;
+    }
+
+    try {
+        if ($sector !== '' && $orgCourse !== '' && $format !== '' && $subOption !== '') {
+            $stmt = $pdo->prepare(
+                'SELECT sector, course, course_value, format, sub_option, kajabi_enabled
+                 FROM training_matrix_entries
+                 WHERE sector = :sector
+                   AND (course = :course OR course_value = :course_value_match)
+                   AND format = :format
+                   AND sub_option = :sub_option
+                 ORDER BY is_active DESC, id ASC
+                 LIMIT 1'
+            );
+            $stmt->execute([
+                ':sector' => $sector,
+                ':course' => $orgCourse,
+                ':course_value_match' => $orgCourse,
+                ':format' => $format,
+                ':sub_option' => $subOption,
+            ]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (is_array($row)) {
+                return [
+                    'kajabi_enabled' => array_key_exists('kajabi_enabled', $row)
+                        ? (bool)$row['kajabi_enabled']
+                        : true,
+                    'course' => (string)($row['course'] ?? ''),
+                    'course_value' => (string)($row['course_value'] ?? ''),
+                    'sector' => (string)($row['sector'] ?? ''),
+                    'format' => (string)($row['format'] ?? ''),
+                    'sub_option' => (string)($row['sub_option'] ?? ''),
+                ];
+            }
+        }
+
+        if ($courseValue !== '') {
+            $stmt = $pdo->prepare(
+                'SELECT sector, course, course_value, format, sub_option, kajabi_enabled
+                 FROM training_matrix_entries
+                 WHERE course_value = :course_value
+                 ORDER BY is_active DESC, id ASC
+                 LIMIT 1'
+            );
+            $stmt->execute([':course_value' => $courseValue]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (is_array($row)) {
+                return [
+                    'kajabi_enabled' => array_key_exists('kajabi_enabled', $row)
+                        ? (bool)$row['kajabi_enabled']
+                        : true,
+                    'course' => (string)($row['course'] ?? ''),
+                    'course_value' => (string)($row['course_value'] ?? ''),
+                    'sector' => (string)($row['sector'] ?? ''),
+                    'format' => (string)($row['format'] ?? ''),
+                    'sub_option' => (string)($row['sub_option'] ?? ''),
+                ];
+            }
+        }
+    } catch (Throwable) {
+        // Column may not exist yet before migration — treat as enabled.
+        return null;
+    }
+
+    return null;
+}
+
+/**
+ * Whether Kajabi auto-invite should run for this enquiry's course combination.
+ * Unknown / unmatched combinations default to enabled (legacy behaviour).
+ *
+ * @param array<string, mixed> $enquiry
+ */
+function trainingMatrixKajabiEnabledForEnquiry(array $enquiry): bool
+{
+    $row = trainingMatrixLookupEntryForEnquiry($enquiry);
+
+    if ($row === null) {
+        return true;
+    }
+
+    return !empty($row['kajabi_enabled']);
+}

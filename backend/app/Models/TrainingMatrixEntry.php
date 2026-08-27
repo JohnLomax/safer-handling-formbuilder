@@ -18,7 +18,16 @@ class TrainingMatrixEntry extends Model
         'default_attendees',
         'pricing',
         'is_active',
+        'kajabi_enabled',
         'sort_order',
+    ];
+
+    /**
+     * @var array<string, mixed>
+     */
+    protected $attributes = [
+        'is_active' => true,
+        'kajabi_enabled' => true,
     ];
 
     protected function casts(): array
@@ -26,6 +35,7 @@ class TrainingMatrixEntry extends Model
         return [
             'pricing' => 'array',
             'is_active' => 'boolean',
+            'kajabi_enabled' => 'boolean',
             'min_attendees' => 'integer',
             'max_cap' => 'integer',
             'default_attendees' => 'integer',
@@ -47,6 +57,7 @@ class TrainingMatrixEntry extends Model
             'minAttendees' => $this->min_attendees,
             'maxCap' => $this->max_cap,
             'pricing' => $this->pricing ?? [],
+            'kajabiEnabled' => (bool) ($this->kajabi_enabled ?? true),
         ];
 
         $description = trim((string) ($this->course_description ?? ''));

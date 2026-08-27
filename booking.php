@@ -19,6 +19,8 @@ $prefill = [
     'invoiceAddress' => '',
     'preferredDate' => '',
     'dateNotSure' => false,
+    'studentNames' => '',
+    'studentEmails' => '',
 ];
 $errorMessage = '';
 $alreadySubmitted = false;
@@ -67,6 +69,9 @@ if ($enquiryIdParam === null || $token === '') {
             'invoiceAddress' => implode("\n", $addressParts),
             'preferredDate' => $preferredDate,
             'dateNotSure' => $dateNotSure,
+            // Kajabi enrolls these rows — start with the booking contact (they can remove themselves).
+            'studentNames' => trim((string)($enquiry['name'] ?? '')),
+            'studentEmails' => trim((string)($enquiry['email'] ?? '')),
         ];
 
         if ($alreadySubmitted && is_array($bookingMeta['details'] ?? null)) {
@@ -76,6 +81,32 @@ if ($enquiryIdParam === null || $token === '') {
                     $prefill[$key] = (string)$saved[$key];
                 }
             }
+
+            $savedStudentNames = trim((string)($saved['studentNames'] ?? ''));
+            $savedStudentEmails = trim((string)($saved['studentEmails'] ?? ''));
+            if ($savedStudentNames === '' && $savedStudentEmails === '' && !empty($saved['delegates']) && is_array($saved['delegates'])) {
+                $nameLines = [];
+                $emailLines = [];
+                foreach ($saved['delegates'] as $delegate) {
+                    if (!is_array($delegate)) {
+                        continue;
+                    }
+                    $dName = trim((string)($delegate['name'] ?? ''));
+                    $dEmail = trim((string)($delegate['email'] ?? ''));
+                    if ($dName === '' && $dEmail === '') {
+                        continue;
+                    }
+                    $nameLines[] = $dName;
+                    $emailLines[] = $dEmail;
+                }
+                $savedStudentNames = implode("\n", $nameLines);
+                $savedStudentEmails = implode("\n", $emailLines);
+            }
+            if ($savedStudentNames !== '' || $savedStudentEmails !== '') {
+                $prefill['studentNames'] = $savedStudentNames;
+                $prefill['studentEmails'] = $savedStudentEmails;
+            }
+
             $savedPreferred = enquiryPreferredDateOnly((string)($saved['preferredDate'] ?? ''));
             $savedNotSure = !empty($saved['dateNotSure']) || !empty($enquiry['date_not_sure']);
             if ($savedPreferred !== '') {
@@ -474,15 +505,17 @@ function bookingH(string $value): string
               <strong>Important — Please read before entering delegate details</strong><br /><br />
               Enter one name per line in the Names field, and the corresponding email address per line in the Emails field.
               Make sure the order matches exactly — the first name must correspond to the first email, and so on.
-              Incorrect ordering will result in training links being sent to the wrong person.
+              Incorrect ordering will result in training links being sent to the wrong person.<br /><br />
+              Your name and email are pre-filled. Remove that line if you should not receive the online course, then add each delegate who should be enrolled.
             </div>
 
             <label for="studentNames">Student Names</label>
-            <textarea id="studentNames" name="studentNames" maxlength="5000" placeholder="One name per line"></textarea>
-            <span class="hint">For a small number of delegates, list names here one per line.</span>
+            <textarea id="studentNames" name="studentNames" maxlength="5000" placeholder="One name per line"><?= bookingH($prefill['studentNames']) ?></textarea>
+            <span class="hint">One name per line. These people receive the Kajabi course invite.</span>
 
             <label for="studentEmails">Email Addresses</label>
-            <textarea id="studentEmails" name="studentEmails" maxlength="5000" placeholder="One email per line"></textarea>
+            <textarea id="studentEmails" name="studentEmails" maxlength="5000" placeholder="One email per line"><?= bookingH($prefill['studentEmails']) ?></textarea>
+            <span class="hint">One email per line, matching the student names order above.</span>
 
             <label for="studentNamesFile">Student Names — File Upload</label>
             <input type="file" id="studentNamesFile" name="studentNamesFile" accept=".csv,.xlsx,.xls,.txt,.pdf,.doc,.docx" />

@@ -97,14 +97,41 @@
         <textarea id="venueAddress" name="venueAddress" rows="3" class="mt-1 block w-full rounded-[10px] border border-[#b7d3ee] px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30" required>{{ old('venueAddress', $booking['venueAddress'] ?? '') }}</textarea>
     </div>
 
+    @php
+        $defaultStudentNames = old('studentNames');
+        if ($defaultStudentNames === null) {
+            $defaultStudentNames = trim((string) ($booking['studentNames'] ?? ''));
+            if ($defaultStudentNames === '' && empty($booking['delegates'])) {
+                $defaultStudentNames = trim((string) ($enquiry->name ?? ''));
+            } elseif ($defaultStudentNames === '' && ! empty($booking['delegates']) && is_array($booking['delegates'])) {
+                $defaultStudentNames = implode("\n", array_values(array_filter(array_map(
+                    static fn ($d): string => is_array($d) ? trim((string) ($d['name'] ?? '')) : '',
+                    $booking['delegates']
+                ))));
+            }
+        }
+        $defaultStudentEmails = old('studentEmails');
+        if ($defaultStudentEmails === null) {
+            $defaultStudentEmails = trim((string) ($booking['studentEmails'] ?? ''));
+            if ($defaultStudentEmails === '' && empty($booking['delegates'])) {
+                $defaultStudentEmails = trim((string) ($enquiry->email ?? ''));
+            } elseif ($defaultStudentEmails === '' && ! empty($booking['delegates']) && is_array($booking['delegates'])) {
+                $defaultStudentEmails = implode("\n", array_values(array_filter(array_map(
+                    static fn ($d): string => is_array($d) ? trim((string) ($d['email'] ?? '')) : '',
+                    $booking['delegates']
+                ))));
+            }
+        }
+    @endphp
     <div class="grid gap-4 sm:grid-cols-2">
         <div>
             <x-input-label for="studentNames" value="Student names (one per line)" />
-            <textarea id="studentNames" name="studentNames" rows="5" class="mt-1 block w-full rounded-[10px] border border-[#b7d3ee] px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30">{{ old('studentNames', $booking['studentNames'] ?? '') }}</textarea>
+            <textarea id="studentNames" name="studentNames" rows="5" class="mt-1 block w-full rounded-[10px] border border-[#b7d3ee] px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30" placeholder="Pre-filled with the booker — remove or add lines as needed">{{ $defaultStudentNames }}</textarea>
+            <p class="mt-1 text-xs text-sh-mid">Kajabi enrolls these people. The booker is pre-filled and can be removed.</p>
         </div>
         <div>
             <x-input-label for="studentEmails" value="Student emails (one per line)" />
-            <textarea id="studentEmails" name="studentEmails" rows="5" class="mt-1 block w-full rounded-[10px] border border-[#b7d3ee] px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30">{{ old('studentEmails', $booking['studentEmails'] ?? '') }}</textarea>
+            <textarea id="studentEmails" name="studentEmails" rows="5" class="mt-1 block w-full rounded-[10px] border border-[#b7d3ee] px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30" placeholder="Matching emails, one per line">{{ $defaultStudentEmails }}</textarea>
         </div>
     </div>
 

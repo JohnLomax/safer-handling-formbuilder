@@ -22,13 +22,14 @@
                     <thead>
                         <tr>
                             <th class="w-[12%]">Sector</th>
-                            <th class="w-[22%]">Course</th>
-                            <th class="w-[18%]">Course code</th>
+                            <th class="w-[20%]">Course</th>
+                            <th class="w-[16%]">Course code</th>
                             <th class="w-[10%]">Format</th>
                             <th class="w-[10%]">Style</th>
                             <th class="w-[8%]">Attendees</th>
-                            <th class="w-[10%]">Status</th>
-                            <th class="w-[10%]">Actions</th>
+                            <th class="w-[8%]">Kajabi</th>
+                            <th class="w-[8%]">Status</th>
+                            <th class="w-[8%]">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -41,6 +42,13 @@
                                 <td class="admin-table-cell-truncate text-sh-mid" title="{{ $entry->sub_option }}">{{ $entry->sub_option }}</td>
                                 <td class="text-sh-mid">
                                     {{ $entry->min_attendees }}@if($entry->max_cap)–{{ $entry->max_cap }}@endif
+                                </td>
+                                <td>
+                                    @if ($entry->kajabi_enabled ?? true)
+                                        <span class="status-pill status-pill-success">On</span>
+                                    @else
+                                        <span class="status-pill status-pill-muted">Off</span>
+                                    @endif
                                 </td>
                                 <td>
                                     @if ($entry->is_active)
@@ -66,7 +74,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="8" class="px-4 py-10 text-center text-sm text-sh-mid">No training matrix rows yet.</td>
+                                <td colspan="9" class="px-4 py-10 text-center text-sm text-sh-mid">No training matrix rows yet.</td>
                             </tr>
                         @endforelse
                     </tbody>

@@ -22,13 +22,14 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 $name = trim((string)($_POST['name'] ?? ''));
 $email = trim((string)($_POST['email'] ?? ''));
+$phone = trim((string)($_POST['phone'] ?? ''));
 $enquiryType = trim((string)($_POST['enquiryType'] ?? ''));
 
-if ($name === '' || $email === '' || $enquiryType === '') {
+if ($name === '' || $email === '' || $phone === '' || $enquiryType === '') {
     http_response_code(422);
     echo json_encode([
         'success' => false,
-        'message' => 'Name, email, and enquiry type are required.',
+        'message' => 'Name, email, phone number, and enquiry type are required.',
     ]);
     exit;
 }
@@ -289,6 +290,7 @@ GQL;
 
     $columnValues = $buildColumnValues($notesLine);
     $columnValues = mondayAppendAddressColumn($columns, $columnValues, mondayAddressFromPost($_POST));
+    $columnValues = mondayAppendPhoneColumn($columns, $columnValues, $phone);
     $columnValues = mondayAppendCreatedDate($columns, $columnValues);
 
     $resumeToken = '';

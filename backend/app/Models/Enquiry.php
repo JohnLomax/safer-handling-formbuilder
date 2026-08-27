@@ -245,6 +245,73 @@ class Enquiry extends Model
     }
 
     /**
+     * Matching Training Matrix row for this enquiry's course combination (if any).
+     */
+    public function trainingMatrixEntry(): ?TrainingMatrixEntry
+    {
+        $sector = trim((string) $this->sector);
+        $orgCourse = trim((string) $this->org_course);
+        $format = trim((string) $this->course_format);
+        $subOption = trim((string) $this->format_sub_option);
+        $formData = is_array($this->form_data_json) ? $this->form_data_json : [];
+        $courseValue = trim((string) (
+            $formData['mondaySpecificCourse']
+            ?? $formData['specificCourse']
+            ?? $this->trainer_course_select
+            ?? $formData['trainerCourseSelect']
+            ?? ''
+        ));
+
+        if ($sector !== '' && $orgCourse !== '' && $format !== '' && $subOption !== '') {
+            $entry = TrainingMatrixEntry::query()
+                ->where('sector', $sector)
+                ->where(function ($query) use ($orgCourse): void {
+                    $query->where('course', $orgCourse)
+                        ->orWhere('course_value', $orgCourse);
+                })
+                ->where('format', $format)
+                ->where('sub_option', $subOption)
+                ->orderByDesc('is_active')
+                ->orderBy('id')
+                ->first();
+            if ($entry) {
+                return $entry;
+            }
+        }
+
+        if ($courseValue !== '') {
+            return TrainingMatrixEntry::query()
+                ->where('course_value', $courseValue)
+                ->orderByDesc('is_active')
+                ->orderBy('id')
+                ->first();
+        }
+
+        return null;
+    }
+
+    /**
+     * Whether Kajabi auto-invite is enabled for this enquiry's matrix course combination.
+     * Unknown combinations default to enabled.
+     */
+    public function isKajabiEnabledForCourseCombination(): bool
+    {
+        $entry = $this->trainingMatrixEntry();
+        if ($entry === null) {
+            return true;
+        }
+
+        return (bool) ($entry->kajabi_enabled ?? true);
+    }
+
+    public function isKajabiDisabledForCourseCombination(): bool
+    {
+        $entry = $this->trainingMatrixEntry();
+
+        return $entry !== null && ! (bool) ($entry->kajabi_enabled ?? true);
+    }
+
+    /**
      * Course title assigned in Kajabi (from journey metadata when available).
      */
     public function kajabiCourseTitle(): string

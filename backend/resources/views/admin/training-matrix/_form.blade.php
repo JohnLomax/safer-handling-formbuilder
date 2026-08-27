@@ -2,6 +2,7 @@
     $defaults = [
         'min_attendees' => 1,
         'is_active' => true,
+        'kajabi_enabled' => true,
         'sort_order' => 0,
         'pricing' => ['kind' => 'addonBandsLinear', 'baseTo12' => 0, 'perAfter12' => 0],
     ];
@@ -119,6 +120,10 @@
         'is_active' => [
             'title' => 'Active on the public enquiry form',
             'body' => "When checked, this row is available for customers to choose on the public enquiry form.\n\nUncheck to hide it without deleting the row.",
+        ],
+        'kajabi_enabled' => [
+            'title' => 'Enable Kajabi',
+            'body' => "When checked, Quote Won automatically invites Accept Quote students to the online Legal Briefing course in Kajabi.\n\nUncheck to skip Kajabi for this course combination. The enquiry admin page will show that Kajabi is disabled for the combination.",
         ],
     ];
 
@@ -321,8 +326,16 @@
     </div>
 
     <label class="flex items-center gap-2 rounded-[10px] border border-sh-border bg-white px-3 py-2.5">
-        <input id="{{ $formId }}_is_active" name="is_active" type="checkbox" value="1" class="rounded border-[#b9d4ef] text-brand shadow-sm focus:ring-brand" @checked($restoreOld ? old('is_active', true) : ($isEdit ? $entry->is_active : true))>
+        <input type="hidden" name="is_active" value="0">
+        <input id="{{ $formId }}_is_active" name="is_active" type="checkbox" value="1" class="rounded border-[#b9d4ef] text-brand shadow-sm focus:ring-brand" @checked($restoreOld ? (string) old('is_active', '1') === '1' : ($isEdit ? $entry->is_active : true))>
         <span class="text-sm text-sh-text">Active on the public enquiry form</span>
         <x-field-help-button :title="$help('is_active')['title']" :body="$help('is_active')['body']" />
+    </label>
+
+    <label class="flex items-center gap-2 rounded-[10px] border border-sh-border bg-white px-3 py-2.5">
+        <input type="hidden" name="kajabi_enabled" value="0">
+        <input id="{{ $formId }}_kajabi_enabled" name="kajabi_enabled" type="checkbox" value="1" class="rounded border-[#b9d4ef] text-brand shadow-sm focus:ring-brand" @checked($restoreOld ? (string) old('kajabi_enabled', '1') === '1' : ($isEdit ? ($entry->kajabi_enabled ?? true) : true))>
+        <span class="text-sm text-sh-text">Enable Kajabi (auto-invite Legal Briefing course)</span>
+        <x-field-help-button :title="$help('kajabi_enabled')['title']" :body="$help('kajabi_enabled')['body']" />
     </label>
 </form>

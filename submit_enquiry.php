@@ -91,6 +91,9 @@ function toMondayColumnValue(string $columnType, $value)
     if ($type === 'long_text') {
         return ['text' => (string)$value];
     }
+    if ($type === 'phone' || strpos($type, 'phone') !== false) {
+        return ['phone' => (string)$value, 'countryShortName' => 'GB'];
+    }
     if ($type === 'numbers' || $type === 'numeric') {
         return (string)$value;
     }
@@ -212,7 +215,8 @@ function mondayResolveOrCreateItemForSubmission(
         $enquiryType !== '' ? $enquiryType : 'training',
         $groupId,
         $columns,
-        mondayAddressFromPost($_POST)
+        mondayAddressFromPost($_POST),
+        trim((string)($_POST['phone'] ?? ''))
     );
 
     if ($enquiryId !== null) {
@@ -397,7 +401,7 @@ GQL;
     }
 
     $columnValues = mondayAppendAddressColumn($columns, $columnValues, mondayAddressFromPost($_POST));
-
+    $columnValues = mondayAppendPhoneColumn($columns, $columnValues, trim((string)($_POST['phone'] ?? '')));
     $columnValues = mondayAppendCreatedDate($columns, $columnValues);
 
     if (count($columnValues) === 0) {
@@ -672,7 +676,11 @@ GQL;
     }
 
     $columnValues = mondayAppendAddressColumn($columns, $columnValues, mondayAddressFromPost($orgData));
-
+    $columnValues = mondayAppendPhoneColumn(
+        $columns,
+        $columnValues,
+        trim((string)($orgData['phone'] ?? $_POST['phone'] ?? ''))
+    );
     $columnValues = mondayAppendCreatedDate($columns, $columnValues);
 
     if (count($columnValues) === 0) {

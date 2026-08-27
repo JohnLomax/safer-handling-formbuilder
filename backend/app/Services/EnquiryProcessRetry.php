@@ -197,15 +197,23 @@ class EnquiryProcessRetry
             return false;
         }
 
+        if ($enquiry->isKajabiDisabledForCourseCombination()) {
+            return false;
+        }
+
+        $ready = $enquiry->status === 'quote_won'
+            || $enquiry->xero_invoice_sent_at !== null
+            || $this->hasSuccessfulEvent($enquiry, 'xero_invoice_sent')
+            || $this->hasSuccessfulEvent($enquiry, 'monday_moved_quote_won')
+            || $this->hasSuccessfulEvent($enquiry, 'kajabi_enroll_failed');
+
+        if (! $ready) {
+            return false;
+        }
+
+        // First enroll, or retry after a failed / partial student enrollment.
         return $enquiry->kajabi_enrolled_at === null
-            && ! $this->hasSuccessfulEvent($enquiry, 'kajabi_enrolled')
-            && (
-                $enquiry->status === 'quote_won'
-                || $enquiry->xero_invoice_sent_at !== null
-                || $this->hasSuccessfulEvent($enquiry, 'xero_invoice_sent')
-                || $this->hasSuccessfulEvent($enquiry, 'monday_moved_quote_won')
-                || $this->hasSuccessfulEvent($enquiry, 'kajabi_enroll_failed')
-            );
+            || $this->hasSuccessfulEvent($enquiry, 'kajabi_enroll_failed');
     }
 
     public function retryKajabiEnroll(Enquiry $enquiry): void
@@ -214,15 +222,16 @@ class EnquiryProcessRetry
             throw new RuntimeException('Kajabi enrollment cannot be retried for this enquiry yet.');
         }
 
-        if ($enquiry->kajabi_enrolled_at !== null || $this->hasSuccessfulEvent($enquiry, 'kajabi_enrolled')) {
-            throw new RuntimeException('Kajabi enrollment has already completed.');
-        }
-
         $result = kajabiMaybeEnrollAfterQuoteWon((int) $enquiry->id, true);
         $enquiry->refresh();
 
-        if (empty($result['enrolled'])) {
+        $enrolledCount = (int) ($result['enrolled_count'] ?? 0);
+        if ($enrolledCount < 1 && empty($result['enrolled'])) {
             throw new RuntimeException((string) ($result['error'] ?? 'Kajabi enrollment failed.'));
+        }
+
+        if (! empty($result['error']) && $enrolledCount > 0) {
+            throw new RuntimeException((string) $result['error']);
         }
     }
 

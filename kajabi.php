@@ -650,7 +650,71 @@ function kajabiMarkEnrolled(int $enquiryId, string $contactId, string $offerId):
 }
 
 /**
- * Create/find a Kajabi contact and enroll them on the Legal Brief offer.
+ * Build Kajabi enrollment recipients from Accept Quote student/delegate fields.
+ *
+ * @param array<string, mixed> $enquiryRow
+ * @return list<array{name:string,email:string}>
+ */
+function kajabiDelegatesForEnquiry(array $enquiryRow): array
+{
+    $details = [];
+    $raw = trim((string) ($enquiryRow['booking_details_json'] ?? ''));
+    if ($raw !== '') {
+        $decoded = json_decode($raw, true);
+        if (is_array($decoded)) {
+            $details = $decoded;
+        }
+    }
+
+    $out = [];
+    $seen = [];
+
+    $add = static function (string $name, string $email) use (&$out, &$seen): void {
+        $email = strtolower(trim($email));
+        $name = trim($name);
+        if ($email === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return;
+        }
+        if (isset($seen[$email])) {
+            return;
+        }
+        $seen[$email] = true;
+        $out[] = [
+            'name' => $name !== '' ? $name : $email,
+            'email' => $email,
+        ];
+    };
+
+    $delegates = $details['delegates'] ?? null;
+    if (is_array($delegates) && $delegates !== []) {
+        foreach ($delegates as $delegate) {
+            if (! is_array($delegate)) {
+                continue;
+            }
+            $add(
+                (string) ($delegate['name'] ?? $delegate['full_name'] ?? ''),
+                (string) ($delegate['email'] ?? '')
+            );
+        }
+    }
+
+    if ($out === []) {
+        $nameLines = preg_split('/\r\n|\r|\n/', (string) ($details['studentNames'] ?? '')) ?: [];
+        $emailLines = preg_split('/\r\n|\r|\n/', (string) ($details['studentEmails'] ?? '')) ?: [];
+        $nameLines = array_values(array_filter(array_map('trim', $nameLines), static fn (string $v): bool => $v !== ''));
+        $emailLines = array_values(array_filter(array_map('trim', $emailLines), static fn (string $v): bool => $v !== ''));
+        $count = max(count($nameLines), count($emailLines));
+        for ($i = 0; $i < $count; $i++) {
+            $add((string) ($nameLines[$i] ?? ''), (string) ($emailLines[$i] ?? ''));
+        }
+    }
+
+    return $out;
+}
+
+/**
+ * Create/find Kajabi contacts for each Accept Quote student and enroll them
+ * on the Legal Brief offer.
  *
  * @return array{
  *   attempted:bool,
@@ -661,6 +725,9 @@ function kajabiMarkEnrolled(int $enquiryId, string $contactId, string $offerId):
  *   offer_id:?string,
  *   offer_title:?string,
  *   created_contact:bool,
+ *   enrolled_count:int,
+ *   failed_count:int,
+ *   delegates:list<array<string,mixed>>,
  *   forge:?array,
  *   monday:?array,
  *   error:?string
@@ -679,6 +746,9 @@ function kajabiMaybeEnrollAfterQuoteWon(int $enquiryId, bool $force = false): ar
         'offer_id' => null,
         'offer_title' => null,
         'created_contact' => false,
+        'enrolled_count' => 0,
+        'failed_count' => 0,
+        'delegates' => [],
         'forge' => null,
         'monday' => null,
         'error' => null,
@@ -695,9 +765,12 @@ function kajabiMaybeEnrollAfterQuoteWon(int $enquiryId, bool $force = false): ar
     enquiryLoggerEnsureColumn($pdo, 'enquiries', 'kajabi_contact_id', 'TEXT');
     enquiryLoggerEnsureColumn($pdo, 'enquiries', 'kajabi_offer_id', 'TEXT');
     enquiryLoggerEnsureColumn($pdo, 'enquiries', 'kajabi_enrolled_at', 'TEXT');
+    enquiryLoggerEnsureColumn($pdo, 'enquiries', 'booking_details_json', 'TEXT');
 
     $stmt = $pdo->prepare(
-        'SELECT id, name, email, kajabi_contact_id, kajabi_offer_id, kajabi_enrolled_at
+        'SELECT id, name, email, sector, org_course, course_format, format_sub_option,
+                trainer_course_select, form_data_json, booking_details_json,
+                kajabi_contact_id, kajabi_offer_id, kajabi_enrolled_at
          FROM enquiries WHERE id = :id LIMIT 1'
     );
     $stmt->execute([':id' => $enquiryId]);
@@ -709,64 +782,47 @@ function kajabiMaybeEnrollAfterQuoteWon(int $enquiryId, bool $force = false): ar
         return $result;
     }
 
+    require_once __DIR__.'/training_matrix_helpers.php';
+    if (! trainingMatrixKajabiEnabledForEnquiry($row)) {
+        $result['skipped'] = true;
+        $result['error'] = 'Kajabi is disabled for this course combination';
+        enquiryLoggerEvent(
+            $enquiryId,
+            'kajabi_enroll_skipped',
+            'Kajabi invite was not sent because Kajabi is disabled for this course combination in the Training Matrix.',
+            [
+                'channel' => 'kajabi',
+                'reason' => 'matrix_kajabi_disabled',
+                'sector' => $row['sector'] ?? null,
+                'org_course' => $row['org_course'] ?? null,
+                'course_format' => $row['course_format'] ?? null,
+                'format_sub_option' => $row['format_sub_option'] ?? null,
+            ]
+        );
+
+        return $result;
+    }
+
     $alreadyEnrolledAt = trim((string) ($row['kajabi_enrolled_at'] ?? ''));
     if ($alreadyEnrolledAt !== '' && ! $force) {
         $result['already_enrolled'] = true;
         $result['skipped'] = true;
         $result['contact_id'] = trim((string) ($row['kajabi_contact_id'] ?? '')) ?: null;
         $result['offer_id'] = trim((string) ($row['kajabi_offer_id'] ?? '')) ?: null;
-
-        // Ensure the Legal Briefing course is still assigned even if we enrolled earlier.
-        $contactId = trim((string) ($result['contact_id'] ?? ''));
-        $offerId = trim((string) ($result['offer_id'] ?? kajabiOfferIdConfigured()));
-        if ($contactId !== '' && $offerId !== '') {
-            try {
-                $ensure = kajabiEnsureOfferGranted($contactId, $offerId, false);
-                if (empty($ensure['already_had'])) {
-                    enquiryLoggerEvent(
-                        $enquiryId,
-                        'kajabi_enrolled',
-                        'Assigned Kajabi course: '.KAJABI_DEFAULT_COURSE_TITLE.'.',
-                        [
-                            'channel' => 'kajabi',
-                            'kajabi_contact_id' => $contactId,
-                            'kajabi_offer_id' => $offerId,
-                            'kajabi_course_id' => KAJABI_DEFAULT_COURSE_ID,
-                            'kajabi_course_title' => KAJABI_DEFAULT_COURSE_TITLE,
-                            'repaired' => true,
-                        ]
-                    );
-                }
-            } catch (Throwable $e) {
-                enquiryLoggerEvent(
-                    $enquiryId,
-                    'kajabi_enroll_failed',
-                    'Kajabi course assignment check failed: '.$e->getMessage(),
-                    [
-                        'channel' => 'kajabi',
-                        'error' => $e->getMessage(),
-                        'kajabi_contact_id' => $contactId,
-                        'kajabi_offer_id' => $offerId,
-                    ]
-                );
-            }
-        }
-
         $result['forge'] = kajabiMaybeUpdateForgeQuoteWon($enquiryId);
         $result['monday'] = kajabiMaybeMoveMondayExported($enquiryId);
 
         return $result;
     }
 
-    $email = strtolower(trim((string) ($row['email'] ?? '')));
-    $name = trim((string) ($row['name'] ?? ''));
-    if ($email === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    $delegates = kajabiDelegatesForEnquiry($row);
+    if ($delegates === []) {
         $result['attempted'] = true;
-        $result['error'] = 'Enquiry has no valid email for Kajabi enrollment';
+        $result['error'] = 'No student names/emails found on the Accept Quote form for Kajabi enrollment.';
         enquiryLoggerEvent(
             $enquiryId,
             'kajabi_enroll_failed',
-            'Kajabi enrollment skipped — enquiry email is missing or invalid.',
+            'Kajabi enrollment skipped — add student names and email addresses on the Accept Quote / venue details form.',
             ['channel' => 'kajabi', 'error' => $result['error']]
         );
 
@@ -789,62 +845,126 @@ function kajabiMaybeEnrollAfterQuoteWon(int $enquiryId, bool $force = false): ar
         $result['offer_id'] = $offerId;
         $result['offer_title'] = $courseTitle !== '' ? $courseTitle : $offerTitle;
 
-        $contact = kajabiEnsureContact($siteId, $name, $email);
-        $result['contact_id'] = $contact['id'];
-        $result['created_contact'] = $contact['created'];
+        $firstContactId = '';
+        $anyCreated = false;
+        $failures = [];
 
-        if ($contact['created']) {
-            enquiryLoggerEvent(
-                $enquiryId,
-                'kajabi_account_created',
-                'Kajabi account created for '.$email.'.',
-                [
-                    'channel' => 'kajabi',
-                    'kajabi_contact_id' => $contact['id'],
-                    'kajabi_site_id' => $siteId,
-                    'email' => $email,
-                ]
-            );
-        } else {
-            enquiryLoggerEvent(
-                $enquiryId,
-                'kajabi_account_found',
-                'Existing Kajabi account found for '.$email.'.',
-                [
-                    'channel' => 'kajabi',
-                    'kajabi_contact_id' => $contact['id'],
-                    'kajabi_site_id' => $siteId,
-                    'email' => $email,
-                ]
-            );
+        foreach ($delegates as $delegate) {
+            $email = $delegate['email'];
+            $name = $delegate['name'];
+            $delegateResult = [
+                'name' => $name,
+                'email' => $email,
+                'enrolled' => false,
+                'created_contact' => false,
+                'contact_id' => null,
+                'error' => null,
+            ];
+
+            try {
+                $contact = kajabiEnsureContact($siteId, $name, $email);
+                $delegateResult['contact_id'] = $contact['id'];
+                $delegateResult['created_contact'] = $contact['created'];
+                if ($firstContactId === '') {
+                    $firstContactId = $contact['id'];
+                }
+                if ($contact['created']) {
+                    $anyCreated = true;
+                    enquiryLoggerEvent(
+                        $enquiryId,
+                        'kajabi_account_created',
+                        'Kajabi account created for '.$email.'.',
+                        [
+                            'channel' => 'kajabi',
+                            'kajabi_contact_id' => $contact['id'],
+                            'kajabi_site_id' => $siteId,
+                            'email' => $email,
+                            'name' => $name,
+                            'delegate' => true,
+                        ]
+                    );
+                } else {
+                    enquiryLoggerEvent(
+                        $enquiryId,
+                        'kajabi_account_found',
+                        'Existing Kajabi account found for '.$email.'.',
+                        [
+                            'channel' => 'kajabi',
+                            'kajabi_contact_id' => $contact['id'],
+                            'kajabi_site_id' => $siteId,
+                            'email' => $email,
+                            'name' => $name,
+                            'delegate' => true,
+                        ]
+                    );
+                }
+
+                $grant = kajabiEnsureOfferGranted($contact['id'], $offerId, true);
+                $delegateResult['enrolled'] = true;
+                $result['enrolled_count']++;
+
+                enquiryLoggerEvent(
+                    $enquiryId,
+                    'kajabi_enrolled',
+                    ($grant['already_had'] ? 'Confirmed' : 'Assigned')
+                        .' Kajabi course for '.$name.' ('.$email.'): '.$result['offer_title'].'.',
+                    [
+                        'channel' => 'kajabi',
+                        'kajabi_contact_id' => $contact['id'],
+                        'kajabi_offer_id' => $offerId,
+                        'kajabi_offer_title' => $offerTitle,
+                        'kajabi_course_id' => $courseId !== '' ? $courseId : null,
+                        'kajabi_course_title' => $courseTitle !== '' ? $courseTitle : null,
+                        'kajabi_site_id' => $siteId,
+                        'created_contact' => $contact['created'],
+                        'already_had_offer' => $grant['already_had'],
+                        'email' => $email,
+                        'name' => $name,
+                        'delegate' => true,
+                    ]
+                );
+            } catch (Throwable $delegateError) {
+                $result['failed_count']++;
+                $delegateResult['error'] = $delegateError->getMessage();
+                $failures[] = $email.': '.$delegateError->getMessage();
+                enquiryLoggerEvent(
+                    $enquiryId,
+                    'kajabi_enroll_failed',
+                    'Kajabi enrollment failed for '.$email.': '.$delegateError->getMessage(),
+                    [
+                        'channel' => 'kajabi',
+                        'error' => $delegateError->getMessage(),
+                        'email' => $email,
+                        'name' => $name,
+                        'delegate' => true,
+                        'kajabi_offer_id' => $offerId,
+                    ]
+                );
+            }
+
+            $result['delegates'][] = $delegateResult;
         }
 
-        // Always assign the Legal Briefing course offer immediately after account create/find.
-        $grant = kajabiEnsureOfferGranted($contact['id'], $offerId, true);
-        kajabiMarkEnrolled($enquiryId, $contact['id'], $offerId);
+        if ($result['enrolled_count'] > 0) {
+            kajabiMarkEnrolled(
+                $enquiryId,
+                $firstContactId !== '' ? $firstContactId : (string) ($result['delegates'][0]['contact_id'] ?? ''),
+                $offerId
+            );
+            $result['contact_id'] = $firstContactId !== '' ? $firstContactId : null;
+            $result['created_contact'] = $anyCreated;
+            $result['enrolled'] = $result['failed_count'] === 0;
+            $result['forge'] = kajabiMaybeUpdateForgeQuoteWon($enquiryId);
+            $result['monday'] = kajabiMaybeMoveMondayExported($enquiryId);
+        }
 
-        enquiryLoggerEvent(
-            $enquiryId,
-            'kajabi_enrolled',
-            ($grant['already_had'] ? 'Confirmed' : 'Assigned')
-                .' Kajabi course: '.$result['offer_title'].'.',
-            [
-                'channel' => 'kajabi',
-                'kajabi_contact_id' => $contact['id'],
-                'kajabi_offer_id' => $offerId,
-                'kajabi_offer_title' => $offerTitle,
-                'kajabi_course_id' => $courseId !== '' ? $courseId : null,
-                'kajabi_course_title' => $courseTitle !== '' ? $courseTitle : null,
-                'kajabi_site_id' => $siteId,
-                'created_contact' => $contact['created'],
-                'already_had_offer' => $grant['already_had'],
-                'email' => $email,
-            ]
-        );
-
-        $result['enrolled'] = true;
-        $result['forge'] = kajabiMaybeUpdateForgeQuoteWon($enquiryId);
-        $result['monday'] = kajabiMaybeMoveMondayExported($enquiryId);
+        if ($result['failed_count'] > 0) {
+            $result['error'] = 'Enrolled '.$result['enrolled_count'].' of '.count($delegates)
+                .' students. Failures: '.implode('; ', $failures);
+            if ($result['enrolled_count'] === 0) {
+                $result['enrolled'] = false;
+            }
+        }
     } catch (Throwable $e) {
         $result['error'] = $e->getMessage();
         enquiryLoggerEvent(

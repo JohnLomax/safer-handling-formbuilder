@@ -5,6 +5,12 @@
                 <a href="{{ route('admin.enquiries.index') }}" class="text-sm text-sh-mid transition hover:text-brand">&larr; All enquiries</a>
                 <h2 class="mt-2 brand-section-title">{{ $enquiry->name }}</h2>
                 <p class="mt-1 text-sm text-sh-mid">{{ $enquiry->email }}</p>
+                @php $headerPhone = trim((string) data_get($enquiry->form_data_json, 'phone', '')); @endphp
+                @if ($headerPhone !== '')
+                    <p class="mt-0.5 text-sm text-sh-mid">
+                        <a href="tel:{{ preg_replace('/\s+/', '', $headerPhone) }}" class="link-brand">{{ $headerPhone }}</a>
+                    </p>
+                @endif
             </div>
             <div class="flex flex-wrap items-center gap-2">
                 @if ($enquiry->status === 'submitted')
@@ -111,7 +117,10 @@
                         <x-kajabi-badge compact class="!h-3.5 !w-3.5" />
                         Kajabi
                     </p>
-                    @if ($enquiry->kajabi_enrolled_at)
+                    @if ($enquiry->isKajabiDisabledForCourseCombination())
+                        <p class="mt-1 text-sm font-semibold text-sh-text">Disabled</p>
+                        <p class="text-xs text-sh-mid leading-snug">Kajabi is disabled for this course combination</p>
+                    @elseif ($enquiry->kajabi_enrolled_at)
                         <p class="mt-1 text-sm font-semibold text-sh-text">Enrolled</p>
                         <p class="text-xs text-sh-mid leading-snug" title="{{ $enquiry->kajabiCourseTitle() }}">{{ $enquiry->kajabiCourseTitle() }}</p>
                     @elseif ($enquiry->events->contains(fn ($event) => $event->event_type === 'kajabi_enroll_failed'))
@@ -185,6 +194,17 @@
                             <dt class="enquiry-detail-label">Reference</dt>
                             <dd class="enquiry-detail-value">#{{ $enquiry->id }}</dd>
                         </div>
+                        @php
+                            $enquiryPhone = trim((string) data_get($enquiry->form_data_json, 'phone', ''));
+                        @endphp
+                        @if ($enquiryPhone !== '')
+                            <div class="enquiry-detail-row">
+                                <dt class="enquiry-detail-label">Phone</dt>
+                                <dd class="enquiry-detail-value">
+                                    <a href="tel:{{ preg_replace('/\s+/', '', $enquiryPhone) }}" class="link-brand">{{ $enquiryPhone }}</a>
+                                </dd>
+                            </div>
+                        @endif
                         <div class="enquiry-detail-row">
                             <dt class="enquiry-detail-label">Audience</dt>
                             <dd class="enquiry-detail-value">{{ $enquiry->audience_type ? ucfirst($enquiry->audience_type) : '—' }}</dd>
@@ -357,7 +377,9 @@
                                         <x-kajabi-badge compact />
                                         <span class="text-sm font-semibold text-sh-text">Kajabi</span>
                                     </div>
-                                    @if ($enquiry->kajabi_enrolled_at)
+                                    @if ($enquiry->isKajabiDisabledForCourseCombination())
+                                        <span class="status-pill status-pill-muted">Disabled</span>
+                                    @elseif ($enquiry->kajabi_enrolled_at)
                                         <span class="status-pill status-pill-success">Enrolled</span>
                                     @elseif ($enquiry->events->contains(fn ($event) => $event->event_type === 'kajabi_enroll_failed'))
                                         <span class="status-pill status-pill-progress">Failed</span>
@@ -367,7 +389,10 @@
                                         <span class="status-pill status-pill-muted">—</span>
                                     @endif
                                 </div>
-                                @if ($enquiry->kajabi_enrolled_at)
+                                @if ($enquiry->isKajabiDisabledForCourseCombination())
+                                    <p class="mt-3 text-sm text-sh-text">Kajabi is disabled for this course combination</p>
+                                    <p class="mt-2 text-xs text-sh-mid">Turn on Enable Kajabi for this Training Matrix row to auto-invite the Legal Briefing course on Quote Won.</p>
+                                @elseif ($enquiry->kajabi_enrolled_at)
                                     <p class="mt-3 text-xs font-semibold uppercase tracking-wide text-sh-mid">Course</p>
                                     <p class="mt-1 text-sm font-semibold leading-snug text-sh-text">{{ $enquiry->kajabiCourseTitle() }}</p>
                                     <p class="mt-2 text-xs text-sh-mid">
@@ -377,7 +402,7 @@
                                         @endif
                                     </p>
                                 @else
-                                    <p class="mt-3 text-xs text-sh-mid">Creates a Kajabi account (if needed) and assigns <span class="font-semibold text-sh-text">2026 Legal Briefing on the use of Reasonable Force</span> when Quote Won runs.</p>
+                                    <p class="mt-3 text-xs text-sh-mid">Creates Kajabi accounts (if needed) and assigns <span class="font-semibold text-sh-text">2026 Legal Briefing on the use of Reasonable Force</span> to each Accept Quote student email when Quote Won runs.</p>
                                 @endif
                                 @if (in_array('kajabi_enroll', $retryableActions, true))
                                     <form method="POST" action="{{ route('admin.enquiries.retry.kajabi-enroll', $enquiry) }}" class="mt-3">

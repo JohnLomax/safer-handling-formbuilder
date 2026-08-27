@@ -130,6 +130,7 @@ class TrainingMatrixSeeder extends Seeder
             TrainingMatrixEntry::query()->create([
                 ...$row,
                 'is_active' => true,
+                'kajabi_enabled' => true,
                 'sort_order' => $index,
             ]);
         }

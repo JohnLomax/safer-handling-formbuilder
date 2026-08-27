@@ -195,6 +195,7 @@ if ($kajabiCoursesUrl === '') {
     input[type="text"],
     input[type="email"],
     input[type="number"],
+    input[type="tel"],
     textarea {
       padding: 11px 12px;
       border: 1px solid #b9d4ef;
@@ -219,6 +220,7 @@ if ($kajabiCoursesUrl === '') {
     input[type="text"]:focus,
     input[type="email"]:focus,
     input[type="number"]:focus,
+    input[type="tel"]:focus,
     textarea:focus {
       outline: none;
       border-color: var(--brand-blue);
@@ -317,6 +319,22 @@ if ($kajabiCoursesUrl === '') {
       border-radius: 10px;
       padding: 8px 6px;
       box-shadow: inset 0 1px 2px rgba(16, 75, 120, 0.08);
+    }
+
+    select.matrix-select-locked {
+      display: none;
+    }
+
+    .matrix-fixed-value {
+      margin: 0 0 4px;
+      padding: 11px 12px;
+      border: 1px solid #b9d4ef;
+      border-radius: 10px;
+      font-size: 0.96rem;
+      font-weight: 700;
+      color: #0f4a78;
+      background: linear-gradient(180deg, #f7fcff 0%, #eef6fc 100%);
+      box-shadow: inset 0 1px 2px rgba(16, 75, 120, 0.06);
     }
 
     .attendees-row {
@@ -582,7 +600,8 @@ if ($kajabiCoursesUrl === '') {
     form.is-locked input,
     form.is-locked select,
     form.is-locked textarea,
-    form.is-locked button {
+    form.is-locked button,
+    form.is-locked .matrix-fixed-value {
       pointer-events: none;
       opacity: 0.85;
     }
@@ -857,6 +876,7 @@ if ($kajabiCoursesUrl === '') {
       input[type="text"],
       input[type="email"],
       input[type="number"],
+      input[type="tel"],
       input[type="date"],
       textarea,
       select {
@@ -893,10 +913,13 @@ if ($kajabiCoursesUrl === '') {
           <p class="section-intro">Use the steps below to choose the course that fits you and build your personalised quote.</p>
 
           <label for="name">Name</label>
-          <input id="name" name="name" type="text" required />
+          <input id="name" name="name" type="text" required autocomplete="name" />
 
           <label for="email">Email</label>
-          <input id="email" name="email" type="email" required />
+          <input id="email" name="email" type="email" required autocomplete="email" />
+
+          <label for="phone">Phone Number</label>
+          <input id="phone" name="phone" type="tel" required maxlength="40" autocomplete="tel" placeholder="e.g. +44 7700 900123" />
 
           <label>I am looking to make an enquiry about</label>
           <div class="choice-group" id="enquiryTypeGroup">
@@ -1040,11 +1063,13 @@ if ($kajabiCoursesUrl === '') {
             <select id="courseFormat" name="courseFormat" disabled>
               <option value="">Select course first</option>
             </select>
+            <div id="courseFormatFixed" class="matrix-fixed-value hidden" aria-live="polite"></div>
 
             <label for="formatSubOption">Course Style</label>
             <select id="formatSubOption" name="formatSubOption" disabled>
               <option value="">Select format first</option>
             </select>
+            <div id="formatSubOptionFixed" class="matrix-fixed-value hidden" aria-live="polite"></div>
 
             <div id="courseDescriptionPanel" class="course-description-panel" hidden>
               <h4>Course description</h4>
@@ -1199,6 +1224,7 @@ if ($kajabiCoursesUrl === '') {
       var thankYouView = document.getElementById("thankYouView");
       var nameInput = document.getElementById("name");
       var emailInput = document.getElementById("email");
+      var phoneInput = document.getElementById("phone");
       var enquiryTypeGroup = document.getElementById("enquiryTypeGroup");
       var continueBtn = document.getElementById("continueBtn");
       var trainingSection = document.getElementById("trainingSection");
@@ -1224,7 +1250,9 @@ if ($kajabiCoursesUrl === '') {
       var sectorSelect = document.getElementById("sector");
       var orgCourseSelect = document.getElementById("orgCourse");
       var courseFormatSelect = document.getElementById("courseFormat");
+      var courseFormatFixed = document.getElementById("courseFormatFixed");
       var formatSubOptionSelect = document.getElementById("formatSubOption");
+      var formatSubOptionFixed = document.getElementById("formatSubOptionFixed");
       var courseDescriptionPanel = document.getElementById("courseDescriptionPanel");
       var courseDescriptionText = document.getElementById("courseDescriptionText");
       var matrixAttendeesInput = document.getElementById("matrixAttendees");
@@ -1538,6 +1566,9 @@ if ($kajabiCoursesUrl === '') {
             setEnquirySession(enquiry.id, token, true);
             nameInput.value = enquiry.name || "";
             emailInput.value = enquiry.email || "";
+            if (phoneInput && !(enquiry.formData && enquiry.formData.phone)) {
+              phoneInput.value = "";
+            }
             applySavedFormData(enquiry.formData || {});
             restoreOrganisationSelections(enquiry.formData || {});
             revealSavedEnquiryProgress(enquiry.enquiryType || getCheckedValue("enquiryType"));
@@ -2426,7 +2457,25 @@ if ($kajabiCoursesUrl === '') {
         return unique;
       }
 
+      function selectOptionEntry(entry) {
+        if (entry && typeof entry === "object" && entry.label != null) {
+          return { value: String(entry.value), label: String(entry.label) };
+        }
+        return { value: String(entry), label: String(entry) };
+      }
+
+      function setMatrixFixedLabel(fixedLabelEl, text) {
+        if (!fixedLabelEl) {
+          return;
+        }
+        var show = !!text;
+        fixedLabelEl.textContent = show ? text : "";
+        fixedLabelEl.classList.toggle("hidden", !show);
+      }
+
       function repopulateSelect(selectElement, values, placeholderText, keepEnabled) {
+        selectElement.classList.remove("matrix-select-locked");
+        selectElement.removeAttribute("aria-hidden");
         selectElement.innerHTML = "";
         var placeholder = document.createElement("option");
         placeholder.value = "";
@@ -2434,18 +2483,39 @@ if ($kajabiCoursesUrl === '') {
         selectElement.appendChild(placeholder);
 
         values.forEach(function (entry) {
+          var parsed = selectOptionEntry(entry);
           var option = document.createElement("option");
-          if (entry && typeof entry === "object" && entry.label != null) {
-            option.value = entry.value;
-            option.textContent = entry.label;
-          } else {
-            option.value = entry;
-            option.textContent = entry;
-          }
+          option.value = parsed.value;
+          option.textContent = parsed.label;
           selectElement.appendChild(option);
         });
 
         selectElement.disabled = !keepEnabled;
+      }
+
+      /**
+       * When only one option exists, show a prefilled label instead of a dropdown.
+       * The underlying select stays enabled (so the value still submits) but is visually locked.
+       */
+      function repopulateSelectOrFixed(selectElement, values, placeholderText, keepEnabled, fixedLabelEl) {
+        var lockSingle = keepEnabled && values.length === 1;
+        if (!lockSingle) {
+          setMatrixFixedLabel(fixedLabelEl, "");
+          repopulateSelect(selectElement, values, placeholderText, keepEnabled);
+          return;
+        }
+
+        var parsed = selectOptionEntry(values[0]);
+        selectElement.innerHTML = "";
+        var option = document.createElement("option");
+        option.value = parsed.value;
+        option.textContent = parsed.label;
+        option.selected = true;
+        selectElement.appendChild(option);
+        selectElement.disabled = false;
+        selectElement.classList.add("matrix-select-locked");
+        selectElement.setAttribute("aria-hidden", "true");
+        setMatrixFixedLabel(fixedLabelEl, parsed.label);
       }
 
       function getCourseSelectOptions(matrixItems) {
@@ -2555,6 +2625,8 @@ if ($kajabiCoursesUrl === '') {
         var selectedCourse = orgCourseSelect.value;
         var selectedFormat = courseFormatSelect.value;
         var selectedSubOption = formatSubOptionSelect.value;
+        var formats = null;
+        var refreshSubOptions = source === "format";
 
         if (source === "sector") {
           var courses = getCourseSelectOptions(
@@ -2563,22 +2635,33 @@ if ($kajabiCoursesUrl === '') {
             })
           );
           repopulateSelect(orgCourseSelect, courses, selectedSector ? "Select course" : "Select sector first", selectedSector && courses.length > 0);
-          repopulateSelect(courseFormatSelect, [], "Select course first", false);
-          repopulateSelect(formatSubOptionSelect, [], "Select format first", false);
+          repopulateSelectOrFixed(courseFormatSelect, [], "Select course first", false, courseFormatFixed);
+          repopulateSelectOrFixed(formatSubOptionSelect, [], "Select format first", false, formatSubOptionFixed);
         }
 
         if (source === "course") {
-          var formats = getUniqueValues(
+          formats = getUniqueValues(
             TRAINING_MATRIX.filter(function (item) {
               return item.sector === selectedSector && orgCourseMatchesItem(item, selectedCourse);
             }),
             "format"
           );
-          repopulateSelect(courseFormatSelect, formats, selectedCourse ? "Select format" : "Select course first", selectedCourse && formats.length > 0);
-          repopulateSelect(formatSubOptionSelect, [], "Select format first", false);
+          repopulateSelectOrFixed(
+            courseFormatSelect,
+            formats,
+            selectedCourse ? "Select format" : "Select course first",
+            selectedCourse && formats.length > 0,
+            courseFormatFixed
+          );
+          if (formats.length === 1) {
+            refreshSubOptions = true;
+          } else {
+            repopulateSelectOrFixed(formatSubOptionSelect, [], "Select format first", false, formatSubOptionFixed);
+          }
         }
 
-        if (source === "format") {
+        if (refreshSubOptions) {
+          selectedFormat = courseFormatSelect.value;
           var subOptions = getUniqueValues(
             TRAINING_MATRIX.filter(function (item) {
               return (
@@ -2589,7 +2672,13 @@ if ($kajabiCoursesUrl === '') {
             }),
             "subOption"
           );
-          repopulateSelect(formatSubOptionSelect, subOptions, selectedFormat ? "Select Course Style" : "Select format first", selectedFormat && subOptions.length > 0);
+          repopulateSelectOrFixed(
+            formatSubOptionSelect,
+            subOptions,
+            selectedFormat ? "Select Course Style" : "Select format first",
+            selectedFormat && subOptions.length > 0,
+            formatSubOptionFixed
+          );
         }
 
         selectedSector = sectorSelect.value;
@@ -2797,13 +2886,15 @@ if ($kajabiCoursesUrl === '') {
       continueBtn.addEventListener("click", function () {
         var name = nameInput.value.trim();
         var email = emailInput.value.trim();
+        var phone = phoneInput ? phoneInput.value.trim() : "";
         var enquiryType = getCheckedValue("enquiryType");
 
         setInputError(nameInput, !name);
         setInputError(emailInput, !email);
+        setInputError(phoneInput, !phone);
         setGroupError(enquiryTypeGroup, !enquiryType);
 
-        if (!name || !email || !enquiryType) {
+        if (!name || !email || !phone || !enquiryType) {
           scrollToFirstError();
           return;
         }
@@ -2819,6 +2910,7 @@ if ($kajabiCoursesUrl === '') {
         var continuePayload = new FormData();
         continuePayload.append("name", name);
         continuePayload.append("email", email);
+        continuePayload.append("phone", phone);
         continuePayload.append("enquiryType", enquiryType);
         appendAddressFieldsToFormData(continuePayload);
         appendEnquiryIdToFormData(continuePayload);
@@ -2957,6 +3049,13 @@ if ($kajabiCoursesUrl === '') {
         scheduleEnquiryProgressSave();
       });
 
+      if (phoneInput) {
+        phoneInput.addEventListener("input", function () {
+          setInputError(phoneInput, !phoneInput.value.trim());
+          scheduleEnquiryProgressSave();
+        });
+      }
+
       matrixAttendeesInput.addEventListener("keydown", function (event) {
         if (["e", "E", "+", "-", "."].indexOf(event.key) > -1) {
           event.preventDefault();
@@ -3036,6 +3135,17 @@ if ($kajabiCoursesUrl === '') {
       form.addEventListener("submit", function (event) {
         event.preventDefault();
         syncPreferredDateUiState();
+
+        var nameOk = !!nameInput.value.trim();
+        var emailOk = !!emailInput.value.trim() && emailInput.checkValidity();
+        var phoneOk = !phoneInput || !!phoneInput.value.trim();
+        setInputError(nameInput, !nameOk);
+        setInputError(emailInput, !emailOk);
+        setInputError(phoneInput, !phoneOk);
+        if (!nameOk || !emailOk || !phoneOk) {
+          scrollToFirstError();
+          return;
+        }
 
         var trainingValid = true;
         var attendeesSubmitInvalid = false;

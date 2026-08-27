@@ -618,10 +618,12 @@ function mondayCreateEnquiryItem(
     string $enquiryType = 'training',
     ?string $groupId = null,
     array $columns = [],
-    array $address = []
+    array $address = [],
+    string $phone = ''
 ): string {
     $name = trim($name);
     $email = trim($email);
+    $phone = trim($phone);
     if ($name === '' || $email === '' || $emailColumnId === '') {
         throw new RuntimeException('Name, email, and Monday email column are required to create an item.');
     }
@@ -693,6 +695,7 @@ function mondayCreateEnquiryItem(
 
     if ($columns !== []) {
         $columnValues = mondayAppendAddressColumn($columns, $columnValues, $address);
+        $columnValues = mondayAppendPhoneColumn($columns, $columnValues, $phone);
         $columnValues = mondayAppendCreatedDate($columns, $columnValues);
     }
 
@@ -1360,6 +1363,34 @@ function mondayBookingDetailsNotesBlock(array $details): string
 }
 
 /**
+ * @param array<int, array<string, mixed>> $columns
+ * @param array<string, mixed> $columnValues
+ * @return array<string, mixed>
+ */
+function mondayAppendPhoneColumn(array $columns, array $columnValues, string $phone): array
+{
+    $phone = trim($phone);
+    if ($phone === '') {
+        return $columnValues;
+    }
+
+    [$columnId, $columnType] = mondayFindColumnByTitles($columns, [
+        'phone',
+        'phone number',
+        'mobile',
+        'telephone',
+    ]);
+    if ($columnId === null || isset($columnValues[$columnId])) {
+        return $columnValues;
+    }
+
+    $out = $columnValues;
+    $out[$columnId] = mondayColumnValueForType($columnType, $phone);
+
+    return $out;
+}
+
+/**
  * Resolve a Monday column id/type by matching one of the given lowercase titles.
  *
  * @param array<int, array<string, mixed>> $columns
@@ -1410,7 +1441,7 @@ function mondaySyncBookingDetails(int $enquiryId, array $details): array
     $bookerName = trim((string)($details['bookerName'] ?? ''));
 
     $pdo = enquiryLoggerPdo();
-    $stmt = $pdo->prepare('SELECT name, email, monday_item_id FROM enquiries WHERE id = :id LIMIT 1');
+    $stmt = $pdo->prepare('SELECT name, email, monday_item_id, form_data_json FROM enquiries WHERE id = :id LIMIT 1');
     $stmt->execute([':id' => $enquiryId]);
     $row = $stmt->fetch();
     if (!$row) {
@@ -1484,15 +1515,26 @@ GQL;
             'training',
             $bookingGroup['groupId'],
             $columns,
-            []
+            [],
+            trim((string)($details['phone'] ?? ''))
         );
     }
 
     enquiryLoggerMarkMondaySynced($enquiryId, $itemId);
 
     $columnValues = [];
+    $phoneForMonday = trim((string)($details['phone'] ?? ''));
+    if ($phoneForMonday === '') {
+        $formRaw = trim((string)($row['form_data_json'] ?? ''));
+        if ($formRaw !== '') {
+            $formDecoded = json_decode($formRaw, true);
+            if (is_array($formDecoded)) {
+                $phoneForMonday = trim((string)($formDecoded['phone'] ?? $formDecoded['phoneNumber'] ?? ''));
+            }
+        }
+    }
     $mappings = [
-        ['titles' => ['phone', 'phone number', 'mobile'], 'value' => $details['phone'] ?? ''],
+        ['titles' => ['phone', 'phone number', 'mobile', 'telephone'], 'value' => $phoneForMonday],
         ['titles' => ['company/organisation', 'company / organisation', 'company', 'organisation', 'organization', 'company name', 'organisation name'], 'value' => $details['organisation'] ?? ''],
         ['titles' => ['venue address', 'venue', 'training venue', 'training venue address'], 'value' => $details['venueAddress'] ?? ''],
         ['titles' => ['address'], 'value' => $details['venueAddress'] ?? ''],
@@ -2050,7 +2092,7 @@ function mondayBookingDetailsColumnValues(array $columns, array $details, string
 {
     $columnValues = [];
     $mappings = [
-        ['titles' => ['phone', 'phone number', 'mobile'], 'value' => $details['phone'] ?? ''],
+        ['titles' => ['phone', 'phone number', 'mobile', 'telephone'], 'value' => $details['phone'] ?? ''],
         ['titles' => ['company/organisation', 'company / organisation', 'company', 'organisation', 'organization', 'company name', 'organisation name'], 'value' => $details['organisation'] ?? ''],
         ['titles' => ['venue address', 'venue', 'training venue', 'training venue address'], 'value' => $details['venueAddress'] ?? ''],
         ['titles' => ['address'], 'value' => $details['venueAddress'] ?? ''],
@@ -2197,7 +2239,7 @@ function mondaySyncCoursesOngoingBookingItem(int $enquiryId, array $details = []
     enquiryLoggerEnsureColumn($pdo, 'enquiries', 'booking_details_json', 'TEXT');
 
     $stmt = $pdo->prepare(
-        'SELECT name, email, monday_booking_item_id, booking_details_json
+        'SELECT name, email, monday_booking_item_id, booking_details_json, form_data_json
          FROM enquiries WHERE id = :id LIMIT 1'
     );
     $stmt->execute([':id' => $enquiryId]);
@@ -2218,6 +2260,19 @@ function mondaySyncCoursesOngoingBookingItem(int $enquiryId, array $details = []
 
     $email = trim((string)($details['email'] ?? $row['email'] ?? ''));
     $bookerName = trim((string)($details['bookerName'] ?? $row['name'] ?? ''));
+    $bookerPhone = trim((string)($details['phone'] ?? ''));
+    if ($bookerPhone === '') {
+        $formRaw = trim((string)($row['form_data_json'] ?? ''));
+        if ($formRaw !== '') {
+            $formDecoded = json_decode($formRaw, true);
+            if (is_array($formDecoded)) {
+                $bookerPhone = trim((string)($formDecoded['phone'] ?? $formDecoded['phoneNumber'] ?? ''));
+            }
+        }
+    }
+    if ($bookerPhone !== '' && trim((string)($details['phone'] ?? '')) === '') {
+        $details['phone'] = $bookerPhone;
+    }
     if ($email === '') {
         throw new RuntimeException('Booking email is required for Courses Ongoing sync.');
     }
@@ -2284,7 +2339,8 @@ GQL;
             'training',
             $group['groupId'],
             $columns,
-            []
+            [],
+            $bookerPhone
         );
         $created = true;
         enquiryLoggerMarkMondayBookingItemId($enquiryId, $itemId);
@@ -2303,7 +2359,8 @@ GQL;
                 'training',
                 $group['groupId'],
                 $columns,
-                []
+                [],
+                $bookerPhone
             );
             $created = true;
             enquiryLoggerMarkMondayBookingItemId($enquiryId, $itemId);

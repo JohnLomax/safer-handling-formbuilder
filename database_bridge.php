@@ -291,20 +291,29 @@ function appTrainingMatrixRows(): array
     }
 
     try {
-        $sql = 'SELECT sector, course, course_value, course_description, format, sub_option, min_attendees, max_cap, default_attendees, pricing
+        $sql = 'SELECT sector, course, course_value, course_description, format, sub_option, min_attendees, max_cap, default_attendees, pricing, kajabi_enabled
              FROM training_matrix_entries
              WHERE is_active = 1
              ORDER BY sort_order ASC, id ASC';
         try {
             $stmt = $pdo->query($sql);
         } catch (Throwable $e) {
-            // Older DBs before course_description migration.
-            $stmt = $pdo->query(
-                'SELECT sector, course, course_value, format, sub_option, min_attendees, max_cap, default_attendees, pricing
-                 FROM training_matrix_entries
-                 WHERE is_active = 1
-                 ORDER BY sort_order ASC, id ASC'
-            );
+            // Older DBs before kajabi_enabled / course_description migrations.
+            try {
+                $stmt = $pdo->query(
+                    'SELECT sector, course, course_value, course_description, format, sub_option, min_attendees, max_cap, default_attendees, pricing
+                     FROM training_matrix_entries
+                     WHERE is_active = 1
+                     ORDER BY sort_order ASC, id ASC'
+                );
+            } catch (Throwable $e2) {
+                $stmt = $pdo->query(
+                    'SELECT sector, course, course_value, format, sub_option, min_attendees, max_cap, default_attendees, pricing
+                     FROM training_matrix_entries
+                     WHERE is_active = 1
+                     ORDER BY sort_order ASC, id ASC'
+                );
+            }
         }
         if ($stmt === false) {
             return $cache;
@@ -325,6 +334,9 @@ function appTrainingMatrixRows(): array
                 'minAttendees' => (int)$row['min_attendees'],
                 'maxCap' => $row['max_cap'] !== null ? (int)$row['max_cap'] : null,
                 'pricing' => $pricing,
+                'kajabiEnabled' => array_key_exists('kajabi_enabled', $row)
+                    ? (bool)$row['kajabi_enabled']
+                    : true,
             ];
 
             $courseDescription = trim((string)($row['course_description'] ?? ''));

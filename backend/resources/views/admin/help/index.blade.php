@@ -545,7 +545,9 @@
                     <div>
                         <h3 class="text-base font-semibold text-brand-header">Booking & terms</h3>
                         <p class="text-sm text-sh-mid" style="margin-top:0.35rem;">
-                            The Accept Quote form collects booker details, preferred date, venue address, delegates, invoice details, venue requirements, and Safer Handling terms.
+                            The Accept Quote form collects booker details, preferred date, venue address, delegates
+                            (student names/emails — pre-filled with the booker, who can remove themselves),
+                            invoice details, venue requirements, and Safer Handling terms.
                         </p>
                     </div>
                     <ul class="list-disc text-sm text-sh-mid">
@@ -598,7 +600,7 @@
                             <div class="help-icon"><x-kajabi-badge compact class="!h-5 !w-5" /></div>
                             <div>
                                 <h4>Kajabi</h4>
-                                <p>Enrollment after quote won where configured.</p>
+                                <p>Enrolls each Accept Quote student on the Legal Briefing course after Quote Won, when Enable Kajabi is on for that Training Matrix row. If off, the enquiry shows “Kajabi is disabled for this course combination” and no invite is sent.</p>
                             </div>
                         </div>
                         <div class="help-feature-card">

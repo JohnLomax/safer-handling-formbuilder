@@ -25,6 +25,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
 
     Route::get('/enquiries', [EnquiryController::class, 'index'])->name('enquiries.index');
     Route::get('/enquiries/{enquiry}', [EnquiryController::class, 'show'])->name('enquiries.show');
+    Route::delete('/enquiries/{enquiry}', [EnquiryController::class, 'destroy'])->name('enquiries.destroy');
     Route::post('/enquiries/{enquiry}/booking', [EnquiryController::class, 'updateBooking'])->name('enquiries.booking.update');
     Route::post('/enquiries/{enquiry}/retry/quote-email', [EnquiryController::class, 'retryQuoteEmail'])->name('enquiries.retry.quote-email');
     Route::post('/enquiries/{enquiry}/retry/lead-notification', [EnquiryController::class, 'retryLeadNotification'])->name('enquiries.retry.lead-notification');

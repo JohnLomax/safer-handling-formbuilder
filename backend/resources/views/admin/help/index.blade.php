@@ -317,6 +317,7 @@
                         <a href="#walkthrough"><span class="help-nav-dot"></span>Video walkthrough</a>
                         <a href="#enquiry-journey"><span class="help-nav-dot"></span>Enquiry journey</a>
                         <a href="#enquiry-page"><span class="help-nav-dot"></span>Working an enquiry</a>
+                        <a href="#delete-enquiry"><span class="help-nav-dot"></span>Delete an enquiry</a>
                         <a href="#emails"><span class="help-nav-dot"></span>Emails & read status</a>
                         <a href="#booking"><span class="help-nav-dot"></span>Booking & terms</a>
                         <a href="#integrations"><span class="help-nav-dot"></span>Integrations</a>
@@ -508,6 +509,25 @@
                         <li><strong class="text-sh-text">View / Edit booking</strong> lets staff complete Accept Quote details for the client.</li>
                         <li>Preferred date can be “Not sure yet”; staff can set it later in booking edit.</li>
                         <li>Once Quote Won, the customer enquiry form is locked from further online edits.</li>
+                        <li><strong class="text-sh-text">Delete enquiry</strong> removes the record from this admin system — see <a href="#delete-enquiry" class="link-brand">Delete an enquiry</a>.</li>
+                    </ul>
+                </section>
+
+                <section id="delete-enquiry" class="brand-panel help-section help-stack scroll-mt-6">
+                    <div class="help-section-head">
+                        <div>
+                            <h3 class="text-base font-semibold text-brand-header">Delete an enquiry</h3>
+                            <p class="text-sm text-sh-mid">Remove a test or unwanted enquiry from the admin system without changing Monday.</p>
+                        </div>
+                    </div>
+                    <ul class="list-disc text-sm text-sh-mid">
+                        <li>On the enquiry page, use <strong class="text-sh-text">Delete enquiry</strong> in the header.</li>
+                        <li>You will be asked: <em>Are you sure you want to delete this enquiry from the system?</em></li>
+                        <li><strong class="text-sh-text">Monday is not deleted</strong> — the Monday board item stays as it is.</li>
+                        <li>If the enquiry has an active Forge booking, that booking is <strong class="text-sh-text">cancelled in Forge</strong> first. If Forge cancel fails, the enquiry is not deleted.</li>
+                        <li>The enquiry, its journey timeline, and related booking uploads are removed from this system.</li>
+                        <li>Xero quotes/invoices and Kajabi enrollments are <strong class="text-sh-text">not</strong> deleted remotely.</li>
+                        <li>Every confirmed delete is written to the <a href="{{ route('admin.activity.index') }}" class="link-brand">Activity</a> audit log (who deleted which enquiry, and whether Forge was cancelled).</li>
                     </ul>
                 </section>
 

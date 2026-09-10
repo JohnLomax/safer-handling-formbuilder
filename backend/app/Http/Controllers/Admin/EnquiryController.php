@@ -5,9 +5,11 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Enquiry;
 use App\Models\EnquiryEvent;
+use App\Services\ActivityLogger;
 use App\Services\EnquiryProcessRetry;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\File;
 use Illuminate\View\View;
 use Throwable;
 
@@ -465,6 +467,70 @@ class EnquiryController extends Controller
                 ->route('admin.enquiries.show', $enquiry)
                 ->withErrors(['forge' => 'Forge cancel failed: '.$e->getMessage()]);
         }
+    }
+
+    public function destroy(Enquiry $enquiry, EnquiryProcessRetry $retry): RedirectResponse
+    {
+        $enquiryId = (int) $enquiry->id;
+        $enquiryName = trim((string) $enquiry->name);
+        $enquiryEmail = trim((string) $enquiry->email);
+        $mondayItemId = trim((string) ($enquiry->monday_item_id ?? ''));
+        $hadForgeBooking = $enquiry->forge_synced_at !== null
+            && ! in_array(strtolower(trim((string) $enquiry->forge_booking_status)), ['cancelled', 'canceled'], true);
+
+        $forgeCancelled = false;
+        if ($retry->canForgeCancel($enquiry)) {
+            try {
+                $retry->forgeCancel($enquiry);
+                $forgeCancelled = true;
+            } catch (Throwable $e) {
+                return redirect()
+                    ->route('admin.enquiries.show', $enquiry)
+                    ->withErrors([
+                        'delete' => 'Could not cancel the Forge booking before deleting this enquiry: '.$e->getMessage(),
+                    ]);
+            }
+        }
+
+        $uploadDir = dirname(base_path()).'/data/booking-uploads/'.$enquiryId;
+        if (is_dir($uploadDir)) {
+            File::deleteDirectory($uploadDir);
+        }
+
+        $descriptionParts = [
+            'Deleted enquiry #'.$enquiryId
+                .($enquiryName !== '' ? ' ('.$enquiryName.')' : '')
+                .' from the system.',
+            'Monday enquiry was not deleted.',
+        ];
+        if ($forgeCancelled || $hadForgeBooking) {
+            $descriptionParts[] = $forgeCancelled
+                ? 'Forge booking was cancelled.'
+                : 'No active Forge booking needed cancelling.';
+        }
+
+        ActivityLogger::log(
+            action: 'delete',
+            description: implode(' ', $descriptionParts),
+            subjectType: Enquiry::class,
+            subjectId: $enquiryId,
+            properties: [
+                'enquiry_id' => $enquiryId,
+                'name' => $enquiryName !== '' ? $enquiryName : null,
+                'email' => $enquiryEmail !== '' ? $enquiryEmail : null,
+                'status' => $enquiry->status,
+                'monday_item_id' => $mondayItemId !== '' ? $mondayItemId : null,
+                'monday_deleted' => false,
+                'forge_cancelled' => $forgeCancelled,
+                'had_forge_booking' => $hadForgeBooking,
+            ],
+        );
+
+        $enquiry->delete();
+
+        return redirect()
+            ->route('admin.enquiries.index')
+            ->with('status', implode(' ', $descriptionParts));
     }
 
     public function retryEvent(Enquiry $enquiry, EnquiryEvent $event, EnquiryProcessRetry $retry): RedirectResponse

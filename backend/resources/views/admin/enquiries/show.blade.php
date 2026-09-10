@@ -51,6 +51,22 @@
                         <span class="text-xs font-semibold text-sh-text">Kajabi</span>
                     </span>
                 @endif
+                <form
+                    method="POST"
+                    action="{{ route('admin.enquiries.destroy', $enquiry) }}"
+                    class="inline"
+                    onsubmit="return confirm('Are you sure you want to delete this enquiry from the system?\n\nThis will not delete the enquiry from Monday.\nIf there is a Forge booking, it will be cancelled.');"
+                >
+                    @csrf
+                    @method('DELETE')
+                    <button
+                        type="submit"
+                        class="btn-brand-outline text-xs text-red-700 border-red-200 hover:border-red-400 hover:text-red-800"
+                        title="Delete this enquiry from the admin system"
+                    >
+                        Delete enquiry
+                    </button>
+                </form>
             </div>
         </div>
     </x-slot>

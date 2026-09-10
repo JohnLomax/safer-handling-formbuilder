@@ -14,6 +14,8 @@ class LogInternalUserActivity
         'login',
         'logout',
         'admin.activity.index',
+        // Logged explicitly in EnquiryController::destroy with full enquiry details.
+        'admin.enquiries.destroy',
     ];
 
     public function handle(Request $request, Closure $next): Response
@@ -96,6 +98,9 @@ class LogInternalUserActivity
             'admin.enquiries.retry.xero-invoice' => 'Retried Xero invoice',
             'admin.enquiries.sync.xero-invoice-sent' => 'Synced Xero invoice sent',
             'admin.enquiries.retry.kajabi-enroll' => 'Retried Kajabi enrollment',
+            'admin.enquiries.forge.resync' => 'Resynced enquiry to Forge',
+            'admin.enquiries.forge.cancel' => 'Cancelled Forge booking',
+            'admin.enquiries.destroy' => 'Deleted enquiry',
             'admin.enquiries.retry.event' => 'Retried enquiry event',
             'admin.feedback.resolve' => 'Resolved feedback',
             'admin.feedback.export' => 'Exported feedback',

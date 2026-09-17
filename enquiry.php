@@ -247,6 +247,7 @@ if ($kajabiCoursesUrl === '') {
       box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
       box-sizing: border-box;
       min-width: 0;
+      overflow-x: clip;
     }
 
     .datetime-block label {
@@ -258,7 +259,11 @@ if ($kajabiCoursesUrl === '') {
     }
 
     .datetime-input {
+      display: block;
+      width: 100%;
       max-width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
       margin-top: 8px;
       font-weight: 700;
       letter-spacing: 0.2px;
@@ -267,9 +272,24 @@ if ($kajabiCoursesUrl === '') {
       border-radius: 11px;
     }
 
+    input[type="date"].datetime-input {
+      /* Native date controls have a large intrinsic width on iOS/Android. */
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
+    }
+
     .datetime-input::-webkit-calendar-picker-indicator {
       cursor: pointer;
       filter: saturate(1.2);
+      flex-shrink: 0;
+    }
+
+    .datetime-input::-webkit-datetime-edit {
+      min-width: 0;
+      max-width: 100%;
+      overflow: hidden;
     }
 
     .datetime-hint {
@@ -281,9 +301,12 @@ if ($kajabiCoursesUrl === '') {
 
     .datetime-choice {
       margin-top: 10px;
-      display: inline-flex;
+      display: flex;
       align-items: center;
       gap: 8px;
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
       padding: 6px 10px;
       border: 1px dashed #c5dbef;
       border-radius: 10px;
@@ -292,6 +315,7 @@ if ($kajabiCoursesUrl === '') {
       font-size: 0.9rem;
       color: #2f618a;
       cursor: pointer;
+      white-space: normal;
     }
 
     .datetime-choice input {
@@ -799,11 +823,24 @@ if ($kajabiCoursesUrl === '') {
 
       .datetime-block {
         max-width: 100%;
+        width: 100%;
+        min-width: 0;
         padding: 12px;
+        overflow-x: clip;
+      }
+
+      .datetime-input,
+      input[type="date"].datetime-input {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+        font-size: 16px; /* avoid iOS zoom + keep control within viewport */
       }
 
       .datetime-choice {
         max-width: 100%;
+        width: 100%;
         box-sizing: border-box;
         white-space: normal;
       }

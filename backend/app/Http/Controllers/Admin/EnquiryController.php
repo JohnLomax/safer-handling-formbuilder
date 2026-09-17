@@ -515,6 +515,7 @@ class EnquiryController extends Controller
             subjectType: Enquiry::class,
             subjectId: $enquiryId,
             properties: [
+                'area' => 'Enquiry',
                 'enquiry_id' => $enquiryId,
                 'name' => $enquiryName !== '' ? $enquiryName : null,
                 'email' => $enquiryEmail !== '' ? $enquiryEmail : null,

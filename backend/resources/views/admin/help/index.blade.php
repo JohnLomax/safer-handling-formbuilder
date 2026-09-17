@@ -318,6 +318,7 @@
                         <a href="#enquiry-journey"><span class="help-nav-dot"></span>Enquiry journey</a>
                         <a href="#enquiry-page"><span class="help-nav-dot"></span>Working an enquiry</a>
                         <a href="#delete-enquiry"><span class="help-nav-dot"></span>Delete an enquiry</a>
+                        <a href="#activity-log"><span class="help-nav-dot"></span>Activity log</a>
                         <a href="#emails"><span class="help-nav-dot"></span>Emails & read status</a>
                         <a href="#booking"><span class="help-nav-dot"></span>Booking & terms</a>
                         <a href="#integrations"><span class="help-nav-dot"></span>Integrations</a>
@@ -528,6 +529,22 @@
                         <li>The enquiry, its journey timeline, and related booking uploads are removed from this system.</li>
                         <li>Xero quotes/invoices and Kajabi enrollments are <strong class="text-sh-text">not</strong> deleted remotely.</li>
                         <li>Every confirmed delete is written to the <a href="{{ route('admin.activity.index') }}" class="link-brand">Activity</a> audit log (who deleted which enquiry, and whether Forge was cancelled).</li>
+                    </ul>
+                </section>
+
+                <section id="activity-log" class="brand-panel help-section help-stack scroll-mt-6">
+                    <div class="help-section-head">
+                        <div>
+                            <h3 class="text-base font-semibold text-brand-header">Activity log</h3>
+                            <p class="text-sm text-sh-mid">Admin audit trail under your profile menu — who signed in and what they changed.</p>
+                        </div>
+                        <a href="{{ route('admin.activity.index') }}" class="btn-brand-outline text-xs">Open Activity</a>
+                    </div>
+                    <ul class="list-disc text-sm text-sh-mid">
+                        <li>Shows clear action labels (Created, Updated, Deleted, Cancelled, Synced, and so on) plus the area touched (Enquiry, Training Matrix, Users, Settings).</li>
+                        <li>Training Matrix create / edit / delete logs include sector, course, format, course style, Kajabi setting, and which fields changed on update.</li>
+                        <li>Enquiry deletes record that Monday was left unchanged and whether a Forge booking was cancelled.</li>
+                        <li>Filter by action, area, or user, or search by name, course, enquiry id, or IP.</li>
                     </ul>
                 </section>
 

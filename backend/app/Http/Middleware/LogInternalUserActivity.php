@@ -2,8 +2,12 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Enquiry;
+use App\Models\TrainingMatrixEntry;
+use App\Models\User;
 use App\Services\ActivityLogger;
 use Closure;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -14,8 +18,11 @@ class LogInternalUserActivity
         'login',
         'logout',
         'admin.activity.index',
-        // Logged explicitly in EnquiryController::destroy with full enquiry details.
+        // Logged explicitly with full details in controllers.
         'admin.enquiries.destroy',
+        'admin.training-matrix.store',
+        'admin.training-matrix.update',
+        'admin.training-matrix.destroy',
     ];
 
     public function handle(Request $request, Closure $next): Response
@@ -57,18 +64,89 @@ class LogInternalUserActivity
         }
 
         $status = $request->session()->get('status');
+        $subject = $this->subjectFromRoute($request);
         $description = $this->descriptionFromStatus($status)
-            ?? $this->descriptionFromRoute($routeName, $method);
+            ?? $this->descriptionFromRoute($routeName, $method, $subject);
 
         ActivityLogger::log(
             action: $this->actionFromMethod($method, $routeName),
             description: $description,
             user: $user,
             request: $request,
-            properties: [
-                'status' => is_string($status) ? $status : null,
-            ],
+            subjectType: $subject ? $subject::class : null,
+            subjectId: $subject?->getKey() ? (int) $subject->getKey() : null,
+            properties: $this->propertiesFor($routeName, $status, $subject),
         );
+    }
+
+    private function subjectFromRoute(Request $request): ?Model
+    {
+        $route = $request->route();
+        if (! $route) {
+            return null;
+        }
+
+        foreach (['enquiry', 'trainingMatrix', 'training_matrix', 'user', 'feedback'] as $key) {
+            $param = $route->parameter($key);
+            if ($param instanceof Model) {
+                return $param;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function propertiesFor(?string $routeName, mixed $status, ?Model $subject): array
+    {
+        $properties = [
+            'status' => is_string($status) ? $status : null,
+            'area' => $this->areaFromRoute($routeName),
+        ];
+
+        if ($subject instanceof Enquiry) {
+            $properties['enquiry_id'] = (int) $subject->id;
+            $properties['name'] = $subject->name;
+            $properties['email'] = $subject->email;
+            $properties['area'] = 'Enquiry';
+        }
+
+        if ($subject instanceof TrainingMatrixEntry) {
+            $properties['matrix_entry_id'] = (int) $subject->id;
+            $properties['sector'] = $subject->sector;
+            $properties['course'] = $subject->course;
+            $properties['course_value'] = $subject->course_value;
+            $properties['format'] = $subject->format;
+            $properties['sub_option'] = $subject->sub_option;
+            $properties['area'] = 'Training Matrix';
+        }
+
+        if ($subject instanceof User) {
+            $properties['user_name'] = $subject->name;
+            $properties['user_email'] = $subject->email;
+            $properties['area'] = 'Users';
+        }
+
+        return array_filter(
+            $properties,
+            static fn ($value) => $value !== null && $value !== ''
+        );
+    }
+
+    private function areaFromRoute(?string $routeName): ?string
+    {
+        $routeName = (string) $routeName;
+
+        return match (true) {
+            str_contains($routeName, 'training-matrix') => 'Training Matrix',
+            str_contains($routeName, 'enquiries') => 'Enquiry',
+            str_contains($routeName, 'users') => 'Users',
+            str_contains($routeName, 'settings') => 'Settings',
+            str_contains($routeName, 'feedback') => 'Feedback',
+            default => null,
+        };
     }
 
     private function descriptionFromStatus(mixed $status): ?string
@@ -85,7 +163,7 @@ class LogInternalUserActivity
         };
     }
 
-    private function descriptionFromRoute(?string $routeName, string $method): string
+    private function descriptionFromRoute(?string $routeName, string $method, ?Model $subject = null): string
     {
         $labels = [
             'admin.enquiries.booking.update' => 'Updated enquiry booking details',
@@ -118,30 +196,62 @@ class LogInternalUserActivity
             'profile.destroy' => 'Deleted account',
         ];
 
-        if ($routeName && isset($labels[$routeName])) {
-            return $labels[$routeName];
+        $base = ($routeName && isset($labels[$routeName]))
+            ? $labels[$routeName]
+            : ($routeName
+                ? ucfirst(str_replace(['admin.', '.', '-', '_'], ['', ' ', ' ', ' '], $routeName))
+                : $method.' request');
+
+        if ($subject instanceof Enquiry) {
+            return rtrim($base, '.').' for enquiry #'.$subject->id
+                .(trim((string) $subject->name) !== '' ? ' ('.trim((string) $subject->name).')' : '').'.';
         }
 
-        if ($routeName) {
-            return ucfirst(str_replace(['admin.', '.', '-', '_'], ['', ' ', ' ', ' '], $routeName));
+        if ($subject instanceof TrainingMatrixEntry) {
+            $label = trim(implode(' · ', array_filter([
+                trim((string) $subject->sector),
+                trim((string) $subject->course),
+                trim((string) $subject->format),
+                trim((string) $subject->sub_option),
+            ])));
+
+            return rtrim($base, '.').($label !== '' ? ': '.$label : '').'.';
         }
 
-        return $method.' request';
+        if ($subject instanceof User) {
+            return rtrim($base, '.').' ('.$subject->name.').';
+        }
+
+        return $base;
     }
 
     private function actionFromMethod(string $method, ?string $routeName): string
     {
-        if ($routeName && str_contains($routeName, 'retry')) {
+        $routeName = (string) $routeName;
+
+        if (str_contains($routeName, 'retry')) {
             return 'retry';
         }
-        if ($routeName && str_contains($routeName, 'resend')) {
+        if (str_contains($routeName, 'resend')) {
             return 'resend';
         }
-        if ($routeName && str_contains($routeName, 'sync')) {
+        if (str_contains($routeName, 'cancel')) {
+            return 'cancel';
+        }
+        if (str_contains($routeName, 'sync') || str_contains($routeName, 'resync')) {
             return 'sync';
         }
-        if ($routeName && str_contains($routeName, 'export')) {
+        if (str_contains($routeName, 'export')) {
             return 'export';
+        }
+        if (str_contains($routeName, 'destroy') || $method === 'DELETE') {
+            return 'delete';
+        }
+        if (str_contains($routeName, '.update') || str_contains($routeName, 'booking.update') || in_array($method, ['PUT', 'PATCH'], true)) {
+            return 'update';
+        }
+        if (str_contains($routeName, '.store')) {
+            return 'create';
         }
 
         return match ($method) {

@@ -653,7 +653,6 @@ if ($kajabiCoursesUrl === '') {
       color: #195783;
     }
 
-    .pricing-grid #trainersRequired,
     .pricing-grid #totalWithVatPrice {
       display: inline-block;
       margin-top: 2px;
@@ -830,7 +829,6 @@ if ($kajabiCoursesUrl === '') {
         font-size: 1.1rem;
       }
 
-      .pricing-grid #trainersRequired,
       .pricing-grid #totalWithVatPrice {
         font-size: 1.12rem;
       }
@@ -993,12 +991,11 @@ if ($kajabiCoursesUrl === '') {
               id="trainerAttendees"
               name="trainerAttendees"
               class="attendees-input"
-              type="number"
-              min="1"
-              max="120"
-              step="1"
-              value=""
+              type="text"
               inputmode="numeric"
+              pattern="[0-9]*"
+              autocomplete="off"
+              value=""
               placeholder="Enter attendees"
             />
             <p id="trainerAttendeesHint" class="note">Enter attendee count to see a live quote.</p>
@@ -1175,7 +1172,6 @@ if ($kajabiCoursesUrl === '') {
             <div id="pricingCard" class="pricing-card hidden">
               <h4>Live Quote</h4>
               <div class="pricing-grid">
-                <div id="trainersRequiredRow"><strong>Number of trainers required:</strong> <span id="trainersRequired">1</span></div>
                 <div id="totalWithVatRow"><strong>Total price estimate (Including Travel but Excluding VAT):</strong> <span id="totalWithVatPrice">-</span></div>
               </div>
             </div>
@@ -1263,9 +1259,7 @@ if ($kajabiCoursesUrl === '') {
       var quoteValueInput = document.getElementById("quoteValue");
       var pricingCard = document.getElementById("pricingCard");
       var totalWithVatRow = document.getElementById("totalWithVatRow");
-      var trainersRequiredRow = document.getElementById("trainersRequiredRow");
       var totalWithVatPrice = document.getElementById("totalWithVatPrice");
-      var trainersRequired = document.getElementById("trainersRequired");
 
       var MATRIX_DEFAULT_ATTENDEES = 12;
       var MATRIX_MAX_ATTENDEES = 120;
@@ -1988,6 +1982,53 @@ if ($kajabiCoursesUrl === '') {
         }
       }
 
+      /**
+       * While typing: allow a fully cleared field and values below min.
+       * Only strip non-digits and soft-cap above max.
+       */
+      function onMatrixAttendeesTyping() {
+        if (matrixAttendeesInput.disabled) {
+          return;
+        }
+
+        var digitsOnly = matrixAttendeesInput.value.replace(/\D/g, "");
+        if (matrixAttendeesInput.value !== digitsOnly) {
+          matrixAttendeesInput.value = digitsOnly;
+        }
+
+        if (!digitsOnly) {
+          setInputError(matrixAttendeesInput, true);
+          renderPricing(null);
+          updateFinalDetailsVisibility();
+          return;
+        }
+
+        var nextValue = Number(digitsOnly);
+        var minValue = Number(matrixAttendeesInput.min) || 1;
+        var maxValue = Number(matrixAttendeesInput.max) || MATRIX_MAX_ATTENDEES;
+        if (!Number.isFinite(nextValue)) {
+          setInputError(matrixAttendeesInput, true);
+          renderPricing(null);
+          updateFinalDetailsVisibility();
+          return;
+        }
+
+        if (nextValue > maxValue) {
+          nextValue = maxValue;
+          matrixAttendeesInput.value = String(maxValue);
+        }
+
+        if (nextValue >= minValue && nextValue <= maxValue) {
+          setInputError(matrixAttendeesInput, false);
+          syncFinalAttendeesFromMatrix();
+          renderPricing(getSelectedTrainingRow());
+        } else {
+          setInputError(matrixAttendeesInput, true);
+          renderPricing(null);
+        }
+        updateFinalDetailsVisibility();
+      }
+
       function commitMatrixAttendeesChange() {
         if (matrixAttendeesInput.disabled) {
           return;
@@ -2111,7 +2152,6 @@ if ($kajabiCoursesUrl === '') {
         if (!row) {
           pricingCard.classList.add("hidden");
           totalWithVatPrice.textContent = "-";
-          trainersRequired.textContent = "1";
           trainersRequiredValueInput.value = "1";
           quoteValueInput.value = "";
           attendeesInput.min = "1";
@@ -2142,10 +2182,8 @@ if ($kajabiCoursesUrl === '') {
           quoteValueInput.value = extractLeadingCurrencyValue(displayPrice);
         }
 
-        var trainerCount = getTrainersRequired(attendeeCount);
-        trainersRequired.textContent = String(trainerCount);
-        trainersRequiredValueInput.value = String(trainerCount);
-        trainersRequiredRow.classList.remove("hidden");
+        // Kept in a hidden field for Monday / admin — not shown on the customer quote card.
+        trainersRequiredValueInput.value = String(getTrainersRequired(attendeeCount));
         if (isTrainerMode()) {
           scheduleTrainerMondayFieldSync();
         }
@@ -3063,6 +3101,10 @@ if ($kajabiCoursesUrl === '') {
       });
 
       matrixAttendeesInput.addEventListener("input", function () {
+        onMatrixAttendeesTyping();
+      });
+
+      matrixAttendeesInput.addEventListener("blur", function () {
         commitMatrixAttendeesChange();
       });
 
@@ -3074,10 +3116,33 @@ if ($kajabiCoursesUrl === '') {
         stepMatrixAttendees(1);
       });
 
+      function commitTrainerAttendeesChange() {
+        var digits = trainerAttendeesInput.value.replace(/\D/g, "");
+        var pkg = getTrainerPackage();
+        var minValue = getMinimumAttendeesForRow(pkg);
+        var maxValue = pkg && pkg.maxCap != null && Number.isFinite(pkg.maxCap) ? pkg.maxCap : MATRIX_MAX_ATTENDEES;
+        if (!digits) {
+          trainerAttendeesInput.value = String(minValue);
+        } else {
+          var nextValue = Number(digits);
+          if (!Number.isFinite(nextValue)) {
+            nextValue = minValue;
+          }
+          trainerAttendeesInput.value = String(Math.min(maxValue, Math.max(minValue, nextValue)));
+        }
+        setInputError(trainerAttendeesInput, false);
+        syncFinalAttendeesFromTrainer();
+        renderPricing(getSelectedTrainingRow());
+        updateFinalDetailsVisibility();
+        scheduleTrainerMondayFieldSync();
+      }
+
       trainerAttendeesInput.addEventListener("input", function () {
         var digits = trainerAttendeesInput.value.replace(/\D/g, "");
+        if (trainerAttendeesInput.value !== digits) {
+          trainerAttendeesInput.value = digits;
+        }
         if (!digits) {
-          trainerAttendeesInput.value = "";
           setInputError(trainerAttendeesInput, true);
           renderPricing(null);
           updateFinalDetailsVisibility();
@@ -3088,15 +3153,38 @@ if ($kajabiCoursesUrl === '') {
         var maxValue = pkg && pkg.maxCap != null && Number.isFinite(pkg.maxCap) ? pkg.maxCap : MATRIX_MAX_ATTENDEES;
         var nextValue = Number(digits);
         if (!Number.isFinite(nextValue)) {
-          nextValue = minValue;
+          setInputError(trainerAttendeesInput, true);
+          renderPricing(null);
+          updateFinalDetailsVisibility();
+          return;
         }
-        var bounded = Math.min(maxValue, Math.max(minValue, nextValue));
-        trainerAttendeesInput.value = String(bounded);
-        setInputError(trainerAttendeesInput, false);
-        syncFinalAttendeesFromTrainer();
-        renderPricing(getSelectedTrainingRow());
+        if (nextValue > maxValue) {
+          nextValue = maxValue;
+          trainerAttendeesInput.value = String(maxValue);
+        }
+        if (nextValue >= minValue && nextValue <= maxValue) {
+          setInputError(trainerAttendeesInput, false);
+          syncFinalAttendeesFromTrainer();
+          renderPricing(getSelectedTrainingRow());
+          scheduleTrainerMondayFieldSync();
+        } else {
+          setInputError(trainerAttendeesInput, true);
+          renderPricing(null);
+        }
         updateFinalDetailsVisibility();
-        scheduleTrainerMondayFieldSync();
+      });
+
+      trainerAttendeesInput.addEventListener("blur", function () {
+        if (!trainerAttendeesInput.value.replace(/\D/g, "")) {
+          // Leave empty until a course is chosen; otherwise finish with a valid count.
+          if (!getTrainerPackage()) {
+            setInputError(trainerAttendeesInput, true);
+            return;
+          }
+        }
+        if (getTrainerPackage() || trainerAttendeesInput.value.replace(/\D/g, "")) {
+          commitTrainerAttendeesChange();
+        }
       });
 
       function onPreferredDateInput() {

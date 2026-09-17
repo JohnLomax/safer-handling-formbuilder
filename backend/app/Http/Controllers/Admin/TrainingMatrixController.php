@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\TrainingMatrixEntry;
+use App\Services\ActivityLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -47,7 +48,15 @@ class TrainingMatrixController extends Controller
         $validated = $this->validatedFromRequest($request, $validator->validated());
         $validated['sort_order'] = (int) (TrainingMatrixEntry::query()->max('sort_order') ?? 0) + 1;
 
-        TrainingMatrixEntry::query()->create($validated);
+        $entry = TrainingMatrixEntry::query()->create($validated);
+
+        ActivityLogger::log(
+            action: 'create',
+            description: 'Created training matrix row: '.$this->activityLabel($entry),
+            subjectType: TrainingMatrixEntry::class,
+            subjectId: (int) $entry->id,
+            properties: $this->activityProperties($entry, 'create'),
+        );
 
         return redirect()->route('admin.training-matrix.index')->with('status', 'Training matrix entry created.');
     }
@@ -71,14 +80,45 @@ class TrainingMatrixController extends Controller
             ])->withInput()->withErrors($validator);
         }
 
+        $before = $this->activitySnapshot($trainingMatrix);
         $trainingMatrix->update($this->validatedFromRequest($request, $validator->validated()));
+        $trainingMatrix->refresh();
+        $after = $this->activitySnapshot($trainingMatrix);
+        $changed = array_keys(array_filter(
+            $after,
+            static fn ($value, $key) => array_key_exists($key, $before) && $before[$key] !== $value,
+            ARRAY_FILTER_USE_BOTH
+        ));
+
+        ActivityLogger::log(
+            action: 'update',
+            description: 'Updated training matrix row: '.$this->activityLabel($trainingMatrix),
+            subjectType: TrainingMatrixEntry::class,
+            subjectId: (int) $trainingMatrix->id,
+            properties: [
+                ...$this->activityProperties($trainingMatrix, 'update'),
+                'changed_fields' => array_values(array_diff($changed, ['matrix_entry_id'])),
+            ],
+        );
 
         return redirect()->route('admin.training-matrix.index')->with('status', 'Training matrix entry updated.');
     }
 
     public function destroy(TrainingMatrixEntry $trainingMatrix): RedirectResponse
     {
+        $label = $this->activityLabel($trainingMatrix);
+        $properties = $this->activityProperties($trainingMatrix, 'delete');
+        $entryId = (int) $trainingMatrix->id;
+
         $trainingMatrix->delete();
+
+        ActivityLogger::log(
+            action: 'delete',
+            description: 'Deleted training matrix row: '.$label,
+            subjectType: TrainingMatrixEntry::class,
+            subjectId: $entryId,
+            properties: $properties,
+        );
 
         return redirect()->route('admin.training-matrix.index')->with('status', 'Training matrix entry deleted.');
     }
@@ -171,5 +211,48 @@ class TrainingMatrixController extends Controller
             ],
             default => ['kind' => $kind],
         };
+    }
+
+    private function activityLabel(TrainingMatrixEntry $entry): string
+    {
+        return trim(implode(' · ', array_filter([
+            trim((string) $entry->sector),
+            trim((string) $entry->course),
+            trim((string) $entry->format),
+            trim((string) $entry->sub_option),
+        ])));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function activitySnapshot(TrainingMatrixEntry $entry): array
+    {
+        return [
+            'matrix_entry_id' => (int) $entry->id,
+            'sector' => (string) $entry->sector,
+            'course' => (string) $entry->course,
+            'course_value' => (string) $entry->course_value,
+            'format' => (string) $entry->format,
+            'sub_option' => (string) $entry->sub_option,
+            'is_active' => (bool) ($entry->is_active ?? true),
+            'kajabi_enabled' => (bool) ($entry->kajabi_enabled ?? true),
+            'min_attendees' => (int) $entry->min_attendees,
+            'max_cap' => $entry->max_cap,
+            'sort_order' => (int) ($entry->sort_order ?? 0),
+            'pricing_kind' => is_array($entry->pricing) ? ($entry->pricing['kind'] ?? null) : null,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function activityProperties(TrainingMatrixEntry $entry, string $crudAction): array
+    {
+        return [
+            'area' => 'Training Matrix',
+            'crud' => $crudAction,
+            ...$this->activitySnapshot($entry),
+        ];
     }
 }

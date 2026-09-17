@@ -3,7 +3,8 @@
         <div class="admin-page-header">
             <div>
                 <a href="{{ route('admin.enquiries.index') }}" class="text-sm text-sh-mid transition hover:text-brand">&larr; All enquiries</a>
-                <h2 class="mt-2 brand-section-title">{{ $enquiry->name }}</h2>
+                <p class="mt-2 text-xs font-semibold uppercase tracking-wide text-sh-mid">Enquiry #{{ $enquiry->id }}</p>
+                <h2 class="mt-1 brand-section-title">{{ $enquiry->name }}</h2>
                 <p class="mt-1 text-sm text-sh-mid">{{ $enquiry->email }}</p>
                 @php $headerPhone = trim((string) data_get($enquiry->form_data_json, 'phone', '')); @endphp
                 @if ($headerPhone !== '')

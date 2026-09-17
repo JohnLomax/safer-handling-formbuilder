@@ -2,7 +2,7 @@
     <x-slot name="header">
         <x-admin.page-header
             title="Activity log"
-            description="Monitor internal user logins (with IP) and changes made in the admin portal."
+            description="Audit trail of admin sign-ins and changes — enquiries, Training Matrix, users, and settings."
         />
     </x-slot>
 
@@ -18,17 +18,27 @@
                         type="search"
                         name="q"
                         value="{{ $search }}"
-                        placeholder="User, IP, description…"
+                        placeholder="User, enquiry, course, IP…"
                         class="w-full rounded-[10px] border border-sh-border px-3 py-2 text-sm"
                     />
                 </div>
 
-                <div class="min-w-[140px]">
+                <div class="min-w-[150px]">
                     <label for="activity-action" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-sh-mid">Action</label>
                     <select id="activity-action" name="action" class="w-full rounded-[10px] border border-sh-border px-3 py-2 text-sm">
                         <option value="all" @selected($actionFilter === 'all')>All actions</option>
-                        @foreach ($actions as $action)
-                            <option value="{{ $action }}" @selected($actionFilter === $action)>{{ ucfirst($action) }}</option>
+                        @foreach ($actionOptions as $actionValue => $actionLabel)
+                            <option value="{{ $actionValue }}" @selected($actionFilter === $actionValue)>{{ $actionLabel }}</option>
+                        @endforeach
+                    </select>
+                </div>
+
+                <div class="min-w-[160px]">
+                    <label for="activity-area" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-sh-mid">Area</label>
+                    <select id="activity-area" name="area" class="w-full rounded-[10px] border border-sh-border px-3 py-2 text-sm">
+                        <option value="all" @selected($areaFilter === 'all')>All areas</option>
+                        @foreach ($areaOptions as $areaValue => $areaLabel)
+                            <option value="{{ $areaValue }}" @selected($areaFilter === $areaValue)>{{ $areaLabel }}</option>
                         @endforeach
                     </select>
                 </div>
@@ -55,46 +65,58 @@
                 <table class="admin-table admin-table-fixed">
                     <thead>
                         <tr>
-                            <th class="w-[16%]">When</th>
-                            <th class="w-[18%]">User</th>
-                            <th class="w-[12%]">Action</th>
-                            <th class="w-[34%]">Details</th>
-                            <th class="w-[20%]">IP / device</th>
+                            <th class="w-[14%]">When</th>
+                            <th class="w-[16%]">User</th>
+                            <th class="w-[14%]">Action</th>
+                            <th class="w-[38%]">Details</th>
+                            <th class="w-[18%]">IP / device</th>
                         </tr>
                     </thead>
                     <tbody>
                         @forelse ($logs as $log)
+                            @php
+                                $detailRows = $log->detailRows();
+                                $areaLabel = $log->areaLabel();
+                                $subjectUrl = $log->subjectUrl();
+                            @endphp
                             <tr>
-                                <td class="text-sh-mid whitespace-nowrap">
-                                    {{ $log->created_at?->format('d M Y H:i:s') ?? '—' }}
+                                <td class="text-sh-mid whitespace-nowrap align-top">
+                                    <div class="font-medium text-sh-text">{{ $log->created_at?->format('d M Y') ?? '—' }}</div>
+                                    <div class="text-xs">{{ $log->created_at?->format('H:i:s') ?? '' }}</div>
                                 </td>
-                                <td>
+                                <td class="align-top">
                                     <div class="font-medium text-sh-text">{{ $log->user_name ?: '—' }}</div>
                                     <div class="text-xs text-sh-mid">{{ $log->user_email }}</div>
                                 </td>
-                                <td>
-                                    @php
-                                        $pill = match ($log->action) {
-                                            'login', 'create' => 'status-pill-success',
-                                            'logout', 'delete' => 'status-pill-muted',
-                                            default => 'status-pill-progress',
-                                        };
-                                    @endphp
-                                    <span class="status-pill {{ $pill }}">{{ ucfirst($log->action) }}</span>
-                                </td>
-                                <td>
-                                    <div class="text-sh-text">{{ $log->description }}</div>
-                                    @if ($log->route_name)
-                                        <div class="mt-0.5 text-xs text-sh-mid">{{ $log->route_name }}</div>
+                                <td class="align-top">
+                                    <span class="status-pill {{ $log->actionPillClass() }}">{{ $log->actionLabel() }}</span>
+                                    @if ($areaLabel)
+                                        <div class="mt-1.5 text-[11px] font-semibold uppercase tracking-wide text-sh-mid">{{ $areaLabel }}</div>
                                     @endif
                                 </td>
-                                <td>
-                                    <div class="font-medium text-sh-text">{{ $log->ip_address ?: '—' }}</div>
-                                    @if ($log->user_agent)
-                                        <div class="mt-0.5 text-xs text-sh-mid admin-table-cell-truncate" title="{{ $log->user_agent }}">
-                                            {{ \Illuminate\Support\Str::limit($log->user_agent, 48) }}
+                                <td class="align-top">
+                                    <div class="text-sm font-medium text-sh-text">{{ $log->description }}</div>
+                                    @if ($subjectUrl)
+                                        <div class="mt-1">
+                                            <a href="{{ $subjectUrl }}" class="link-brand text-xs">Open related record</a>
                                         </div>
                                     @endif
+                                    @if (count($detailRows) > 0)
+                                        <div class="mt-2 space-y-1">
+                                            @foreach ($detailRows as $row)
+                                                <div class="text-xs text-sh-mid">
+                                                    <span class="font-semibold text-sh-text/80">{{ $row['label'] }}:</span>
+                                                    {{ $row['value'] }}
+                                                </div>
+                                            @endforeach
+                                        </div>
+                                    @endif
+                                </td>
+                                <td class="align-top">
+                                    <div class="font-medium text-sh-text">{{ $log->ip_address ?: '—' }}</div>
+                                    <div class="mt-0.5 text-xs text-sh-mid" title="{{ $log->user_agent }}">
+                                        {{ $log->deviceSummary() }}
+                                    </div>
                                 </td>
                             </tr>
                         @empty

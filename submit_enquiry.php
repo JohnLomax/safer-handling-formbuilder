@@ -9,6 +9,7 @@ if (file_exists($configPath)) {
 }
 
 require_once __DIR__ . '/monday_helpers.php';
+require_once __DIR__ . '/phone_helpers.php';
 require_once __DIR__ . '/training_matrix_helpers.php';
 require_once __DIR__ . '/brevo_email.php';
 require_once __DIR__ . '/enquiry_logger.php';
@@ -92,7 +93,9 @@ function toMondayColumnValue(string $columnType, $value)
         return ['text' => (string)$value];
     }
     if ($type === 'phone' || strpos($type, 'phone') !== false) {
-        return ['phone' => (string)$value, 'countryShortName' => 'GB'];
+        $phone = normalizePhoneForApi((string) $value);
+
+        return ['phone' => $phone, 'countryShortName' => 'GB'];
     }
     if ($type === 'numbers' || $type === 'numeric') {
         return (string)$value;

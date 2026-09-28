@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/training_matrix_helpers.php';
+require_once __DIR__ . '/phone_helpers.php';
 
 /**
  * Monday `date` column JSON for the current moment (server default timezone).
@@ -623,7 +624,7 @@ function mondayCreateEnquiryItem(
 ): string {
     $name = trim($name);
     $email = trim($email);
-    $phone = trim($phone);
+    $phone = normalizePhoneForApi($phone);
     if ($name === '' || $email === '' || $emailColumnId === '') {
         throw new RuntimeException('Name, email, and Monday email column are required to create an item.');
     }
@@ -1285,8 +1286,10 @@ function mondayColumnValueForType(string $columnType, $value)
     if ($type === 'numbers' || $type === 'numeric') {
         return (string)$value;
     }
-    if ($type === 'phone') {
-        return ['phone' => (string)$value, 'countryShortName' => 'GB'];
+    if ($type === 'phone' || strpos($type, 'phone') !== false) {
+        $phone = normalizePhoneForApi((string) $value);
+
+        return ['phone' => $phone, 'countryShortName' => 'GB'];
     }
     if ($type === 'email') {
         $email = (string)$value;
@@ -1369,7 +1372,7 @@ function mondayBookingDetailsNotesBlock(array $details): string
  */
 function mondayAppendPhoneColumn(array $columns, array $columnValues, string $phone): array
 {
-    $phone = trim($phone);
+    $phone = normalizePhoneForApi($phone);
     if ($phone === '') {
         return $columnValues;
     }
@@ -1548,13 +1551,26 @@ GQL;
     ];
 
     foreach ($mappings as $mapping) {
-        $value = trim((string)($mapping['value'] ?? ''));
+        $value = trim((string) ($mapping['value'] ?? ''));
         if ($value === '') {
             continue;
         }
         [$columnId, $columnType] = mondayFindColumnByTitles($columns, $mapping['titles']);
         if ($columnId === null || isset($columnValues[$columnId])) {
             continue;
+        }
+        $columnTypeLower = strtolower(trim((string) $columnType));
+        $titlesLower = array_map(static fn ($title) => strtolower(trim((string) $title)), $mapping['titles']);
+        $isPhoneField = strpos($columnTypeLower, 'phone') !== false
+            || (bool) array_filter(
+                $titlesLower,
+                static fn ($title) => strpos($title, 'phone') !== false || $title === 'mobile' || $title === 'telephone'
+            );
+        if ($isPhoneField) {
+            $value = normalizePhoneForApi($value);
+            if ($value === '') {
+                continue;
+            }
         }
         $columnValues[$columnId] = mondayColumnValueForType($columnType, $value);
     }
@@ -2106,13 +2122,26 @@ function mondayBookingDetailsColumnValues(array $columns, array $details, string
     ];
 
     foreach ($mappings as $mapping) {
-        $value = trim((string)($mapping['value'] ?? ''));
+        $value = trim((string) ($mapping['value'] ?? ''));
         if ($value === '') {
             continue;
         }
         [$columnId, $columnType] = mondayFindColumnByTitles($columns, $mapping['titles']);
         if ($columnId === null || isset($columnValues[$columnId])) {
             continue;
+        }
+        $columnTypeLower = strtolower(trim((string) $columnType));
+        $titlesLower = array_map(static fn ($title) => strtolower(trim((string) $title)), $mapping['titles']);
+        $isPhoneField = strpos($columnTypeLower, 'phone') !== false
+            || (bool) array_filter(
+                $titlesLower,
+                static fn ($title) => strpos($title, 'phone') !== false || $title === 'mobile' || $title === 'telephone'
+            );
+        if ($isPhoneField) {
+            $value = normalizePhoneForApi($value);
+            if ($value === '') {
+                continue;
+            }
         }
         $columnValues[$columnId] = mondayColumnValueForType($columnType, $value);
     }

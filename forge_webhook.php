@@ -441,9 +441,10 @@ function forgeBuildBookingPayload(
 
     $bookerName = trim((string)($bookingDetails['bookerName'] ?? $enquiry['name'] ?? ''));
     $bookerEmail = trim((string)($bookingDetails['email'] ?? $enquiry['email'] ?? ''));
-    $bookerPhone = trim((string)($bookingDetails['phone'] ?? ''));
+    require_once __DIR__ . '/phone_helpers.php';
+    $bookerPhone = normalizePhoneForApi((string)($bookingDetails['phone'] ?? ''));
     if ($bookerPhone === '') {
-        $bookerPhone = trim((string)($formData['phone'] ?? $formData['phoneNumber'] ?? $formData['tmPhone'] ?? ''));
+        $bookerPhone = normalizePhoneForApi((string)($formData['phone'] ?? $formData['phoneNumber'] ?? $formData['tmPhone'] ?? ''));
     }
     $termsAccepted = !empty($bookingDetails['termsAccepted'])
         || trim((string)($enquiry['status'] ?? '')) === 'quote_accepted'
@@ -1005,7 +1006,8 @@ function forgeMaybeMarkProvisionalFromEnquiry(int $enquiryId, array $post = []):
     $organisation = trim((string)($formData['organisationCompany'] ?? $row['organisation_company'] ?? ''));
     $bookerName = trim((string)($formData['name'] ?? $row['name'] ?? ''));
     $bookerEmail = trim((string)($formData['email'] ?? $row['email'] ?? ''));
-    $bookerPhone = trim((string)($formData['phone'] ?? $formData['phoneNumber'] ?? $formData['tmPhone'] ?? ''));
+    require_once __DIR__ . '/phone_helpers.php';
+    $bookerPhone = normalizePhoneForApi((string)($formData['phone'] ?? $formData['phoneNumber'] ?? $formData['tmPhone'] ?? ''));
 
     $addressLines = array_values(array_filter([
         trim((string)($formData['addressLine1'] ?? $formData['tmAddressLine1'] ?? '')),
@@ -1245,26 +1247,29 @@ function forgeAdminLoadBookingDetails(int $enquiryId): array
     }
 
     if ($bookingDetails !== []) {
-        if (trim((string)($bookingDetails['phone'] ?? '')) === '') {
+        require_once __DIR__ . '/phone_helpers.php';
+        if (normalizePhoneForApi((string) ($bookingDetails['phone'] ?? '')) === '') {
             $formData = [];
-            $rawForm = trim((string)($row['form_data_json'] ?? ''));
+            $rawForm = trim((string) ($row['form_data_json'] ?? ''));
             if ($rawForm !== '') {
                 $decodedForm = json_decode($rawForm, true);
                 if (is_array($decodedForm)) {
                     $formData = $decodedForm;
                 }
             }
-            $fromForm = trim((string)($formData['phone'] ?? $formData['phoneNumber'] ?? $formData['tmPhone'] ?? ''));
+            $fromForm = normalizePhoneForApi((string) ($formData['phone'] ?? $formData['phoneNumber'] ?? $formData['tmPhone'] ?? ''));
             if ($fromForm !== '') {
                 $bookingDetails['phone'] = $fromForm;
             }
+        } else {
+            $bookingDetails['phone'] = normalizePhoneForApi((string) $bookingDetails['phone']);
         }
 
         return $bookingDetails;
     }
 
     $formData = [];
-    $rawForm = trim((string)($row['form_data_json'] ?? ''));
+    $rawForm = trim((string) ($row['form_data_json'] ?? ''));
     if ($rawForm !== '') {
         $decodedForm = json_decode($rawForm, true);
         if (is_array($decodedForm)) {
@@ -1272,10 +1277,11 @@ function forgeAdminLoadBookingDetails(int $enquiryId): array
         }
     }
 
-    $organisation = trim((string)($formData['organisationCompany'] ?? $row['organisation_company'] ?? ''));
-    $bookerName = trim((string)($formData['name'] ?? $row['name'] ?? ''));
-    $bookerEmail = trim((string)($formData['email'] ?? $row['email'] ?? ''));
-    $bookerPhone = trim((string)($formData['phone'] ?? $formData['phoneNumber'] ?? $formData['tmPhone'] ?? ''));
+    $organisation = trim((string) ($formData['organisationCompany'] ?? $row['organisation_company'] ?? ''));
+    $bookerName = trim((string) ($formData['name'] ?? $row['name'] ?? ''));
+    $bookerEmail = trim((string) ($formData['email'] ?? $row['email'] ?? ''));
+    require_once __DIR__ . '/phone_helpers.php';
+    $bookerPhone = normalizePhoneForApi((string) ($formData['phone'] ?? $formData['phoneNumber'] ?? $formData['tmPhone'] ?? ''));
 
     $addressLines = array_values(array_filter([
         trim((string)($formData['addressLine1'] ?? $formData['tmAddressLine1'] ?? '')),

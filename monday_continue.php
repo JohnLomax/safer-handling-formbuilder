@@ -22,7 +22,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 $name = trim((string)($_POST['name'] ?? ''));
 $email = trim((string)($_POST['email'] ?? ''));
-$phone = trim((string)($_POST['phone'] ?? ''));
+$phone = normalizePhoneForApi((string)($_POST['phone'] ?? ''));
 $enquiryType = trim((string)($_POST['enquiryType'] ?? ''));
 
 if ($name === '' || $email === '' || $phone === '' || $enquiryType === '') {

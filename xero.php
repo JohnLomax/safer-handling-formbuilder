@@ -852,7 +852,8 @@ function xeroEnsureContactAddress(
 
     $addresses = xeroContactAddressesPayload($address);
     $email = trim($email);
-    $phone = trim($phone);
+    require_once __DIR__ . '/phone_helpers.php';
+    $phone = normalizePhoneForApi($phone);
 
     // Name is intentionally ignored: renaming can collide with another active contact.
     unset($name);

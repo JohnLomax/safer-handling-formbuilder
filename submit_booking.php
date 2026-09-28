@@ -10,6 +10,7 @@ if (file_exists($configPath)) {
 
 require_once __DIR__ . '/enquiry_logger.php';
 require_once __DIR__ . '/brevo_email.php';
+require_once __DIR__ . '/phone_helpers.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
@@ -55,7 +56,7 @@ if (is_array($existing) && trim((string)($existing['booking_submitted_at'] ?? ''
 $bookerName = trim((string)($_POST['bookerName'] ?? ''));
 $organisation = trim((string)($_POST['organisation'] ?? ''));
 $email = trim((string)($_POST['email'] ?? ''));
-$phone = trim((string)($_POST['phone'] ?? ''));
+$phone = normalizePhoneForApi((string)($_POST['phone'] ?? ''));
 $preferredDate = enquiryPreferredDateOnly((string)($_POST['preferredDate'] ?? ($_POST['preferredDateTime'] ?? '')));
 $dateNotSureRaw = $_POST['dateNotSure'] ?? null;
 $dateNotSure = $dateNotSureRaw !== null
@@ -74,7 +75,7 @@ $specialRequests = trim((string)($_POST['specialRequests'] ?? ''));
 $invoiceName = trim((string)($_POST['invoiceName'] ?? ''));
 $invoiceEmail = trim((string)($_POST['invoiceEmail'] ?? ''));
 $invoiceAddress = trim((string)($_POST['invoiceAddress'] ?? ''));
-$invoicePhone = trim((string)($_POST['invoicePhone'] ?? ''));
+$invoicePhone = normalizePhoneForApi((string)($_POST['invoicePhone'] ?? ''));
 $purchaseOrderNumber = trim((string)($_POST['purchaseOrderNumber'] ?? ''));
 $venueRequirements = isset($_POST['venueRequirements']);
 $termsAccepted = isset($_POST['termsAccepted']);

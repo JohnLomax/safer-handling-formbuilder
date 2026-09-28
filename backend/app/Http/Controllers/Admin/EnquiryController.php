@@ -117,6 +117,7 @@ class EnquiryController extends Controller
         require_once $root.'/config.php';
         require_once $root.'/enquiry_logger.php';
         require_once $root.'/monday_helpers.php';
+        require_once $root.'/phone_helpers.php';
 
         $dateNotSure = $request->boolean('dateNotSure');
         $preferredDate = enquiryPreferredDateOnly((string) ($validated['preferredDate'] ?? ''));
@@ -214,7 +215,7 @@ class EnquiryController extends Controller
             'bookerName' => trim($validated['bookerName']),
             'organisation' => trim((string) ($validated['organisation'] ?? '')),
             'email' => trim($validated['email']),
-            'phone' => trim($validated['phone']),
+            'phone' => normalizePhoneForApi((string) $validated['phone']),
             'preferredDate' => $preferredDate,
             'dateNotSure' => $dateNotSure,
             'venueAddress' => trim($validated['venueAddress']),
@@ -227,7 +228,7 @@ class EnquiryController extends Controller
             'invoiceName' => trim($validated['invoiceName']),
             'invoiceEmail' => trim($validated['invoiceEmail']),
             'invoiceAddress' => trim($validated['invoiceAddress']),
-            'invoicePhone' => trim((string) ($validated['invoicePhone'] ?? '')),
+            'invoicePhone' => normalizePhoneForApi((string) ($validated['invoicePhone'] ?? '')),
             'purchaseOrderNumber' => trim((string) ($validated['purchaseOrderNumber'] ?? '')),
             'termsAccepted' => true,
             'source' => $enquiry->hasBookingDetails() ? 'admin_edit' : 'admin_manual',

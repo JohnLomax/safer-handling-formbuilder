@@ -355,6 +355,61 @@ function forgeOrgAddressFields(array $formData): array
 }
 
 /**
+ * @param array<string, mixed> $formData
+ * @return array{line_1:string,line_2:string,city:string,postcode:string}
+ */
+function forgeDay2AddressFields(array $formData): array
+{
+    return [
+        'line_1' => trim((string)($formData['day2AddressLine1'] ?? '')),
+        'line_2' => trim((string)($formData['day2AddressLine2'] ?? '')),
+        'city' => trim((string)($formData['day2AddressTown'] ?? '')),
+        'postcode' => trim((string)($formData['day2AddressPostcode'] ?? '')),
+    ];
+}
+
+/**
+ * @param array{line_1:string,line_2:string,city:string,postcode:string} $address
+ * @param string $fallbackLocation
+ * @return array<string, mixed>
+ */
+function forgeSessionDateFromParsed(
+    int $enquiryId,
+    int $index,
+    array $parsedDate,
+    array $address,
+    string $fallbackLocation
+): array {
+    $location = $fallbackLocation;
+    if ($address['line_1'] !== '') {
+        $location = $address['line_1'];
+    } elseif ($address['city'] !== '') {
+        $location = $address['city'];
+    }
+
+    $session = [
+        'id' => forgeSessionDateId($enquiryId, $index),
+        'date' => $parsedDate['date'],
+        'start_time' => $parsedDate['start_time'],
+        'location' => $location,
+    ];
+    if ($address['line_1'] !== '') {
+        $session['loc_address_line_1'] = $address['line_1'];
+    }
+    if ($address['line_2'] !== '') {
+        $session['loc_address_line_2'] = $address['line_2'];
+    }
+    if ($address['city'] !== '') {
+        $session['loc_address_city'] = $address['city'];
+    }
+    if ($address['postcode'] !== '') {
+        $session['loc_address_postcode'] = $address['postcode'];
+    }
+
+    return $session;
+}
+
+/**
  * Resolve Monday / Forge course value (not the customer-facing course label).
  *
  * @param array<string, mixed> $enquiry
@@ -496,29 +551,47 @@ function forgeBuildBookingPayload(
     // to_rearrange / cancelled: clear session date-times so Forge shows nothing active to rearrange/cancel.
     $clearSessions = in_array($bookingStatus, ['to_rearrange', 'cancelled'], true);
     $dateNotSure = !empty($enquiry['date_not_sure']);
+    $enableSecondDate = !empty($enquiry['enable_second_date'])
+        || !empty($formData['enableSecondDate'])
+        || trim((string)($formData['enableSecondDate'] ?? '')) === '1';
+    $day1Address = $orgAddress;
+    $day2Address = forgeDay2AddressFields($formData);
+    // Booking venue (Accept Quote) overrides Day 1 location when present.
+    $day1SessionAddress = ($venueAddress['line_1'] !== '' || $venueAddress['postcode'] !== '')
+        ? $venueAddress
+        : $day1Address;
+    $day1LocationFallback = $venueLocation !== '' ? $venueLocation : $organisation;
+
     $parsedDate = ($clearSessions || $dateNotSure)
         ? null
-        : forgeParsePreferredDateTime($enquiry['preferred_date_time'] ?? null);
+        : forgeParsePreferredDateTime($enquiry['preferred_date_time'] ?? ($formData['preferredDateTime'] ?? $formData['preferredDate'] ?? null));
     if ($parsedDate !== null) {
-        $session = [
-            'id' => forgeSessionDateId($enquiryId, 1),
-            'date' => $parsedDate['date'],
-            'start_time' => $parsedDate['start_time'],
-            'location' => $venueLocation !== '' ? $venueLocation : $organisation,
-        ];
-        if ($venueAddress['line_1'] !== '') {
-            $session['loc_address_line_1'] = $venueAddress['line_1'];
-        }
-        if ($venueAddress['line_2'] !== '') {
-            $session['loc_address_line_2'] = $venueAddress['line_2'];
-        }
-        if ($venueAddress['city'] !== '') {
-            $session['loc_address_city'] = $venueAddress['city'];
-        }
-        if ($venueAddress['postcode'] !== '') {
-            $session['loc_address_postcode'] = $venueAddress['postcode'];
-        }
-        $sessionDates[] = $session;
+        $sessionDates[] = forgeSessionDateFromParsed(
+            $enquiryId,
+            1,
+            $parsedDate,
+            $day1SessionAddress,
+            $day1LocationFallback
+        );
+    }
+
+    $parsedDate2 = null;
+    if ($enableSecondDate && ! $clearSessions && ! $dateNotSure) {
+        $parsedDate2 = forgeParsePreferredDateTime(
+            $enquiry['preferred_date_2'] ?? ($formData['preferredDate2'] ?? $formData['preferredDateTime2'] ?? null)
+        );
+    }
+    if ($parsedDate2 !== null) {
+        $day2Fallback = $day2Address['line_1'] !== ''
+            ? $day2Address['line_1']
+            : ($organisation !== '' ? $organisation : $day1LocationFallback);
+        $sessionDates[] = forgeSessionDateFromParsed(
+            $enquiryId,
+            2,
+            $parsedDate2,
+            $day2Address['line_1'] !== '' || $day2Address['postcode'] !== '' ? $day2Address : $day1SessionAddress,
+            $day2Fallback
+        );
     }
 
     $payload = [
@@ -729,7 +802,7 @@ function forgeMaybeSyncBooking(
     enquiryLoggerEnsureForgeColumns();
     $stmt = $pdo->prepare(
         'SELECT id, name, email, status, organisation_company, org_course, trainer_course_select,
-                preferred_date_time, date_not_sure, attendees, matrix_attendees, trainer_attendees,
+                preferred_date_time, preferred_date_2, enable_second_date, date_not_sure, attendees, matrix_attendees, trainer_attendees,
                 form_data_json, forge_synced_at, forge_booking_status, xero_invoice_sent_at
          FROM enquiries WHERE id = :id LIMIT 1'
     );
@@ -1228,7 +1301,8 @@ function forgeAdminLoadBookingDetails(int $enquiryId): array
     $pdo = enquiryLoggerPdo();
     $stmt = $pdo->prepare(
         'SELECT id, name, email, organisation_company, form_data_json, booking_details_json,
-                forge_synced_at, forge_booking_status, preferred_date_time, date_not_sure
+                forge_synced_at, forge_booking_status, preferred_date_time, preferred_date_2,
+                enable_second_date, date_not_sure
          FROM enquiries WHERE id = :id LIMIT 1'
     );
     $stmt->execute([':id' => $enquiryId]);

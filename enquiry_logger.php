@@ -113,6 +113,8 @@ function enquiryLoggerEnsureSchema(PDO $pdo): void
     enquiryLoggerEnsureColumn($pdo, 'enquiries', 'forge_event_id', 'TEXT');
     enquiryLoggerEnsureColumn($pdo, 'enquiries', 'forge_last_action', 'TEXT');
     enquiryLoggerEnsureColumn($pdo, 'enquiries', 'forge_booking_status', 'TEXT');
+    enquiryLoggerEnsureColumn($pdo, 'enquiries', 'preferred_date_2', 'TEXT');
+    enquiryLoggerEnsureColumn($pdo, 'enquiries', 'enable_second_date', 'INTEGER DEFAULT 0');
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_enquiries_resume_token ON enquiries(resume_token)');
 
     $ready = true;
@@ -490,7 +492,7 @@ function enquiryLoggerMarkResumeEmailSent(int $enquiryId): void
  * Stored as YYYY-MM-DD (date only). "Not sure" clears the date.
  *
  * @param array<string, mixed> $post
- * @return array{preferredDateTime: string, dateNotSure: bool}
+ * @return array{preferredDateTime: string, preferredDate2: string, dateNotSure: bool, enableSecondDate: bool}
  */
 function enquiryPreferredDateFromPost(array $post): array
 {
@@ -502,31 +504,37 @@ function enquiryPreferredDateFromPost(array $post): array
         && $rawNotSure !== false
         && strtolower((string)$rawNotSure) !== 'false';
 
+    $rawSecond = $post['enableSecondDate'] ?? null;
+    $enableSecondDate = $rawSecond !== null
+        && $rawSecond !== ''
+        && $rawSecond !== '0'
+        && $rawSecond !== 0
+        && $rawSecond !== false
+        && strtolower((string)$rawSecond) !== 'false';
+
     $preferredDate = trim((string)($post['preferredDate'] ?? ''));
     $pdt = trim((string)($post['preferredDateTime'] ?? ''));
     if ($preferredDate === '' && $pdt !== '') {
         $preferredDate = $pdt;
     }
 
-    $dateOnly = '';
-    if ($preferredDate !== '') {
-        // Keep calendar date only — never let a time/timezone suffix shift the day.
-        if (preg_match('/^(\d{4}-\d{2}-\d{2})/', str_replace(' ', 'T', $preferredDate), $matches)) {
-            $candidate = $matches[1];
-            $dt = \DateTimeImmutable::createFromFormat('!Y-m-d', $candidate, new \DateTimeZone('Europe/London'));
-            if ($dt !== false && $dt->format('Y-m-d') === $candidate) {
-                $dateOnly = $candidate;
-            }
-        }
-    }
+    $dateOnly = enquiryPreferredDateOnly($preferredDate);
+    $date2Only = enquiryPreferredDateOnly((string)($post['preferredDate2'] ?? ($post['preferredDateTime2'] ?? '')));
 
     if ($dateNotSure) {
         $dateOnly = '';
+        $date2Only = '';
+    }
+
+    if (! $enableSecondDate) {
+        $date2Only = '';
     }
 
     return [
         'preferredDateTime' => $dateOnly,
+        'preferredDate2' => $date2Only,
         'dateNotSure' => $dateNotSure,
+        'enableSecondDate' => $enableSecondDate,
     ];
 }
 
@@ -625,6 +633,17 @@ function enquiryPostWithNormalisedPreferredDate(array $post): array
     } else {
         unset($out['preferredDateTime'], $out['preferredDate']);
     }
+    if ($preferred['enableSecondDate'] && $preferred['preferredDate2'] !== '') {
+        $out['preferredDate2'] = $preferred['preferredDate2'];
+        $out['preferredDateTime2'] = $preferred['preferredDate2'];
+    } else {
+        unset($out['preferredDate2'], $out['preferredDateTime2']);
+    }
+    if ($preferred['enableSecondDate']) {
+        $out['enableSecondDate'] = '1';
+    } else {
+        unset($out['enableSecondDate']);
+    }
     if ($preferred['dateNotSure']) {
         $out['dateNotSure'] = 'on';
     } else {
@@ -670,6 +689,8 @@ function enquiryLoggerUpdateFromPost(int $enquiryId, array $post, string $status
             matrix_attendees = :matrix_attendees,
             organisation_company = :organisation_company,
             preferred_date_time = :preferred_date_time,
+            preferred_date_2 = :preferred_date_2,
+            enable_second_date = :enable_second_date,
             date_not_sure = :date_not_sure,
             attendees = :attendees,
             extra_notes = :extra_notes,
@@ -696,6 +717,8 @@ function enquiryLoggerUpdateFromPost(int $enquiryId, array $post, string $status
         ':matrix_attendees' => isset($post['matrixAttendees']) && $post['matrixAttendees'] !== '' ? (int)$post['matrixAttendees'] : null,
         ':organisation_company' => trim((string)($post['organisationCompany'] ?? '')),
         ':preferred_date_time' => $preferred['preferredDateTime'],
+        ':preferred_date_2' => $preferred['preferredDate2'] !== '' ? $preferred['preferredDate2'] : null,
+        ':enable_second_date' => $preferred['enableSecondDate'] ? 1 : 0,
         ':date_not_sure' => $preferred['dateNotSure'] ? 1 : 0,
         ':attendees' => isset($post['attendees']) && $post['attendees'] !== '' ? (int)$post['attendees'] : null,
         ':extra_notes' => trim((string)($post['extraNotes'] ?? '')),

@@ -314,8 +314,11 @@
                     </div>
                     <nav class="help-nav">
                         <a class="is-section" href="#using-the-system"><span class="help-nav-dot"></span>How to use the system</a>
+                        <a href="#whats-new"><span class="help-nav-dot"></span>What's new</a>
                         <a href="#walkthrough"><span class="help-nav-dot"></span>Video walkthrough</a>
                         <a href="#enquiry-journey"><span class="help-nav-dot"></span>Enquiry journey</a>
+                        <a href="#form-paths"><span class="help-nav-dot"></span>Form paths (It's for me)</a>
+                        <a href="#second-date"><span class="help-nav-dot"></span>Second date courses</a>
                         <a href="#enquiry-page"><span class="help-nav-dot"></span>Working an enquiry</a>
                         <a href="#delete-enquiry"><span class="help-nav-dot"></span>Delete an enquiry</a>
                         <a href="#activity-log"><span class="help-nav-dot"></span>Activity log</a>
@@ -323,6 +326,7 @@
                         <a href="#booking"><span class="help-nav-dot"></span>Booking & terms</a>
                         <a href="#integrations"><span class="help-nav-dot"></span>Integrations</a>
                         <a href="#forge-delivery-stages"><span class="help-nav-dot"></span>Forge delivery stages</a>
+                        <a class="is-section" href="#vouchers"><span class="help-nav-dot"></span>Vouchers</a>
                         <a class="is-section" href="#training-matrix"><span class="help-nav-dot"></span>Training Matrix</a>
                         <a href="#adding-to-form"><span class="help-nav-dot"></span>Adding to the form / skill matrix</a>
                         <a href="#matrix-fields"><span class="help-nav-dot"></span>Matrix fields</a>
@@ -359,7 +363,16 @@
                             </div>
                             <div>
                                 <h4>Training Matrix</h4>
-                                <p>Controls organisation course options, live quote pricing, and whether Kajabi auto-invite runs for each combination.</p>
+                                <p>Controls organisation and It’s for me course options, live quote pricing, second-date courses, and whether Kajabi auto-invite runs for each combination.</p>
+                            </div>
+                        </div>
+                        <div class="help-feature-card">
+                            <div class="help-icon" style="background:#fff7e8;color:#9a6700;">
+                                <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 6v.75m0 3v.75m0 3v.75m0 3V18m-9-5.25h5.25M7.5 15h3M3.375 5.25c-.621 0-1.125.504-1.125 1.125v3.026a2.999 2.999 0 010 5.198v3.026c0 .621.504 1.125 1.125 1.125h17.25c.621 0 1.125-.504 1.125-1.125v-3.026a2.999 2.999 0 010-5.198V6.375c0-.621-.504-1.125-1.125-1.125H3.375z" /></svg>
+                            </div>
+                            <div>
+                                <h4>Vouchers</h4>
+                                <p>Create fixed £ discount codes. Staff apply them on enquiries; customers can enter a code on the live quote form.</p>
                             </div>
                         </div>
                         <div class="help-feature-card">
@@ -378,6 +391,51 @@
                             <div>
                                 <h4>Integration settings</h4>
                                 <p>Monday, Brevo, Xero, Kajabi, Forge, postcodes, and email open tracking — under your profile menu.</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="whats-new" class="brand-panel help-section help-stack scroll-mt-6">
+                    <div>
+                        <h2 class="text-lg font-semibold text-brand-header">What's new</h2>
+                        <p class="text-sm text-sh-mid" style="margin-top:0.35rem;">Recent features added to the enquiry form and admin tools.</p>
+                    </div>
+                    <div class="help-card-grid">
+                        <div class="help-feature-card">
+                            <div class="help-icon" style="background:#eef7ff;color:#0255a4;">
+                                <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" /></svg>
+                            </div>
+                            <div>
+                                <h4>It's for me — book a course</h4>
+                                <p>Individuals can pick Sector → Course → Format → Course Style → Attendees from the Training Matrix (same live quote as organisations). See <a href="#form-paths" class="link-brand">Form paths</a>.</p>
+                            </div>
+                        </div>
+                        <div class="help-feature-card">
+                            <div class="help-icon" style="background:#f3f9e8;color:#3f6d1c;">
+                                <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" /></svg>
+                            </div>
+                            <div>
+                                <h4>Enable second date</h4>
+                                <p>Matrix rows can collect Day 1 + Day 2 dates and addresses. Both go to Monday, emails, and Forge <code class="rounded bg-sh-surface px-1 text-xs">session_dates</code>. See <a href="#second-date" class="link-brand">Second date courses</a>.</p>
+                            </div>
+                        </div>
+                        <div class="help-feature-card">
+                            <div class="help-icon" style="background:#fff7e8;color:#9a6700;">
+                                <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 6v.75m0 3v.75m0 3v.75m0 3V18m-9-5.25h5.25M7.5 15h3M3.375 5.25c-.621 0-1.125.504-1.125 1.125v3.026a2.999 2.999 0 010 5.198v3.026c0 .621.504 1.125 1.125 1.125h17.25c.621 0 1.125-.504 1.125-1.125v-3.026a2.999 2.999 0 010-5.198V6.375c0-.621-.504-1.125-1.125-1.125H3.375z" /></svg>
+                            </div>
+                            <div>
+                                <h4>Vouchers</h4>
+                                <p>Fixed £ discount codes with optional max redemptions and date windows. Customers and staff can apply them on live quotes. See <a href="#vouchers" class="link-brand">Vouchers</a>.</p>
+                            </div>
+                        </div>
+                        <div class="help-feature-card">
+                            <div class="help-icon">
+                                <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
+                            </div>
+                            <div>
+                                <h4>Max capacity description</h4>
+                                <p>Optional note on a matrix row explaining why attendees cannot exceed the max — shown on the form when someone tries to go over.</p>
                             </div>
                         </div>
                     </div>
@@ -443,7 +501,7 @@
                         <div class="help-step-card">
                             <div class="help-step-num">2</div>
                             <h4>Training & live quote</h4>
-                            <p>Organisation path uses the Training Matrix: sector → course → format → style → attendees → date. If only one format or course style is available, the form shows it as a prefilled label instead of a dropdown.</p>
+                            <p>Organisation and It’s for me (book a course) paths use the Training Matrix: sector → course → format → style → attendees → date (or Day 1 + Day 2 when Enable second date is on). If only one format or course style is available, the form shows it as a prefilled label instead of a dropdown.</p>
                         </div>
                         <div class="help-step-card">
                             <div class="help-step-num">3</div>
@@ -496,6 +554,101 @@
                     </div>
                 </section>
 
+                <section id="form-paths" class="brand-panel help-section help-stack scroll-mt-6">
+                    <div class="help-section-head">
+                        <div>
+                            <h3 class="text-base font-semibold text-brand-header">Form paths — It's for me &amp; My organisation</h3>
+                            <p class="text-sm text-sh-mid">How customers choose a training path on the public enquiry form.</p>
+                        </div>
+                    </div>
+
+                    <div class="help-step-grid">
+                        <div class="help-step-card">
+                            <div class="help-step-num">1</div>
+                            <h4>Audience</h4>
+                            <p>Customer chooses <strong class="text-sh-text">It's for me</strong> or <strong class="text-sh-text">My organisation</strong>.</p>
+                        </div>
+                        <div class="help-step-card">
+                            <div class="help-step-num">2</div>
+                            <h4>It's for me options</h4>
+                            <p>
+                                <strong class="text-sh-text">Book a training course</strong> — Training Matrix selectors (sector, course, format, style, attendees) plus address and preferred date.<br>
+                                <strong class="text-sh-text">Online course</strong> — redirects to the Kajabi store.<br>
+                                <strong class="text-sh-text">Become a trainer</strong> — trainer course list and quote / book flow.
+                            </p>
+                        </div>
+                        <div class="help-step-card">
+                            <div class="help-step-num">3</div>
+                            <h4>My organisation</h4>
+                            <p>Same matrix selectors as “Book a training course”, plus optional company name. Live quote and voucher field apply the same way.</p>
+                        </div>
+                        <div class="help-step-card">
+                            <div class="help-step-num">4</div>
+                            <h4>Change selection</h4>
+                            <p>
+                                After a path is chosen, the form shows a summary with <strong class="text-sh-text">Change selection</strong> (keeps the previous choice preselected).
+                                On the organisation path, <strong class="text-sh-text">It's for me instead</strong> switches back and restores the last personal option.
+                                On the It's for me path, <strong class="text-sh-text">My organisation instead</strong> switches to the organisation path.
+                            </p>
+                        </div>
+                    </div>
+
+                    <ul class="list-disc text-sm text-sh-mid">
+                        <li>It's for me → book a course does not ask for company/organisation.</li>
+                        <li>Monday notes / It's for me column are updated when an individual books via the matrix.</li>
+                        <li>Quotes, emails, and Forge sync use the same matrix course value as organisation bookings.</li>
+                    </ul>
+                </section>
+
+                <section id="second-date" class="brand-panel help-section help-stack scroll-mt-6">
+                    <div class="help-section-head">
+                        <div>
+                            <h3 class="text-base font-semibold text-brand-header">Second date courses</h3>
+                            <p class="text-sm text-sh-mid">Two-day matrix courses with Day 1 and Day 2 dates and addresses.</p>
+                        </div>
+                        <a href="{{ route('admin.training-matrix.index') }}" class="btn-brand-outline text-xs">Open Training Matrix</a>
+                    </div>
+
+                    <div class="help-card-grid">
+                        <div class="help-feature-card">
+                            <div class="help-icon">
+                                <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                            </div>
+                            <div>
+                                <h4>Turn it on</h4>
+                                <p>Edit a Training Matrix row and tick <strong class="text-sh-text">Enable second date</strong>.</p>
+                            </div>
+                        </div>
+                        <div class="help-feature-card">
+                            <div class="help-icon">
+                                <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" /></svg>
+                            </div>
+                            <div>
+                                <h4>On the form</h4>
+                                <p>Customers enter Day 1 date + address and Day 2 date + address (each with postcode lookup). “Not sure yet” clears both dates.</p>
+                            </div>
+                        </div>
+                        <div class="help-feature-card">
+                            <div class="help-icon">
+                                <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" /></svg>
+                            </div>
+                            <div>
+                                <h4>Emails &amp; admin</h4>
+                                <p>Quote and lead emails show Day 1 / Day 2. The enquiry page lists both dates and addresses.</p>
+                            </div>
+                        </div>
+                        <div class="help-feature-card">
+                            <div class="help-icon">
+                                <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" /></svg>
+                            </div>
+                            <div>
+                                <h4>Monday &amp; Forge</h4>
+                                <p>Monday notes include Day 1 / Day 2 (and a Day 2 date column if the board has one). Forge receives two objects in <code class="rounded bg-sh-surface px-1 text-xs">session_dates</code>.</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
                 <section id="enquiry-page" class="brand-panel help-section help-stack scroll-mt-6">
                     <div class="help-section-head">
                         <div>
@@ -509,6 +662,7 @@
                         <li><strong class="text-sh-text">Edit form</strong> opens the customer enquiry form with saved details.</li>
                         <li><strong class="text-sh-text">View / Edit booking</strong> lets staff complete Accept Quote details for the client.</li>
                         <li>Preferred date can be “Not sure yet”; staff can set it later in booking edit.</li>
+                        <li>Matrix rows with <strong class="text-sh-text">Enable second date</strong> collect Day 1 + Day 2 dates and addresses; Forge receives both as <code class="rounded bg-sh-surface px-1 text-xs">session_dates</code>.</li>
                         <li>Once Quote Won, the customer enquiry form is locked from further online edits.</li>
                         <li><strong class="text-sh-text">Delete enquiry</strong> removes the record from this admin system — see <a href="#delete-enquiry" class="link-brand">Delete an enquiry</a>.</li>
                     </ul>
@@ -523,9 +677,10 @@
                     </div>
                     <ul class="list-disc text-sm text-sh-mid">
                         <li>On the enquiry page, use <strong class="text-sh-text">Delete enquiry</strong> in the header.</li>
-                        <li>You will be asked: <em>Are you sure you want to delete this enquiry from the system?</em></li>
+                        <li>On the Enquiries list, tick one or more rows and use <strong class="text-sh-text">Delete selected</strong>. A confirmation popup asks if you are sure before anything is removed.</li>
+                        <li>You will be asked: <em>Are you sure you want to delete this enquiry from the system?</em> (or the selected count for bulk delete).</li>
                         <li><strong class="text-sh-text">Monday is not deleted</strong> — the Monday board item stays as it is.</li>
-                        <li>If the enquiry has an active Forge booking, that booking is <strong class="text-sh-text">cancelled in Forge</strong> first. If Forge cancel fails, the enquiry is not deleted.</li>
+                        <li>If the enquiry has an active Forge booking, that booking is <strong class="text-sh-text">cancelled in Forge</strong> first. If Forge cancel fails, that enquiry is not deleted.</li>
                         <li>The enquiry, its journey timeline, and related booking uploads are removed from this system.</li>
                         <li>Xero quotes/invoices and Kajabi enrollments are <strong class="text-sh-text">not</strong> deleted remotely.</li>
                         <li>Every confirmed delete is written to the <a href="{{ route('admin.activity.index') }}" class="link-brand">Activity</a> audit log (who deleted which enquiry, and whether Forge was cancelled).</li>
@@ -771,11 +926,55 @@
                     </p>
                 </section>
 
+                <section id="vouchers" class="brand-panel help-section help-stack scroll-mt-6">
+                    <div class="help-section-head">
+                        <div>
+                            <h2 class="text-lg font-semibold text-brand-header">Vouchers</h2>
+                            <p class="text-sm text-sh-mid">Fixed-amount discounts deducted from the quote net (ex VAT) before Monday and Xero.</p>
+                        </div>
+                        <a href="{{ route('admin.vouchers.index') }}" class="btn-brand-outline text-xs">Open Vouchers</a>
+                    </div>
+
+                    <div class="help-step-grid">
+                        <div class="help-step-card">
+                            <div class="help-step-num">1</div>
+                            <h4>Create a voucher</h4>
+                            <p>Add a code, name, and fixed £ amount. Optionally set active dates, a redemption limit, and notes. Codes are stored uppercase with spaces removed.</p>
+                        </div>
+                        <div class="help-step-card">
+                            <div class="help-step-num">2</div>
+                            <h4>See assigned quotes</h4>
+                            <p>Open a voucher to list every enquiry that used it, with original quote net, discount, and final net.</p>
+                        </div>
+                        <div class="help-step-card">
+                            <div class="help-step-num">3</div>
+                            <h4>Staff apply on an enquiry</h4>
+                            <p>On the enquiry page, use Apply voucher with the code. One voucher per enquiry. Remove restores the original quote net.</p>
+                        </div>
+                        <div class="help-step-card">
+                            <div class="help-step-num">4</div>
+                            <h4>Customers on the form</h4>
+                            <p>Organisation and trainer quote paths — and It’s for me → book a course — show an optional voucher field under the live quote. Submit stores the discounted net for Monday / Xero.</p>
+                        </div>
+                    </div>
+
+                    <ul class="mt-4 list-disc space-y-2 pl-5 text-sm text-sh-mid">
+                        <li>Discounts never go below £0.00 — a £100 voucher on an £80 quote becomes £0.00.</li>
+                        <li><strong class="text-sh-text">Max redemptions</strong> (optional) caps how many enquiries can use the code. Leave blank for unlimited. When the limit is reached the voucher shows as Fully used.</li>
+                        <li>Valid from / until dates restrict when the code can be applied (optional).</li>
+                        <li>Applying or removing a voucher regenerates and emails a new Xero quote when one was already sent.</li>
+                        <li>Quote Won enquiries cannot have vouchers applied or changed — the field is greyed out with an explanation.</li>
+                        <li>If a quote was already emailed, applying a voucher later updates the stored net and regenerates the Xero quote PDF email.</li>
+                        <li>Deleting a voucher clears the link on enquiries but keeps the discount history fields on those enquiries.</li>
+                        <li>It's for me (book a course) and organisation paths both show the voucher field under the live quote.</li>
+                    </ul>
+                </section>
+
                 <section id="training-matrix" class="brand-panel help-section help-stack scroll-mt-6">
                     <div class="help-section-head">
                         <div>
                             <h2 class="text-lg font-semibold text-brand-header">Training Matrix</h2>
-                            <p class="text-sm text-sh-mid">The skill / course catalogue that powers organisation live quotes on the public form.</p>
+                            <p class="text-sm text-sh-mid">The skill / course catalogue that powers organisation and It’s for me live quotes on the public form.</p>
                         </div>
                         <a href="{{ route('admin.training-matrix.index') }}" class="btn-brand-outline text-xs">Open Training Matrix</a>
                     </div>
@@ -801,10 +1000,11 @@
                     </div>
 
                     <ul class="list-disc text-sm text-sh-mid">
-                        <li>Each row is one selectable combination: sector, course, format, course style, attendee limits, pricing, and Kajabi invite setting.</li>
+                        <li>Each row is one selectable combination: sector, course, format, course style, attendee limits, pricing, Kajabi invite, and optional second date.</li>
                         <li>Only <strong class="text-sh-text">Active</strong> rows appear on the public form.</li>
-                        <li>Customers only see valid matrix combinations.</li>
+                        <li>Customers only see valid matrix combinations — used by both <strong class="text-sh-text">My organisation</strong> and <strong class="text-sh-text">It's for me → Book a training course</strong>.</li>
                         <li><strong class="text-sh-text">Enable Kajabi</strong> is on by default. When on, Quote Won auto-invites Accept Quote students to the online Legal Briefing course; when off, no invite is sent and the enquiry shows “Kajabi is disabled for this course combination”.</li>
+                        <li><strong class="text-sh-text">Enable second date</strong> asks for Day 1 and Day 2 on the form — see <a href="#second-date" class="link-brand">Second date courses</a>.</li>
                         <li>On the public form, if a course has only one format or course style, that value is shown as a fixed label (not a dropdown).</li>
                         <li>Use the (?) help buttons on the matrix form for field-level tips.</li>
                         <li>Lower sort order numbers appear first.</li>
@@ -873,10 +1073,21 @@
                                     <td class="text-sh-mid">Limits and starting value for the attendee stepper.</td>
                                 </tr>
                                 <tr>
+                                    <td class="font-medium text-sh-text">Max capacity description</td>
+                                    <td class="text-sh-mid">Optional reason for the max cap. Shown on the enquiry / edit enquiry form when someone tries to go above the maximum.</td>
+                                </tr>
+                                <tr>
                                     <td class="font-medium text-sh-text">Enable Kajabi</td>
                                     <td class="text-sh-mid">
                                         Defaults to on. When checked, Quote Won automatically invites each Accept Quote student to the Legal Briefing course in Kajabi.
                                         Uncheck to skip Kajabi for this combination — the enquiry admin page shows that Kajabi is disabled and Enroll in Kajabi is not offered.
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td class="font-medium text-sh-text">Enable second date</td>
+                                    <td class="text-sh-mid">
+                                        When checked, the enquiry form asks for Day 1 and Day 2 dates plus a separate address for each day.
+                                        Those dates are stored on the enquiry, written to Monday notes (and a Day 2 date column if present), shown in quote emails, and sent to Forge as two <code class="rounded bg-sh-surface px-1 text-xs">session_dates</code>.
                                     </td>
                                 </tr>
                                 <tr>

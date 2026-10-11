@@ -55,6 +55,10 @@
             'title' => 'Max cap',
             'body' => "Optional upper limit for attendees on this course option.\n\nLeave blank if there is no maximum. When set, the form will not allow a higher headcount.",
         ],
+        'max_cap_description' => [
+            'title' => 'Max capacity description',
+            'body' => "Optional explanation shown on the enquiry form when someone tries to go above the Max cap.\n\nLeave blank to show no extra message — the form still blocks higher numbers.",
+        ],
         'default_attendees' => [
             'title' => 'Default attendees',
             'body' => "Optional starting attendee value when this course option is selected.\n\nIf blank, the form uses the minimum attendees value instead.",
@@ -124,6 +128,10 @@
         'kajabi_enabled' => [
             'title' => 'Enable Kajabi',
             'body' => "When checked, Quote Won automatically invites Accept Quote students to the online Legal Briefing course in Kajabi.\n\nUncheck to skip Kajabi for this course combination. The enquiry admin page will show that Kajabi is disabled for the combination.",
+        ],
+        'enable_second_date' => [
+            'title' => 'Enable second date',
+            'body' => "When checked, the enquiry form asks for Day 1 and Day 2 dates plus a separate address for each day.\n\nThose dates are stored on the enquiry, written to Monday notes, shown in quote emails, and sent to Forge as two session_dates.",
         ],
     ];
 
@@ -234,6 +242,21 @@
         </div>
     </div>
 
+    <div>
+        <div class="flex items-center gap-1.5">
+            <x-input-label for="{{ $formId }}_max_cap_description" value="Max capacity description" />
+            <x-field-help-button :title="$help('max_cap_description')['title']" :body="$help('max_cap_description')['body']" />
+        </div>
+        <textarea
+            id="{{ $formId }}_max_cap_description"
+            name="max_cap_description"
+            rows="3"
+            maxlength="2000"
+            class="mt-1 block w-full rounded-[10px] border-[#b9d4ef] text-[#133a59] shadow-sm focus:border-brand focus:ring-brand"
+            placeholder="Shown on the form when someone tries to exceed the max cap"
+        >{{ $value('max_cap_description') }}</textarea>
+    </div>
+
     <div class="rounded-[12px] border border-sh-border bg-sh-surface/50 p-4">
         <h4 class="text-sm font-semibold text-brand-header">Pricing</h4>
         <div class="mt-3 grid gap-4 md:grid-cols-2">
@@ -337,5 +360,12 @@
         <input id="{{ $formId }}_kajabi_enabled" name="kajabi_enabled" type="checkbox" value="1" class="rounded border-[#b9d4ef] text-brand shadow-sm focus:ring-brand" @checked($restoreOld ? (string) old('kajabi_enabled', '1') === '1' : ($isEdit ? ($entry->kajabi_enabled ?? true) : true))>
         <span class="text-sm text-sh-text">Enable Kajabi (auto-invite Legal Briefing course)</span>
         <x-field-help-button :title="$help('kajabi_enabled')['title']" :body="$help('kajabi_enabled')['body']" />
+    </label>
+
+    <label class="flex items-center gap-2 rounded-[10px] border border-sh-border bg-white px-3 py-2.5">
+        <input type="hidden" name="enable_second_date" value="0">
+        <input id="{{ $formId }}_enable_second_date" name="enable_second_date" type="checkbox" value="1" class="rounded border-[#b9d4ef] text-brand shadow-sm focus:ring-brand" @checked($restoreOld ? (string) old('enable_second_date', '0') === '1' : ($isEdit ? ($entry->enable_second_date ?? false) : false))>
+        <span class="text-sm text-sh-text">Enable second date (Day 1 + Day 2 on the form)</span>
+        <x-field-help-button :title="$help('enable_second_date')['title']" :body="$help('enable_second_date')['body']" />
     </label>
 </form>

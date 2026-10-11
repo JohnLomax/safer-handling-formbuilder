@@ -15,10 +15,12 @@ class TrainingMatrixEntry extends Model
         'sub_option',
         'min_attendees',
         'max_cap',
+        'max_cap_description',
         'default_attendees',
         'pricing',
         'is_active',
         'kajabi_enabled',
+        'enable_second_date',
         'sort_order',
     ];
 
@@ -28,6 +30,7 @@ class TrainingMatrixEntry extends Model
     protected $attributes = [
         'is_active' => true,
         'kajabi_enabled' => true,
+        'enable_second_date' => false,
     ];
 
     protected function casts(): array
@@ -36,6 +39,7 @@ class TrainingMatrixEntry extends Model
             'pricing' => 'array',
             'is_active' => 'boolean',
             'kajabi_enabled' => 'boolean',
+            'enable_second_date' => 'boolean',
             'min_attendees' => 'integer',
             'max_cap' => 'integer',
             'default_attendees' => 'integer',
@@ -58,11 +62,17 @@ class TrainingMatrixEntry extends Model
             'maxCap' => $this->max_cap,
             'pricing' => $this->pricing ?? [],
             'kajabiEnabled' => (bool) ($this->kajabi_enabled ?? true),
+            'enableSecondDate' => (bool) ($this->enable_second_date ?? false),
         ];
 
         $description = trim((string) ($this->course_description ?? ''));
         if ($description !== '') {
             $row['courseDescription'] = $description;
+        }
+
+        $maxCapDescription = trim((string) ($this->max_cap_description ?? ''));
+        if ($maxCapDescription !== '') {
+            $row['maxCapDescription'] = $maxCapDescription;
         }
 
         if ($this->default_attendees !== null) {

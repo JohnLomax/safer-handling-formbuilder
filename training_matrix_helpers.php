@@ -307,6 +307,13 @@ function trainingMatrixResolveOrganisationSubmission(array $post): array
 
     require_once __DIR__ . '/enquiry_logger.php';
     $preferred = enquiryPreferredDateFromPost($post);
+    if (! $preferred['enableSecondDate'] && !empty($row['enableSecondDate'])) {
+        $preferred['enableSecondDate'] = true;
+        $preferred['preferredDate2'] = enquiryPreferredDateOnly((string)($post['preferredDate2'] ?? ($post['preferredDateTime2'] ?? '')));
+        if ($preferred['dateNotSure']) {
+            $preferred['preferredDate2'] = '';
+        }
+    }
 
     return [
         'sector' => (string)$row['sector'],
@@ -319,6 +326,8 @@ function trainingMatrixResolveOrganisationSubmission(array $post): array
         'trainersRequired' => (string)trainingMatrixTrainersRequired($attendees),
         'quoteValue' => trainingMatrixFormatQuoteValue($quoteNumeric),
         'preferredDateTime' => $preferred['preferredDateTime'],
+        'preferredDate2' => $preferred['preferredDate2'],
+        'enableSecondDate' => $preferred['enableSecondDate'] ? '1' : '0',
         'dateNotSure' => $preferred['dateNotSure'] ? '1' : '0',
         'extraNotes' => trim((string)($post['extraNotes'] ?? '')),
     ];

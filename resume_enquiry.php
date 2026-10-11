@@ -54,14 +54,24 @@ try {
     // Prefer dedicated columns when form JSON is missing/stale (common after edits).
     $preferredFromColumns = [
         'preferredDateTime' => trim((string)($row['preferred_date_time'] ?? '')),
+        'preferredDate2' => trim((string)($row['preferred_date_2'] ?? '')),
+        'enableSecondDate' => !empty($row['enable_second_date']) ? '1' : null,
         'dateNotSure' => !empty($row['date_not_sure']) ? 'on' : null,
     ];
     if ($preferredFromColumns['preferredDateTime'] !== '') {
         $formData['preferredDateTime'] = $preferredFromColumns['preferredDateTime'];
     }
+    if (!empty($preferredFromColumns['enableSecondDate'])) {
+        $formData['enableSecondDate'] = '1';
+        if ($preferredFromColumns['preferredDate2'] !== '') {
+            $formData['preferredDate2'] = $preferredFromColumns['preferredDate2'];
+        }
+    } else {
+        unset($formData['enableSecondDate'], $formData['preferredDate2'], $formData['preferredDateTime2']);
+    }
     if ($preferredFromColumns['dateNotSure'] !== null) {
         $formData['dateNotSure'] = 'on';
-        unset($formData['preferredDateTime']);
+        unset($formData['preferredDateTime'], $formData['preferredDate2'], $formData['preferredDateTime2']);
     } else {
         unset($formData['dateNotSure']);
     }

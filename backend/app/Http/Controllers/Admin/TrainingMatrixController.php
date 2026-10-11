@@ -137,6 +137,7 @@ class TrainingMatrixController extends Controller
             'sub_option' => ['required', 'string', 'max:255'],
             'min_attendees' => ['required', 'integer', 'min:1', 'max:999'],
             'max_cap' => ['nullable', 'integer', 'min:1', 'max:999'],
+            'max_cap_description' => ['nullable', 'string', 'max:2000'],
             'default_attendees' => ['nullable', 'integer', 'min:1', 'max:999'],
             'pricing_kind' => ['required', 'string', 'in:addonBands,addonBandsLinear,addonBandsPer4621,flat,flatUnlimited,perDelegate'],
             'base_to_12' => ['nullable', 'numeric', 'min:0'],
@@ -148,6 +149,7 @@ class TrainingMatrixController extends Controller
             'per_delegate_rate' => ['nullable', 'numeric', 'min:0'],
             'is_active' => ['nullable', 'boolean'],
             'kajabi_enabled' => ['nullable', 'boolean'],
+            'enable_second_date' => ['nullable', 'boolean'],
             'sort_order' => ['nullable', 'integer', 'min:0'],
         ];
     }
@@ -167,10 +169,12 @@ class TrainingMatrixController extends Controller
             'sub_option' => $validated['sub_option'],
             'min_attendees' => $validated['min_attendees'],
             'max_cap' => $validated['max_cap'] ?? null,
+            'max_cap_description' => trim((string) ($validated['max_cap_description'] ?? '')) ?: null,
             'default_attendees' => $validated['default_attendees'] ?? null,
             'pricing' => $this->buildPricing($validated),
             'is_active' => $request->boolean('is_active'),
             'kajabi_enabled' => $request->boolean('kajabi_enabled'),
+            'enable_second_date' => $request->boolean('enable_second_date'),
             'sort_order' => $validated['sort_order'] ?? 0,
         ];
     }
@@ -237,8 +241,10 @@ class TrainingMatrixController extends Controller
             'sub_option' => (string) $entry->sub_option,
             'is_active' => (bool) ($entry->is_active ?? true),
             'kajabi_enabled' => (bool) ($entry->kajabi_enabled ?? true),
+            'enable_second_date' => (bool) ($entry->enable_second_date ?? false),
             'min_attendees' => (int) $entry->min_attendees,
             'max_cap' => $entry->max_cap,
+            'max_cap_description' => $entry->max_cap_description,
             'sort_order' => (int) ($entry->sort_order ?? 0),
             'pricing_kind' => is_array($entry->pricing) ? ($entry->pricing['kind'] ?? null) : null,
         ];

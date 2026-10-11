@@ -291,28 +291,46 @@ function appTrainingMatrixRows(): array
     }
 
     try {
-        $sql = 'SELECT sector, course, course_value, course_description, format, sub_option, min_attendees, max_cap, default_attendees, pricing, kajabi_enabled
+        $sql = 'SELECT sector, course, course_value, course_description, format, sub_option, min_attendees, max_cap, max_cap_description, default_attendees, pricing, kajabi_enabled, enable_second_date
              FROM training_matrix_entries
              WHERE is_active = 1
              ORDER BY sort_order ASC, id ASC';
         try {
             $stmt = $pdo->query($sql);
         } catch (Throwable $e) {
-            // Older DBs before kajabi_enabled / course_description migrations.
+            // Older DBs before enable_second_date / max_cap_description / kajabi_enabled / course_description migrations.
             try {
                 $stmt = $pdo->query(
-                    'SELECT sector, course, course_value, course_description, format, sub_option, min_attendees, max_cap, default_attendees, pricing
+                    'SELECT sector, course, course_value, course_description, format, sub_option, min_attendees, max_cap, max_cap_description, default_attendees, pricing, kajabi_enabled
                      FROM training_matrix_entries
                      WHERE is_active = 1
                      ORDER BY sort_order ASC, id ASC'
                 );
             } catch (Throwable $e2) {
-                $stmt = $pdo->query(
-                    'SELECT sector, course, course_value, format, sub_option, min_attendees, max_cap, default_attendees, pricing
-                     FROM training_matrix_entries
-                     WHERE is_active = 1
-                     ORDER BY sort_order ASC, id ASC'
-                );
+                try {
+                    $stmt = $pdo->query(
+                        'SELECT sector, course, course_value, course_description, format, sub_option, min_attendees, max_cap, default_attendees, pricing, kajabi_enabled
+                         FROM training_matrix_entries
+                         WHERE is_active = 1
+                         ORDER BY sort_order ASC, id ASC'
+                    );
+                } catch (Throwable $e3) {
+                    try {
+                        $stmt = $pdo->query(
+                            'SELECT sector, course, course_value, course_description, format, sub_option, min_attendees, max_cap, default_attendees, pricing
+                             FROM training_matrix_entries
+                             WHERE is_active = 1
+                             ORDER BY sort_order ASC, id ASC'
+                        );
+                    } catch (Throwable $e4) {
+                        $stmt = $pdo->query(
+                            'SELECT sector, course, course_value, format, sub_option, min_attendees, max_cap, default_attendees, pricing
+                             FROM training_matrix_entries
+                             WHERE is_active = 1
+                             ORDER BY sort_order ASC, id ASC'
+                        );
+                    }
+                }
             }
         }
         if ($stmt === false) {
@@ -337,11 +355,19 @@ function appTrainingMatrixRows(): array
                 'kajabiEnabled' => array_key_exists('kajabi_enabled', $row)
                     ? (bool)$row['kajabi_enabled']
                     : true,
+                'enableSecondDate' => array_key_exists('enable_second_date', $row)
+                    ? (bool)$row['enable_second_date']
+                    : false,
             ];
 
             $courseDescription = trim((string)($row['course_description'] ?? ''));
             if ($courseDescription !== '') {
                 $item['courseDescription'] = $courseDescription;
+            }
+
+            $maxCapDescription = trim((string)($row['max_cap_description'] ?? ''));
+            if ($maxCapDescription !== '') {
+                $item['maxCapDescription'] = $maxCapDescription;
             }
 
             if ($row['default_attendees'] !== null) {

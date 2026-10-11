@@ -68,6 +68,136 @@ class EnquiryProcessRetry
             && ($this->isTrainerFlow($enquiry) || $this->isOrganisationTrainingFlow($enquiry));
     }
 
+    /**
+     * Create and email a fresh Xero quote after the quote net changes (e.g. voucher apply/remove).
+     * Blocked when the enquiry is already Quote Won.
+     *
+     * @return array{regenerated:bool,channel:?string,message:string}
+     */
+    public function regenerateQuoteAfterVoucherChange(Enquiry $enquiry): array
+    {
+        $this->bootFormHelpers();
+
+        if ($enquiry->status === 'quote_won') {
+            throw new RuntimeException('Can\'t apply a voucher because this enquiry is Quote Won.');
+        }
+
+        if (! $this->isTrainerFlow($enquiry) && ! $this->isOrganisationTrainingFlow($enquiry)) {
+            return [
+                'regenerated' => false,
+                'channel' => null,
+                'message' => 'This enquiry is not on a live-quote path.',
+            ];
+        }
+
+        $hadQuote = $enquiry->quote_email_sent_at !== null
+            || $enquiry->xero_quote_sent_at !== null
+            || filled($enquiry->xero_quote_id)
+            || $this->hasSuccessfulEvent($enquiry, 'quote_email_sent');
+
+        if (! $hadQuote) {
+            return [
+                'regenerated' => false,
+                'channel' => null,
+                'message' => 'No quote has been sent yet — the next quote send will use the updated amount.',
+            ];
+        }
+
+        if (! xeroEnabled() && ! brevoEmailEnabled()) {
+            return [
+                'regenerated' => false,
+                'channel' => null,
+                'message' => 'Xero/Brevo quote sending is disabled, so the quote was not regenerated.',
+            ];
+        }
+
+        $enquiry->refresh();
+        $quoteData = $this->buildQuoteEmailData($enquiry);
+        if ($enquiry->quote_net_final !== null) {
+            $quoteData['quoteValue'] = number_format((float) $enquiry->quote_net_final, 2, '.', '');
+        } elseif ($enquiry->quote_net_original !== null && ! $enquiry->hasVoucher()) {
+            $quoteData['quoteValue'] = number_format((float) $enquiry->quote_net_original, 2, '.', '');
+        }
+
+        $quoteData['enquiryId'] = (int) $enquiry->id;
+        $quoteData['resumeToken'] = enquiryLoggerEnsureResumeToken((int) $enquiry->id);
+        $quoteData['email'] = (string) $enquiry->email;
+        $quoteData['name'] = (string) $enquiry->name;
+
+        try {
+            $result = sendQuoteToClient((string) $enquiry->email, (string) $enquiry->name, $quoteData);
+            $enquiry->forceFill(['quote_email_sent_at' => now()])->save();
+
+            if (($result['channel'] ?? '') === 'xero') {
+                $quote = $result['xero']['quote'] ?? [];
+                $contact = $result['xero']['contact'] ?? [];
+                $enquiry->forceFill([
+                    'xero_contact_id' => $contact['ContactID'] ?? $enquiry->xero_contact_id,
+                    'xero_quote_id' => $quote['QuoteID'] ?? $enquiry->xero_quote_id,
+                    'xero_quote_number' => $quote['QuoteNumber'] ?? $enquiry->xero_quote_number,
+                    'xero_quote_sent_at' => now(),
+                ])->save();
+
+                $this->logEvent(
+                    $enquiry,
+                    'quote_email_sent',
+                    'Xero quote regenerated and emailed after voucher change (PDF attached).',
+                    [
+                        'channel' => 'xero',
+                        'regenerated' => true,
+                        'reason' => 'voucher_change',
+                        'xero_quote_id' => $quote['QuoteID'] ?? null,
+                        'xero_quote_number' => $quote['QuoteNumber'] ?? null,
+                        'xero_contact_id' => $contact['ContactID'] ?? null,
+                        'subtotal' => $quote['SubTotal'] ?? null,
+                        'vat' => $quote['TotalTax'] ?? null,
+                        'total' => $quote['Total'] ?? null,
+                        'brevo_message_id' => $result['brevo_message_id'] ?? null,
+                        'email_kind' => 'quote',
+                    ]
+                );
+
+                return [
+                    'regenerated' => true,
+                    'channel' => 'xero',
+                    'message' => 'Xero quote regenerated and emailed to the customer.',
+                ];
+            }
+
+            $this->logEvent(
+                $enquiry,
+                'quote_email_sent',
+                'Quote confirmation regenerated and emailed after voucher change.',
+                [
+                    'channel' => 'brevo',
+                    'regenerated' => true,
+                    'reason' => 'voucher_change',
+                    'brevo_message_id' => $result['brevo_message_id'] ?? null,
+                    'email_kind' => 'quote',
+                ]
+            );
+
+            return [
+                'regenerated' => true,
+                'channel' => 'brevo',
+                'message' => 'Quote email regenerated and sent to the customer.',
+            ];
+        } catch (Throwable $e) {
+            $this->logEvent(
+                $enquiry,
+                'quote_email_failed',
+                'Could not regenerate quote after voucher change.',
+                [
+                    'regenerated' => false,
+                    'reason' => 'voucher_change',
+                    'error' => $e->getMessage(),
+                ]
+            );
+
+            throw $e;
+        }
+    }
+
     public function canRetryLeadNotification(Enquiry $enquiry): bool
     {
         return in_array($enquiry->status, ['submitted', 'contacted', 'quote_sent', 'quote_accepted'], true)
@@ -784,7 +914,16 @@ class EnquiryProcessRetry
 
     private function isOrganisationTrainingFlow(Enquiry $enquiry): bool
     {
-        return $enquiry->enquiry_type === 'training' && $enquiry->audience_type === 'organisation';
+        if ($enquiry->enquiry_type !== 'training') {
+            return false;
+        }
+
+        if ($enquiry->audience_type === 'organisation') {
+            return true;
+        }
+
+        return $enquiry->audience_type === 'me'
+            && in_array((string) $enquiry->personal_goal, ['bookCourse', ''], true);
     }
 
     /**

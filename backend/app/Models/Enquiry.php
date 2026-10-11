@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\Concerns\InterpretsUtcTimestamps;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Enquiry extends Model
@@ -27,9 +28,16 @@ class Enquiry extends Model
         'matrix_attendees',
         'organisation_company',
         'preferred_date_time',
+        'preferred_date_2',
+        'enable_second_date',
         'date_not_sure',
         'attendees',
         'extra_notes',
+        'voucher_id',
+        'voucher_code',
+        'voucher_amount',
+        'quote_net_original',
+        'quote_net_final',
         'form_data_json',
         'booking_details_json',
         'monday_item_id',
@@ -66,8 +74,12 @@ class Enquiry extends Model
         return [
             'booking_via_company' => 'boolean',
             'date_not_sure' => 'boolean',
+            'enable_second_date' => 'boolean',
             'form_data_json' => 'array',
             'booking_details_json' => 'array',
+            'voucher_amount' => 'decimal:2',
+            'quote_net_original' => 'decimal:2',
+            'quote_net_final' => 'decimal:2',
             'monday_synced_at' => 'datetime',
             'quote_email_sent_at' => 'datetime',
             'xero_quote_sent_at' => 'datetime',
@@ -88,6 +100,16 @@ class Enquiry extends Model
     public function events(): HasMany
     {
         return $this->hasMany(EnquiryEvent::class)->orderBy('created_at');
+    }
+
+    public function voucher(): BelongsTo
+    {
+        return $this->belongsTo(Voucher::class);
+    }
+
+    public function hasVoucher(): bool
+    {
+        return $this->voucher_id !== null || filled($this->voucher_code);
     }
 
     public function isMondaySynced(): bool
@@ -147,6 +169,37 @@ class Enquiry extends Model
         }
 
         $raw = trim((string) $this->preferred_date_time);
+        if ($raw === '') {
+            return '';
+        }
+
+        if (! preg_match('/^\d{4}-\d{2}-\d{2}/', $raw)) {
+            return $raw;
+        }
+
+        $dateOnly = substr(str_replace(' ', 'T', $raw), 0, 10);
+        $dt = \DateTimeImmutable::createFromFormat('!Y-m-d', $dateOnly, new \DateTimeZone('Europe/London'));
+        if ($dt === false || $dt->format('Y-m-d') !== $dateOnly) {
+            return $raw;
+        }
+
+        return $dt->format('l j F Y');
+    }
+
+    /**
+     * Human-readable Day 2 preferred date for admin display.
+     */
+    public function preferredDate2Label(): string
+    {
+        if (! $this->enable_second_date) {
+            return '';
+        }
+
+        if ($this->date_not_sure) {
+            return 'Not sure yet';
+        }
+
+        $raw = trim((string) $this->preferred_date_2);
         if ($raw === '') {
             return '';
         }

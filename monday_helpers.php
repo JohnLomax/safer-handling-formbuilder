@@ -53,13 +53,50 @@ function mondayStripPreferredDateNoteLines(string $notes): string
     $lines = preg_split('/\r\n|\r|\n/', $notes) ?: [];
     $kept = [];
     foreach ($lines as $line) {
-        if (preg_match('/^preferred date(\s*\/\s*time)?\s*:/i', trim((string) $line))) {
+        $trimmed = trim((string) $line);
+        if (preg_match('/^preferred date(\s*\/\s*time)?\s*:/i', $trimmed)) {
+            continue;
+        }
+        if (preg_match('/^day\s*[12]\s*(date|address)\s*:/i', $trimmed)) {
             continue;
         }
         $kept[] = $line;
     }
 
     return trim(implode("\n", $kept));
+}
+
+/**
+ * Day 2 address parts from POST / form data.
+ *
+ * @param array<string, mixed> $post
+ * @return array<string, string>
+ */
+function mondayDay2AddressFromPost(array $post): array
+{
+    return [
+        'addressLine1' => trim((string)($post['day2AddressLine1'] ?? '')),
+        'addressLine2' => trim((string)($post['day2AddressLine2'] ?? '')),
+        'addressTown' => trim((string)($post['day2AddressTown'] ?? '')),
+        'addressPostcode' => trim((string)($post['day2AddressPostcode'] ?? '')),
+        'addressLat' => trim((string)($post['day2AddressLat'] ?? '')),
+        'addressLng' => trim((string)($post['day2AddressLng'] ?? '')),
+    ];
+}
+
+/**
+ * Single-line address for Monday notes.
+ *
+ * @param array<string, string> $address
+ */
+function mondayAddressSingleLine(array $address): string
+{
+    return trim(implode(', ', array_filter([
+        $address['addressLine1'] ?? '',
+        $address['addressLine2'] ?? '',
+        $address['addressTown'] ?? '',
+        $address['addressPostcode'] ?? '',
+    ], static fn ($part): bool => trim((string) $part) !== '')));
 }
 
 /**

@@ -8,6 +8,7 @@ use App\Http\Controllers\Admin\HelpController;
 use App\Http\Controllers\Admin\SettingController;
 use App\Http\Controllers\Admin\TrainingMatrixController;
 use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\Admin\VoucherController;
 use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
 
@@ -24,6 +25,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::get('/dashboard/chart', [DashboardController::class, 'chart'])->name('dashboard.chart');
 
     Route::get('/enquiries', [EnquiryController::class, 'index'])->name('enquiries.index');
+    Route::delete('/enquiries/bulk', [EnquiryController::class, 'bulkDestroy'])->name('enquiries.bulk-destroy');
     Route::get('/enquiries/{enquiry}', [EnquiryController::class, 'show'])->name('enquiries.show');
     Route::delete('/enquiries/{enquiry}', [EnquiryController::class, 'destroy'])->name('enquiries.destroy');
     Route::post('/enquiries/{enquiry}/booking', [EnquiryController::class, 'updateBooking'])->name('enquiries.booking.update');
@@ -39,6 +41,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/enquiries/{enquiry}/forge/resync', [EnquiryController::class, 'forgeResync'])->name('enquiries.forge.resync');
     Route::post('/enquiries/{enquiry}/forge/cancel', [EnquiryController::class, 'forgeCancel'])->name('enquiries.forge.cancel');
     Route::post('/enquiries/{enquiry}/events/{event}/retry', [EnquiryController::class, 'retryEvent'])->name('enquiries.retry.event');
+    Route::post('/enquiries/{enquiry}/voucher', [EnquiryController::class, 'applyVoucher'])->name('enquiries.voucher.apply');
+    Route::delete('/enquiries/{enquiry}/voucher', [EnquiryController::class, 'removeVoucher'])->name('enquiries.voucher.remove');
 
     Route::get('/feedback', [FeedbackController::class, 'index'])->name('feedback.index');
     Route::get('/feedback/export', [FeedbackController::class, 'export'])->name('feedback.export');
@@ -56,6 +60,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::resource('training-matrix', TrainingMatrixController::class)
         ->parameters(['training-matrix' => 'trainingMatrix'])
         ->except(['show']);
+
+    Route::resource('vouchers', VoucherController::class);
 
     Route::get('/help', [HelpController::class, 'index'])->name('help.index');
 

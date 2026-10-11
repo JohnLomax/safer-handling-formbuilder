@@ -170,9 +170,12 @@
                                     </td>
                                     <td class="text-sh-mid">{{ $enquiry->created_at?->format('d M Y H:i') }}</td>
                                     <td>
-                                        <x-admin.table-action :href="route('admin.enquiries.show', $enquiry)" icon="chevron">
-                                            View
-                                        </x-admin.table-action>
+                                        <x-admin.table-action
+                                            :href="route('admin.enquiries.show', $enquiry)"
+                                            icon="eye"
+                                            title="View"
+                                            aria-label="View"
+                                        />
                                     </td>
                                 </tr>
                             @empty

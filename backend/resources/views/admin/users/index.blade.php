@@ -41,16 +41,23 @@
                                 </td>
                                 <td>
                                     <div class="admin-table-actions">
-                                        <x-admin.table-action :href="route('admin.users.edit', $user)" icon="edit">
-                                            Edit
-                                        </x-admin.table-action>
+                                        <x-admin.table-action
+                                            :href="route('admin.users.edit', $user)"
+                                            icon="edit"
+                                            title="Edit"
+                                            aria-label="Edit"
+                                        />
                                         @if (auth()->id() !== $user->id)
                                             <form action="{{ route('admin.users.destroy', $user) }}" method="POST" class="inline" onsubmit="return confirm('Delete this user?')">
                                                 @csrf
                                                 @method('DELETE')
-                                                <x-admin.table-action type="submit" variant="danger" icon="delete">
-                                                    Delete
-                                                </x-admin.table-action>
+                                                <x-admin.table-action
+                                                    type="submit"
+                                                    variant="danger"
+                                                    icon="delete"
+                                                    title="Delete"
+                                                    aria-label="Delete"
+                                                />
                                             </form>
                                         @endif
                                     </div>

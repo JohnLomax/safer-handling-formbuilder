@@ -59,15 +59,22 @@
                                 </td>
                                 <td>
                                     <div class="admin-table-actions">
-                                        <x-admin.table-action :href="route('admin.training-matrix.edit', $entry)" icon="edit">
-                                            Edit
-                                        </x-admin.table-action>
+                                        <x-admin.table-action
+                                            :href="route('admin.training-matrix.edit', $entry)"
+                                            icon="edit"
+                                            title="Edit"
+                                            aria-label="Edit"
+                                        />
                                         <form action="{{ route('admin.training-matrix.destroy', $entry) }}" method="POST" class="inline" onsubmit="return confirm('Delete this row?')">
                                             @csrf
                                             @method('DELETE')
-                                            <x-admin.table-action type="submit" variant="danger" icon="delete">
-                                                Delete
-                                            </x-admin.table-action>
+                                            <x-admin.table-action
+                                                type="submit"
+                                                variant="danger"
+                                                icon="delete"
+                                                title="Delete"
+                                                aria-label="Delete"
+                                            />
                                         </form>
                                     </div>
                                 </td>

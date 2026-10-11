@@ -13,6 +13,109 @@ require_once __DIR__ . '/phone_helpers.php';
 require_once __DIR__ . '/training_matrix_helpers.php';
 require_once __DIR__ . '/brevo_email.php';
 require_once __DIR__ . '/enquiry_logger.php';
+require_once __DIR__ . '/voucher_helpers.php';
+
+/**
+ * Apply a posted voucher code to a quote net and persist on the enquiry.
+ *
+ * @return array{quoteValue:string,applied:bool,changed:bool,error:?string,discount:float,original:float}
+ */
+function submitEnquiryApplyVoucher(?int $enquiryId, string $quoteValue, array $post): array
+{
+    $code = trim((string) ($post['voucherCode'] ?? ''));
+    $original = is_numeric(preg_replace('/[^0-9.\-]/', '', $quoteValue) ?? '')
+        ? (float) preg_replace('/[^0-9.\-]/', '', $quoteValue)
+        : 0.0;
+
+    $out = [
+        'quoteValue' => voucherFormatQuoteValue($original),
+        'applied' => false,
+        'changed' => false,
+        'error' => null,
+        'discount' => 0.0,
+        'original' => $original,
+    ];
+
+    if ($enquiryId !== null) {
+        try {
+            $pdo = enquiryLoggerPdo();
+            $stmt = $pdo->prepare('SELECT status, voucher_code FROM enquiries WHERE id = :id LIMIT 1');
+            $stmt->execute([':id' => $enquiryId]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            $status = strtolower(trim((string) ($row['status'] ?? '')));
+            $existingCode = voucherNormalizeCode((string) ($row['voucher_code'] ?? ''));
+            if ($status === 'quote_won') {
+                if ($code !== '' || $existingCode !== '') {
+                    $out['error'] = 'Can\'t apply a voucher because this enquiry is Quote Won.';
+                }
+
+                return $out;
+            }
+        } catch (Throwable) {
+            // continue without status gate if lookup fails
+            $existingCode = '';
+        }
+    } else {
+        $existingCode = '';
+    }
+
+    if ($code === '') {
+        if ($enquiryId !== null) {
+            try {
+                if ($existingCode !== '') {
+                    voucherClearFromEnquiry($enquiryId);
+                    $out['changed'] = true;
+                } else {
+                    voucherClearFromEnquiry($enquiryId);
+                }
+            } catch (Throwable) {
+                // ignore clear failures on fresh enquiries without columns yet
+            }
+        }
+
+        return $out;
+    }
+
+    $result = voucherApplyToQuoteNet($original, $code, $enquiryId);
+    if (! $result['ok'] || $result['voucher'] === null) {
+        $out['error'] = $result['error'] ?? 'That voucher could not be applied.';
+
+        return $out;
+    }
+
+    $out['quoteValue'] = $result['final_formatted'];
+    $out['applied'] = true;
+    $out['changed'] = true;
+    $out['discount'] = (float) $result['discount'];
+    $out['original'] = (float) $result['original'];
+
+    if ($enquiryId !== null) {
+        voucherAttachToEnquiry(
+            $enquiryId,
+            $result['voucher'],
+            (float) $result['original'],
+            (float) $result['final'],
+            (float) $result['discount']
+        );
+        enquiryLoggerSafe(function () use ($enquiryId, $result): void {
+            enquiryLoggerEvent(
+                $enquiryId,
+                'voucher_applied',
+                'Voucher '.$result['voucher']['code'].' applied (−£'.voucherFormatQuoteValue((float) $result['discount']).').',
+                [
+                    'voucher_id' => $result['voucher']['id'],
+                    'voucher_code' => $result['voucher']['code'],
+                    'discount' => $result['discount'],
+                    'original' => $result['original'],
+                    'final' => $result['final'],
+                    'source' => 'customer',
+                ]
+            );
+        });
+    }
+
+    return $out;
+}
 
 /**
  * @return array{status:int,body:array<string,mixed>}
@@ -482,6 +585,10 @@ GQL;
     $deliveryPreferenceColumnType = '';
     $preferredDateColumnId = null;
     $preferredDateColumnType = '';
+    $preferredDate2ColumnId = null;
+    $preferredDate2ColumnType = '';
+    $itsForMeColumnId = null;
+    $itsForMeColumnType = '';
     $quoteValueColumnId = null;
     $quoteValueColumnType = '';
     $companyColumnId = null;
@@ -518,9 +625,29 @@ GQL;
             'preferred datetime',
             'preferred day',
             'preferred day(s)',
+            'day 1 date',
+            'day1 date',
         ], true)) {
             $preferredDateColumnId = $id;
             $preferredDateColumnType = $type;
+        }
+        if ($preferredDate2ColumnId === null && in_array($title, [
+            'day 2 date',
+            'day2 date',
+            'preferred date 2',
+            'preferred date2',
+            'second date',
+        ], true)) {
+            $preferredDate2ColumnId = $id;
+            $preferredDate2ColumnType = $type;
+        }
+        if ($itsForMeColumnId === null && in_array($title, [
+            "it's for me",
+            'its for me',
+            'it’s for me',
+        ], true)) {
+            $itsForMeColumnId = $id;
+            $itsForMeColumnType = $type;
         }
         if ($quoteValueColumnId === null && $title === 'quote value') {
             $quoteValueColumnId = $id;
@@ -568,24 +695,53 @@ GQL;
     require_once __DIR__ . '/enquiry_logger.php';
     $preferred = enquiryPreferredDateFromPost([
         'preferredDateTime' => $orgData['preferredDateTime'] ?? '',
+        'preferredDate2' => $orgData['preferredDate2'] ?? '',
+        'enableSecondDate' => $orgData['enableSecondDate'] ?? null,
         'dateNotSure' => (($orgData['dateNotSure'] ?? '') === '1') ? 'on' : null,
     ]);
     $preferredDateTime = $preferred['preferredDateTime'];
+    $preferredDate2 = $preferred['preferredDate2'];
+    $enableSecondDate = $preferred['enableSecondDate'];
     $dateNotSure = $preferred['dateNotSure'];
 
     $noteLines = [];
+    if (!empty($orgData['itsForMe'])) {
+        $noteLines[] = "It's for me: Yes";
+    }
     if (($orgData['organisationCompany'] ?? '') !== '') {
         $noteLines[] = 'Company/Organisation: ' . trim((string)$orgData['organisationCompany']);
     }
     if (($orgData['courseStyle'] ?? '') !== '') {
         $noteLines[] = 'Course Style: ' . trim($orgData['courseStyle']);
     }
+    require_once __DIR__ . '/brevo_email.php';
     if ($dateNotSure) {
-        $noteLines[] = 'Preferred date: not sure yet';
+        $noteLines[] = $enableSecondDate ? 'Day 1 date: not sure yet' : 'Preferred date: not sure yet';
+        if ($enableSecondDate) {
+            $noteLines[] = 'Day 2 date: not sure yet';
+        }
+    } elseif ($enableSecondDate) {
+        if ($preferredDateTime !== '') {
+            $formattedPreferred = formatPreferredTrainingDate($preferredDateTime, false);
+            $noteLines[] = 'Day 1 date: ' . ($formattedPreferred !== '' ? $formattedPreferred : $preferredDateTime);
+        }
+        if ($preferredDate2 !== '') {
+            $formattedPreferred2 = formatPreferredTrainingDate($preferredDate2, false);
+            $noteLines[] = 'Day 2 date: ' . ($formattedPreferred2 !== '' ? $formattedPreferred2 : $preferredDate2);
+        }
     } elseif ($preferredDateTime !== '') {
-        require_once __DIR__ . '/brevo_email.php';
         $formattedPreferred = formatPreferredTrainingDate($preferredDateTime, false);
         $noteLines[] = 'Preferred date: ' . ($formattedPreferred !== '' ? $formattedPreferred : $preferredDateTime);
+    }
+    $day1AddressLine = mondayAddressSingleLine(mondayAddressFromPost($orgData));
+    if ($day1AddressLine !== '') {
+        $noteLines[] = ($enableSecondDate ? 'Day 1 address: ' : 'Address: ') . $day1AddressLine;
+    }
+    if ($enableSecondDate) {
+        $day2AddressLine = mondayAddressSingleLine(mondayDay2AddressFromPost($orgData));
+        if ($day2AddressLine !== '') {
+            $noteLines[] = 'Day 2 address: ' . $day2AddressLine;
+        }
     }
     if (($orgData['trainersRequired'] ?? '') !== '') {
         $noteLines[] = 'Number of trainers required: ' . trim((string)$orgData['trainersRequired']);
@@ -668,6 +824,31 @@ GQL;
             }
         } else {
             $columnValues[$preferredDateColumnId] = toMondayColumnValue($preferredDateColumnType, $preferredDateTime);
+        }
+    }
+
+    if ($preferredDate2ColumnId !== null) {
+        if (! $enableSecondDate || $dateNotSure || $preferredDate2 === '') {
+            $columnValues[$preferredDate2ColumnId] = null;
+        } elseif ($preferredDate2ColumnType === 'date') {
+            $date2Payload = mondayDateColumnValueFromDatetimeLocal($preferredDate2);
+            if (is_array($date2Payload) && ($date2Payload['date'] ?? '') !== '') {
+                $columnValues[$preferredDate2ColumnId] = $date2Payload;
+            }
+        } else {
+            $columnValues[$preferredDate2ColumnId] = toMondayColumnValue($preferredDate2ColumnType, $preferredDate2);
+        }
+    }
+
+    if ($itsForMeColumnId !== null && !empty($orgData['itsForMe'])) {
+        if ($itsForMeColumnType === 'checkbox') {
+            $columnValues[$itsForMeColumnId] = ['checked' => 'true'];
+        } elseif ($itsForMeColumnType === 'status') {
+            $columnValues[$itsForMeColumnId] = ['label' => "It's for me"];
+        } elseif ($itsForMeColumnType === 'dropdown') {
+            $columnValues[$itsForMeColumnId] = ['labels' => ["It's for me"]];
+        } else {
+            $columnValues[$itsForMeColumnId] = "It's for me";
         }
     }
 
@@ -812,6 +993,7 @@ try {
     $audienceType = trim((string)($_POST['audienceType'] ?? ''));
     $personalGoal = trim((string)($_POST['personalGoal'] ?? ''));
     $isTrainerFlow = $audienceType === 'me' && $personalGoal === 'becomeTrainer';
+    $voucherChanged = false;
 
     if ($isTrainerFlow) {
         $trainerCourse = trim((string)($_POST['trainerCourseSelect'] ?? ''));
@@ -825,6 +1007,14 @@ try {
         if ($trainerCourse === '' || $trainerAttendees === '' || $trainersRequired === '') {
             throw new RuntimeException('Missing trainer details required for Monday update.');
         }
+
+        $voucherResult = submitEnquiryApplyVoucher($enquiryId, $quoteValue, $_POST);
+        if ($voucherResult['error'] !== null) {
+            throw new RuntimeException($voucherResult['error']);
+        }
+        $voucherChanged = !empty($voucherResult['changed']);
+        $quoteValue = $voucherResult['quoteValue'];
+        $_POST['quoteValue'] = $quoteValue;
 
         updateMondayTrainerSubmission($email, [
             'specificCourse' => $trainerCourse,
@@ -842,22 +1032,51 @@ try {
         }
     }
 
-    $isOrganisationTrainingFlow = $enquiryType === 'training' && $audienceType === 'organisation';
+    $isOrganisationTrainingFlow = $enquiryType === 'training'
+        && (
+            $audienceType === 'organisation'
+            || ($audienceType === 'me' && ($personalGoal === 'bookCourse' || $personalGoal === ''))
+        );
     $resolvedOrganisation = null;
     if ($isOrganisationTrainingFlow) {
         $resolvedOrganisation = trainingMatrixResolveOrganisationSubmission($_POST);
+        $voucherResult = submitEnquiryApplyVoucher(
+            $enquiryId,
+            (string) ($resolvedOrganisation['quoteValue'] ?? ''),
+            $_POST
+        );
+        if ($voucherResult['error'] !== null) {
+            throw new RuntimeException($voucherResult['error']);
+        }
+        $voucherChanged = $voucherChanged || !empty($voucherResult['changed']);
+        $resolvedOrganisation['quoteValue'] = $voucherResult['quoteValue'];
+        $_POST['quoteValue'] = $voucherResult['quoteValue'];
+
         updateMondayOrganisationSubmission($email, array_merge(
             $resolvedOrganisation,
             mondayAddressFromPost($_POST),
             [
+                'itsForMe' => $audienceType === 'me',
+                'day2AddressLine1' => trim((string)($_POST['day2AddressLine1'] ?? '')),
+                'day2AddressLine2' => trim((string)($_POST['day2AddressLine2'] ?? '')),
+                'day2AddressTown' => trim((string)($_POST['day2AddressTown'] ?? '')),
+                'day2AddressPostcode' => trim((string)($_POST['day2AddressPostcode'] ?? '')),
+                'day2AddressLat' => trim((string)($_POST['day2AddressLat'] ?? '')),
+                'day2AddressLng' => trim((string)($_POST['day2AddressLng'] ?? '')),
                 // Prefer explicit Monday / Forge course value from the form hidden field.
                 'mondaySpecificCourse' => trim((string)($_POST['mondaySpecificCourse'] ?? '')),
             ]
         ));
         if ($enquiryId !== null) {
-            enquiryLoggerSafe(function () use ($enquiryId): void {
+            enquiryLoggerSafe(function () use ($enquiryId, $audienceType): void {
                 enquiryLoggerMarkMondaySynced($enquiryId);
-                enquiryLoggerEvent($enquiryId, 'monday_submission_updated', 'Organisation training details synced to Monday.');
+                enquiryLoggerEvent(
+                    $enquiryId,
+                    'monday_submission_updated',
+                    $audienceType === 'me'
+                        ? 'It\'s for me training details synced to Monday.'
+                        : 'Organisation training details synced to Monday.'
+                );
             });
         }
     }
@@ -871,6 +1090,10 @@ try {
     $shouldSendQuoteEmail = (brevoEmailEnabled() || xeroEnabled())
         && $isQuoteFlow
         && !$quoteAlreadySent;
+    $shouldRegenerateQuoteForVoucher = (brevoEmailEnabled() || xeroEnabled())
+        && $isQuoteFlow
+        && $quoteAlreadySent
+        && $voucherChanged;
 
     // Edit Enquiry Email always goes out on initial submit (when enabled) so the
     // customer can return to their form. Quote / Accept Quote is a separate email.
@@ -897,7 +1120,7 @@ try {
             }
         });
     }
-    if ($isQuoteFlow && !$shouldSendQuoteEmail && $enquiryId !== null) {
+    if ($isQuoteFlow && !$shouldSendQuoteEmail && !$shouldRegenerateQuoteForVoucher && $enquiryId !== null) {
         enquiryLoggerSafe(function () use ($enquiryId, $quoteAlreadySent): void {
             if ($quoteAlreadySent) {
                 enquiryLoggerEvent(
@@ -920,7 +1143,7 @@ try {
             }
         });
     }
-    if ($shouldSendQuoteEmail) {
+    if ($shouldSendQuoteEmail || $shouldRegenerateQuoteForVoucher) {
         try {
             $quoteEmailData = $resolvedOrganisation !== null
                 ? buildQuoteEmailDataFromResolvedOrganisation(
@@ -937,7 +1160,7 @@ try {
             }
             $quoteSendResult = sendQuoteToClient($email, $name, $quoteEmailData);
             if ($enquiryId !== null) {
-                enquiryLoggerSafe(function () use ($enquiryId, $quoteSendResult, $name, $email): void {
+                enquiryLoggerSafe(function () use ($enquiryId, $quoteSendResult, $name, $email, $shouldRegenerateQuoteForVoucher): void {
                     enquiryLoggerMarkQuoteEmailSent($enquiryId);
                     if (($quoteSendResult['channel'] ?? '') === 'xero') {
                         $quote = $quoteSendResult['xero']['quote'] ?? [];
@@ -951,9 +1174,13 @@ try {
                         enquiryLoggerEvent(
                             $enquiryId,
                             'quote_email_sent',
-                            'Xero quote created and emailed to the customer via Brevo (PDF attached).',
+                            $shouldRegenerateQuoteForVoucher
+                                ? 'Xero quote regenerated and emailed after voucher change (PDF attached).'
+                                : 'Xero quote created and emailed to the customer via Brevo (PDF attached).',
                             [
                                 'channel' => 'xero',
+                                'regenerated' => $shouldRegenerateQuoteForVoucher,
+                                'reason' => $shouldRegenerateQuoteForVoucher ? 'voucher_change' : null,
                                 'xero_quote_id' => $quote['QuoteID'] ?? null,
                                 'xero_quote_number' => $quote['QuoteNumber'] ?? null,
                                 'xero_contact_id' => $contact['ContactID'] ?? null,
@@ -965,29 +1192,37 @@ try {
                                 'email_kind' => 'quote',
                             ]
                         );
-                        require_once __DIR__ . '/monday_helpers.php';
-                        mondayMoveEnquiryToQuoteSentAfterXeroQuote($enquiryId);
+                        if (!$shouldRegenerateQuoteForVoucher) {
+                            require_once __DIR__ . '/monday_helpers.php';
+                            mondayMoveEnquiryToQuoteSentAfterXeroQuote($enquiryId);
 
-                        try {
-                            maybeSendBookingDetailsEmail($enquiryId, $name, $email);
-                        } catch (Throwable $bookingEmailError) {
-                            enquiryLoggerEvent(
-                                $enquiryId,
-                                'booking_email_failed',
-                                'Booking details / terms acceptance email could not be sent.',
-                                ['error' => $bookingEmailError->getMessage()]
-                            );
+                            try {
+                                maybeSendBookingDetailsEmail($enquiryId, $name, $email);
+                            } catch (Throwable $bookingEmailError) {
+                                enquiryLoggerEvent(
+                                    $enquiryId,
+                                    'booking_email_failed',
+                                    'Booking details / terms acceptance email could not be sent.',
+                                    ['error' => $bookingEmailError->getMessage()]
+                                );
+                            }
                         }
                     } else {
                         // Auto Brevo quote email = Contacted.
-                        enquiryLoggerMarkContacted($enquiryId);
+                        if (!$shouldRegenerateQuoteForVoucher) {
+                            enquiryLoggerMarkContacted($enquiryId);
+                        }
                         enquiryLoggerEvent(
                             $enquiryId,
                             'quote_email_sent',
-                            'Automatic quote confirmation email sent via Brevo.',
+                            $shouldRegenerateQuoteForVoucher
+                                ? 'Quote confirmation regenerated and emailed after voucher change.'
+                                : 'Automatic quote confirmation email sent via Brevo.',
                             [
                                 'channel' => 'brevo',
-                                'status' => 'contacted',
+                                'regenerated' => $shouldRegenerateQuoteForVoucher,
+                                'reason' => $shouldRegenerateQuoteForVoucher ? 'voucher_change' : null,
+                                'status' => $shouldRegenerateQuoteForVoucher ? null : 'contacted',
                                 'brevo_message_id' => $quoteSendResult['brevo_message_id'] ?? null,
                                 'email_kind' => 'quote',
                             ]

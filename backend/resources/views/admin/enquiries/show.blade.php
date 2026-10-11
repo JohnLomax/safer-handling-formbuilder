@@ -274,8 +274,41 @@
                         @endif
                         @if ($enquiry->preferredDateTimeLabel() !== '')
                             <div class="enquiry-detail-row">
-                                <dt class="enquiry-detail-label">Preferred date</dt>
+                                <dt class="enquiry-detail-label">{{ $enquiry->enable_second_date ? 'Day 1 date' : 'Preferred date' }}</dt>
                                 <dd class="enquiry-detail-value">{{ $enquiry->preferredDateTimeLabel() }}</dd>
+                            </div>
+                        @endif
+                        @if ($enquiry->preferredDate2Label() !== '')
+                            <div class="enquiry-detail-row">
+                                <dt class="enquiry-detail-label">Day 2 date</dt>
+                                <dd class="enquiry-detail-value">{{ $enquiry->preferredDate2Label() }}</dd>
+                            </div>
+                        @endif
+                        @php
+                            $formData = is_array($enquiry->form_data_json) ? $enquiry->form_data_json : [];
+                            $day1Address = trim(implode(', ', array_filter([
+                                $formData['addressLine1'] ?? '',
+                                $formData['addressLine2'] ?? '',
+                                $formData['addressTown'] ?? '',
+                                $formData['addressPostcode'] ?? '',
+                            ], static fn ($part): bool => trim((string) $part) !== '')));
+                            $day2Address = trim(implode(', ', array_filter([
+                                $formData['day2AddressLine1'] ?? '',
+                                $formData['day2AddressLine2'] ?? '',
+                                $formData['day2AddressTown'] ?? '',
+                                $formData['day2AddressPostcode'] ?? '',
+                            ], static fn ($part): bool => trim((string) $part) !== '')));
+                        @endphp
+                        @if ($day1Address !== '')
+                            <div class="enquiry-detail-row">
+                                <dt class="enquiry-detail-label">{{ $enquiry->enable_second_date ? 'Day 1 address' : 'Address' }}</dt>
+                                <dd class="enquiry-detail-value">{{ $day1Address }}</dd>
+                            </div>
+                        @endif
+                        @if ($enquiry->enable_second_date && $day2Address !== '')
+                            <div class="enquiry-detail-row">
+                                <dt class="enquiry-detail-label">Day 2 address</dt>
+                                <dd class="enquiry-detail-value">{{ $day2Address }}</dd>
                             </div>
                         @endif
                         @if ($enquiry->extra_notes)
@@ -283,6 +316,76 @@
                                 <dt class="enquiry-detail-label">Notes</dt>
                                 <dd class="enquiry-detail-value whitespace-pre-wrap">{{ $enquiry->extra_notes }}</dd>
                             </div>
+                        @endif
+                        @php
+                            $quoteNetDisplay = $enquiry->quote_net_final
+                                ?? data_get($enquiry->form_data_json, 'quoteValue')
+                                ?? null;
+                            $quoteOriginalDisplay = $enquiry->quote_net_original
+                                ?? data_get($enquiry->form_data_json, 'quoteValueOriginal')
+                                ?? null;
+                        @endphp
+                        @if ($quoteNetDisplay !== null && $quoteNetDisplay !== '')
+                            <div class="enquiry-detail-row">
+                                <dt class="enquiry-detail-label">Quote net</dt>
+                                <dd class="enquiry-detail-value">
+                                    £{{ number_format((float) $quoteNetDisplay, 2) }}
+                                    @if ($enquiry->hasVoucher() && $quoteOriginalDisplay)
+                                        <span class="text-sh-mid text-sm">(was £{{ number_format((float) $quoteOriginalDisplay, 2) }})</span>
+                                    @endif
+                                </dd>
+                            </div>
+                        @endif
+                        @if ($enquiry->hasVoucher())
+                            <div class="enquiry-detail-row">
+                                <dt class="enquiry-detail-label">Voucher</dt>
+                                <dd class="enquiry-detail-value">
+                                    <span class="font-mono font-semibold">{{ $enquiry->voucher_code }}</span>
+                                    @if ($enquiry->voucher_amount !== null)
+                                        · −£{{ number_format((float) $enquiry->voucher_amount, 2) }}
+                                    @endif
+                                    @if ($enquiry->voucher)
+                                        · <a href="{{ route('admin.vouchers.show', $enquiry->voucher) }}" class="link-brand text-sm">View</a>
+                                    @endif
+                                </dd>
+                            </div>
+                        @endif
+                    </div>
+
+                    <div class="mt-6 rounded-[12px] border border-sh-border bg-white/70 p-4">
+                        <h4 class="text-sm font-semibold text-brand-header">Apply voucher</h4>
+                        <p class="mt-1 text-xs text-sh-mid">Fixed £ discount against the quote net (ex VAT). One voucher per enquiry. Applying or removing regenerates the Xero quote when one has already been sent.</p>
+                        @error('voucher')
+                            <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
+                        @enderror
+                        @if ($enquiry->status === 'quote_won')
+                            <div class="mt-3 rounded-[10px] border border-sh-border bg-sh-surface/60 p-3">
+                                <label for="voucher_code_locked" class="block text-xs font-semibold text-sh-mid">Code</label>
+                                <input
+                                    id="voucher_code_locked"
+                                    type="text"
+                                    value="{{ $enquiry->voucher_code ?: '' }}"
+                                    disabled
+                                    class="mt-1 block w-full cursor-not-allowed rounded-md border-sh-border bg-gray-100 uppercase text-sh-mid shadow-sm opacity-70"
+                                    placeholder="Unavailable"
+                                />
+                                <p class="mt-2 text-sm text-sh-mid">Can't apply a voucher because this enquiry is Quote Won.</p>
+                            </div>
+                        @elseif ($enquiry->hasVoucher())
+                            <form method="POST" action="{{ route('admin.enquiries.voucher.remove', $enquiry) }}" class="mt-3" onsubmit="return confirm('Remove this voucher and restore the original quote net?\n\nIf a quote was already sent, a new Xero quote will be generated and emailed.');">
+                                @csrf
+                                @method('DELETE')
+                                <button type="submit" class="btn-brand-outline text-xs">Remove voucher</button>
+                            </form>
+                        @else
+                            <form method="POST" action="{{ route('admin.enquiries.voucher.apply', $enquiry) }}" class="mt-3 flex flex-wrap items-end gap-2">
+                                @csrf
+                                <div class="min-w-[10rem] flex-1">
+                                    <label for="voucher_code" class="block text-xs font-semibold text-sh-mid">Code</label>
+                                    <input id="voucher_code" name="voucher_code" type="text" value="{{ old('voucher_code') }}" required maxlength="64" class="mt-1 block w-full rounded-md border-sh-border uppercase shadow-sm focus:border-brand focus:ring-brand" placeholder="SPRING50" />
+                                </div>
+                                <button type="submit" class="btn-brand text-xs">Apply</button>
+                            </form>
                         @endif
                     </div>
                 </div>
@@ -623,7 +726,13 @@
                                     <p class="mt-1 text-xs text-sh-mid">Form submitted {{ $enquiry->booking_submitted_at->format('d M Y · H:i') }}</p>
                                 @endif
                                 @if ($enquiry->preferredDateTimeLabel() !== '' && ! $enquiry->booking_submitted_at)
-                                    <p class="mt-1 text-xs text-sh-mid">Preferred date: {{ $enquiry->preferredDateTimeLabel() }}</p>
+                                    <p class="mt-1 text-xs text-sh-mid">
+                                        {{ $enquiry->enable_second_date ? 'Day 1 date' : 'Preferred date' }}:
+                                        {{ $enquiry->preferredDateTimeLabel() }}
+                                        @if ($enquiry->preferredDate2Label() !== '')
+                                            · Day 2 date: {{ $enquiry->preferredDate2Label() }}
+                                        @endif
+                                    </p>
                                 @endif
                                 @if (! empty($acceptVenueEmailBlockedReason) && ! $enquiry->booking_submitted_at)
                                     <p class="mt-2 text-xs text-amber-800">{{ $acceptVenueEmailBlockedReason }}</p>

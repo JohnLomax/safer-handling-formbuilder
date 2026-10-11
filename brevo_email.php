@@ -1058,8 +1058,35 @@ function formatPreferredTrainingDate(string $preferredDateTime, bool $dateNotSur
 function quoteEmailHasPreferredDate(array $data): bool
 {
     $preferredDate = trim((string)($data['preferredDate'] ?? ''));
+    $preferredDate2 = trim((string)($data['preferredDate2'] ?? ''));
 
-    return $preferredDate !== '';
+    return $preferredDate !== '' || $preferredDate2 !== '';
+}
+
+/**
+ * @param array<string, mixed> $data
+ */
+function quoteEmailPreferredDateItems(array $data): array
+{
+    $items = [];
+    $enableSecond = !empty($data['enableSecondDate'])
+        || trim((string)($data['enableSecondDate'] ?? '')) === '1'
+        || trim((string)($data['preferredDate2'] ?? '')) !== '';
+    $preferredDate = trim((string)($data['preferredDate'] ?? ''));
+    $preferredDate2 = trim((string)($data['preferredDate2'] ?? ''));
+
+    if ($enableSecond) {
+        if ($preferredDate !== '') {
+            $items['Day 1 date'] = $preferredDate;
+        }
+        if ($preferredDate2 !== '') {
+            $items['Day 2 date'] = $preferredDate2;
+        }
+    } elseif ($preferredDate !== '') {
+        $items['Preferred date'] = $preferredDate;
+    }
+
+    return $items;
 }
 
 /**
@@ -1075,8 +1102,8 @@ function buildQuoteSummaryRows(array $data): string
         'Delegates' => (string)($data['attendees'] ?? ''),
     ];
 
-    if (quoteEmailHasPreferredDate($data)) {
-        $items['Preferred date'] = (string)$data['preferredDate'];
+    foreach (quoteEmailPreferredDateItems($data) as $label => $value) {
+        $items[$label] = $value;
     }
 
     foreach ($items as $label => $value) {
@@ -1123,15 +1150,29 @@ HTML;
  */
 function buildTrainingDateBlock(array $data): string
 {
-    if (quoteEmailHasPreferredDate($data)) {
-        $date = htmlspecialchars((string)$data['preferredDate'], ENT_QUOTES, 'UTF-8');
+    $dateItems = quoteEmailPreferredDateItems($data);
+    if ($dateItems !== []) {
+        $inner = [];
+        $keys = array_keys($dateItems);
+        $lastKey = end($keys);
+        foreach ($dateItems as $label => $value) {
+            $labelEsc = htmlspecialchars((string) $label, ENT_QUOTES, 'UTF-8');
+            $valueEsc = htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
+            $valueMargin = $label === $lastKey ? 'margin:0;' : 'margin:0 0 12px;';
+            $inner[] = '<p style="margin:0 0 4px; color:#0255a4; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px;">'
+                . $labelEsc
+                . '</p>'
+                . '<p style="' . $valueMargin . ' font-size:17px; font-weight:700; color:#16324a;">'
+                . $valueEsc
+                . '</p>';
+        }
+        $lines = implode('', $inner);
 
         return <<<HTML
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f4f9ff; border:1px solid #d8e8f8; border-radius:4px;">
   <tr>
     <td style="padding:16px 18px; font-family:Arial,Helvetica,sans-serif; font-size:15px; line-height:1.5; color:#414141; text-align:center;">
-      <p style="margin:0 0 6px; color:#0255a4; font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px;">Your preferred training date</p>
-      <p style="margin:0; font-size:17px; font-weight:700; color:#16324a;">{$date}</p>
+      {$lines}
     </td>
   </tr>
 </table>
@@ -1290,14 +1331,18 @@ function buildQuoteEmailText(array $data): string
     ];
 
     foreach (
-        [
-            'Course' => (string)($data['course'] ?? ''),
-            'Sector' => (string)($data['sector'] ?? ''),
-            'Delivery' => trim((string)($data['format'] ?? '') . ((string)($data['courseStyle'] ?? '') !== '' ? ' (' . (string)$data['courseStyle'] . ')' : '')),
-            'Delegates' => (string)($data['attendees'] ?? ''),
-            'Preferred date' => quoteEmailHasPreferredDate($data) ? (string)$data['preferredDate'] : '',
-            'Quote total (Including Travel but Excluding VAT)' => (string)($data['quoteDisplay'] ?? ''),
-        ] as $label => $value
+        array_merge(
+            [
+                'Course' => (string)($data['course'] ?? ''),
+                'Sector' => (string)($data['sector'] ?? ''),
+                'Delivery' => trim((string)($data['format'] ?? '') . ((string)($data['courseStyle'] ?? '') !== '' ? ' (' . (string)$data['courseStyle'] . ')' : '')),
+                'Delegates' => (string)($data['attendees'] ?? ''),
+            ],
+            quoteEmailPreferredDateItems($data),
+            [
+                'Quote total (Including Travel but Excluding VAT)' => (string)($data['quoteDisplay'] ?? ''),
+            ]
+        ) as $label => $value
     ) {
         if ($value !== '') {
             $lines[] = $label . ': ' . $value;
@@ -1305,8 +1350,9 @@ function buildQuoteEmailText(array $data): string
     }
 
     $attendees = trim((string)($data['attendees'] ?? ''));
-    $dateLine = quoteEmailHasPreferredDate($data)
-        ? (string)$data['preferredDate']
+    $dateItems = quoteEmailPreferredDateItems($data);
+    $dateLine = $dateItems !== []
+        ? implode(' / ', array_values($dateItems))
         : 'Not yet selected — our team will contact you to arrange a date.';
 
     $lines = array_merge($lines, [
@@ -1506,8 +1552,10 @@ function buildNewLeadEmailHtml(array $data): string
     $courseStyle = htmlspecialchars((string)($data['courseStyle'] ?? ''), ENT_QUOTES, 'UTF-8');
     $attendees = htmlspecialchars((string)($data['attendees'] ?? ''), ENT_QUOTES, 'UTF-8');
     $preferredDate = htmlspecialchars((string)($data['preferredDate'] ?? ''), ENT_QUOTES, 'UTF-8');
+    $preferredDate2 = htmlspecialchars((string)($data['preferredDate2'] ?? ''), ENT_QUOTES, 'UTF-8');
     $quoteDisplay = htmlspecialchars((string)($data['quoteDisplay'] ?? ''), ENT_QUOTES, 'UTF-8');
     $address = htmlspecialchars((string)($data['address'] ?? ''), ENT_QUOTES, 'UTF-8');
+    $day2Address = htmlspecialchars((string)($data['day2Address'] ?? ''), ENT_QUOTES, 'UTF-8');
     $extraNotes = nl2br(htmlspecialchars((string)($data['extraNotes'] ?? ''), ENT_QUOTES, 'UTF-8'));
     $logoSrc = htmlspecialchars(brevoLogoUrl(), ENT_QUOTES, 'UTF-8');
 
@@ -1522,10 +1570,17 @@ function buildNewLeadEmailHtml(array $data): string
         'Sector' => $sector,
         'Delivery' => trim($format . ($courseStyle !== '' ? ' (' . $courseStyle . ')' : '')),
         'Delegates' => $attendees,
-        'Preferred date' => $preferredDate,
-        'Quote (Including Travel but Excluding VAT)' => $quoteDisplay,
-        'Address' => $address,
     ];
+    foreach (quoteEmailPreferredDateItems($data) as $label => $value) {
+        $fields[$label] = htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
+    }
+    $fields['Quote (Including Travel but Excluding VAT)'] = $quoteDisplay;
+    if ($preferredDate2 !== '' || !empty($data['enableSecondDate'])) {
+        $fields['Day 1 address'] = $address;
+        $fields['Day 2 address'] = $day2Address;
+    } else {
+        $fields['Address'] = $address;
+    }
 
     foreach ($fields as $label => $value) {
         if ($value === '') {
@@ -1627,11 +1682,18 @@ function buildNewLeadEmailText(array $data): string
         'Sector' => (string)($data['sector'] ?? ''),
         'Delivery' => trim((string)($data['format'] ?? '') . ((string)($data['courseStyle'] ?? '') !== '' ? ' (' . (string)$data['courseStyle'] . ')' : '')),
         'Delegates' => (string)($data['attendees'] ?? ''),
-        'Preferred date' => (string)($data['preferredDate'] ?? ''),
-        'Quote (Including Travel but Excluding VAT)' => (string)($data['quoteDisplay'] ?? ''),
-        'Address' => (string)($data['address'] ?? ''),
-        'Notes' => (string)($data['extraNotes'] ?? ''),
     ];
+    foreach (quoteEmailPreferredDateItems($data) as $label => $value) {
+        $fields[$label] = (string) $value;
+    }
+    $fields['Quote (Including Travel but Excluding VAT)'] = (string)($data['quoteDisplay'] ?? '');
+    if (!empty($data['enableSecondDate']) || trim((string)($data['preferredDate2'] ?? '')) !== '') {
+        $fields['Day 1 address'] = (string)($data['address'] ?? '');
+        $fields['Day 2 address'] = (string)($data['day2Address'] ?? '');
+    } else {
+        $fields['Address'] = (string)($data['address'] ?? '');
+    }
+    $fields['Notes'] = (string)($data['extraNotes'] ?? '');
 
     foreach ($fields as $label => $value) {
         if (trim($value) === '') {
@@ -1737,13 +1799,11 @@ function buildNewLeadEmailData(
     array $quoteData,
     array $post
 ): array {
+    require_once __DIR__ . '/monday_helpers.php';
+
     $addressParts = mondayAddressFromPost($post);
-    $address = trim(implode(', ', array_filter([
-        $addressParts['addressLine1'] ?? '',
-        $addressParts['addressLine2'] ?? '',
-        $addressParts['addressTown'] ?? '',
-        $addressParts['addressPostcode'] ?? '',
-    ], static fn ($part): bool => trim((string)$part) !== '')));
+    $address = mondayAddressSingleLine($addressParts);
+    $day2Address = mondayAddressSingleLine(mondayDay2AddressFromPost($post));
 
     return [
         'enquiryId' => $enquiryId !== null ? (string)$enquiryId : '',
@@ -1757,8 +1817,11 @@ function buildNewLeadEmailData(
         'courseStyle' => (string)($quoteData['courseStyle'] ?? ''),
         'attendees' => (string)($quoteData['attendees'] ?? ''),
         'preferredDate' => (string)($quoteData['preferredDate'] ?? ''),
+        'preferredDate2' => (string)($quoteData['preferredDate2'] ?? ''),
+        'enableSecondDate' => (string)($quoteData['enableSecondDate'] ?? ''),
         'quoteDisplay' => (string)($quoteData['quoteDisplay'] ?? ''),
         'address' => $address,
+        'day2Address' => $day2Address,
         'extraNotes' => trim((string)($post['extraNotes'] ?? '')),
     ];
 }
@@ -1770,6 +1833,9 @@ function buildQuoteEmailDataFromResolvedOrganisation(array $resolved, string $na
 {
     require_once __DIR__ . '/monday_helpers.php';
 
+    $dateNotSure = ($resolved['dateNotSure'] ?? '0') === '1';
+    $enableSecondDate = ($resolved['enableSecondDate'] ?? '0') === '1';
+
     return array_merge([
         'name' => $name,
         'course' => $resolved['orgCourse'] ?? '',
@@ -1779,14 +1845,23 @@ function buildQuoteEmailDataFromResolvedOrganisation(array $resolved, string $na
         'attendees' => $resolved['attendees'] ?? '',
         'preferredDate' => formatPreferredTrainingDate(
             $resolved['preferredDateTime'] ?? '',
-            ($resolved['dateNotSure'] ?? '0') === '1'
+            $dateNotSure
         ),
+        'preferredDate2' => $enableSecondDate
+            ? formatPreferredTrainingDate($resolved['preferredDate2'] ?? '', $dateNotSure)
+            : '',
+        'enableSecondDate' => $enableSecondDate ? '1' : '',
         'quoteValue' => (string)($resolved['quoteValue'] ?? ''),
         'quoteDisplay' => formatQuoteCurrency($resolved['quoteValue'] ?? ''),
         'email' => $email,
         'acceptQuoteUrl' => '',
         'xeroItemCode' => (string)($resolved['orgCourse'] ?? ''),
-    ], mondayAddressFromPost($resolved));
+    ], mondayAddressFromPost($resolved), [
+        'day2AddressLine1' => trim((string)($resolved['day2AddressLine1'] ?? '')),
+        'day2AddressLine2' => trim((string)($resolved['day2AddressLine2'] ?? '')),
+        'day2AddressTown' => trim((string)($resolved['day2AddressTown'] ?? '')),
+        'day2AddressPostcode' => trim((string)($resolved['day2AddressPostcode'] ?? '')),
+    ]);
 }
 
 /**
@@ -1805,6 +1880,8 @@ function buildQuoteEmailDataFromSubmission(array $post, string $name, string $em
         $courseStyle = 'Full-day';
         $sector = '';
         $preferredDateTime = '';
+        $preferredDate2 = '';
+        $enableSecondDate = false;
         $dateNotSure = false;
     } else {
         $course = trim((string)($post['orgCourse'] ?? ''));
@@ -1818,6 +1895,8 @@ function buildQuoteEmailDataFromSubmission(array $post, string $name, string $em
         require_once __DIR__ . '/enquiry_logger.php';
         $preferred = enquiryPreferredDateFromPost($post);
         $preferredDateTime = $preferred['preferredDateTime'];
+        $preferredDate2 = $preferred['preferredDate2'];
+        $enableSecondDate = $preferred['enableSecondDate'];
         $dateNotSure = $preferred['dateNotSure'];
     }
 
@@ -1833,12 +1912,21 @@ function buildQuoteEmailDataFromSubmission(array $post, string $name, string $em
         'sector' => $sector,
         'attendees' => $attendees,
         'preferredDate' => formatPreferredTrainingDate($preferredDateTime, $dateNotSure),
+        'preferredDate2' => !empty($enableSecondDate)
+            ? formatPreferredTrainingDate($preferredDate2 ?? '', $dateNotSure)
+            : '',
+        'enableSecondDate' => !empty($enableSecondDate) ? '1' : '',
         'quoteValue' => $quoteValue,
         'quoteDisplay' => formatQuoteCurrency($quoteValue),
         'email' => $email,
         'acceptQuoteUrl' => '',
         'xeroItemCode' => $course,
-    ], mondayAddressFromPost($post));
+    ], mondayAddressFromPost($post), [
+        'day2AddressLine1' => trim((string)($post['day2AddressLine1'] ?? '')),
+        'day2AddressLine2' => trim((string)($post['day2AddressLine2'] ?? '')),
+        'day2AddressTown' => trim((string)($post['day2AddressTown'] ?? '')),
+        'day2AddressPostcode' => trim((string)($post['day2AddressPostcode'] ?? '')),
+    ]);
 }
 
 /**

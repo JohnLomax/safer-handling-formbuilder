@@ -69,6 +69,7 @@ $formEndpoints = [
     '/monday_booking_via_company.php',
     '/postcode_lookup.php',
     '/training_matrix.php',
+    '/voucher_validate.php',
 ];
 
 if (in_array($path, $formEndpoints, true)) {

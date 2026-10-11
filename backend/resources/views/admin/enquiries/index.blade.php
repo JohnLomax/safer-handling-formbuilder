@@ -3,7 +3,40 @@
         <x-admin.page-header title="Enquiries" description="Search, filter, and open customer forms. Built for large enquiry volumes." />
     </x-slot>
 
-    <div class="admin-shell">
+    <div
+        class="admin-shell"
+        x-data="{
+            selected: [],
+            pageIds: @js($enquiries->pluck('id')->map(fn ($id) => (int) $id)->values()),
+            toggleAll(checked) {
+                this.selected = checked ? [...this.pageIds] : [];
+            },
+            isSelected(id) {
+                return this.selected.includes(id);
+            },
+            toggleOne(id, checked) {
+                if (checked) {
+                    if (! this.selected.includes(id)) {
+                        this.selected.push(id);
+                    }
+                    return;
+                }
+                this.selected = this.selected.filter((value) => value !== id);
+            },
+            get allSelected() {
+                return this.pageIds.length > 0 && this.pageIds.every((id) => this.selected.includes(id));
+            },
+            get selectedCount() {
+                return this.selected.length;
+            },
+            openBulkDelete() {
+                if (this.selectedCount < 1) {
+                    return;
+                }
+                $dispatch('open-modal', 'confirm-bulk-enquiry-delete');
+            }
+        }"
+    >
         <div class="brand-panel !p-0">
             @include('admin.partials.alerts')
 
@@ -72,15 +105,27 @@
                         @endforeach
                     </div>
 
-                    <p class="text-sm text-sh-mid">
-                        Showing
-                        <span class="font-semibold text-sh-text">{{ number_format($enquiries->firstItem() ?? 0) }}–{{ number_format($enquiries->lastItem() ?? 0) }}</span>
-                        of
-                        <span class="font-semibold text-sh-text">{{ number_format($enquiries->total()) }}</span>
-                        @if ($search !== '')
-                            for “{{ $search }}”
-                        @endif
-                    </p>
+                    <div class="flex flex-wrap items-center gap-3">
+                        <p class="text-sm text-sh-mid">
+                            Showing
+                            <span class="font-semibold text-sh-text">{{ number_format($enquiries->firstItem() ?? 0) }}–{{ number_format($enquiries->lastItem() ?? 0) }}</span>
+                            of
+                            <span class="font-semibold text-sh-text">{{ number_format($enquiries->total()) }}</span>
+                            @if ($search !== '')
+                                for “{{ $search }}”
+                            @endif
+                        </p>
+
+                        <button
+                            type="button"
+                            class="btn-brand-outline whitespace-nowrap text-xs"
+                            x-show="selectedCount > 0"
+                            x-cloak
+                            x-on:click="openBulkDelete()"
+                        >
+                            Delete selected (<span x-text="selectedCount"></span>)
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -88,7 +133,18 @@
                 <table class="admin-table">
                     <thead>
                         <tr>
-                            <th class="w-[28%]">Customer</th>
+                            <th class="w-[3rem]">
+                                <label class="sr-only" for="select-all-enquiries">Select all on this page</label>
+                                <input
+                                    id="select-all-enquiries"
+                                    type="checkbox"
+                                    class="rounded border-[#b9d4ef] text-brand shadow-sm focus:ring-brand"
+                                    x-bind:checked="allSelected"
+                                    x-on:change="toggleAll($event.target.checked)"
+                                    @disabled($enquiries->isEmpty())
+                                />
+                            </th>
+                            <th class="w-[26%]">Customer</th>
                             <th class="w-[12%]">Type</th>
                             <th class="w-[12%]">Status</th>
                             <th class="w-[14%]">Started</th>
@@ -100,6 +156,17 @@
                     <tbody>
                         @forelse ($enquiries as $enquiry)
                             <tr>
+                                <td>
+                                    <label class="sr-only" for="enquiry-select-{{ $enquiry->id }}">Select enquiry #{{ $enquiry->id }}</label>
+                                    <input
+                                        id="enquiry-select-{{ $enquiry->id }}"
+                                        type="checkbox"
+                                        value="{{ $enquiry->id }}"
+                                        class="rounded border-[#b9d4ef] text-brand shadow-sm focus:ring-brand"
+                                        x-bind:checked="isSelected({{ (int) $enquiry->id }})"
+                                        x-on:change="toggleOne({{ (int) $enquiry->id }}, $event.target.checked)"
+                                    />
+                                </td>
                                 <td>
                                     <div class="flex min-w-0 items-start gap-2.5">
                                         <div class="min-w-0 flex-1">
@@ -164,15 +231,18 @@
                                 <td class="text-center text-sh-mid">{{ number_format($enquiry->events_count) }}</td>
                                 <td>
                                     <div class="admin-table-actions">
-                                        <x-admin.table-action :href="route('admin.enquiries.show', $enquiry)" icon="chevron">
-                                            View
-                                        </x-admin.table-action>
+                                        <x-admin.table-action
+                                            :href="route('admin.enquiries.show', $enquiry)"
+                                            icon="eye"
+                                            title="View"
+                                            aria-label="View"
+                                        />
                                     </div>
                                 </td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="7" class="px-4 py-12 text-center text-sm text-sh-mid">
+                                <td colspan="8" class="px-4 py-12 text-center text-sm text-sh-mid">
                                     @if ($search !== '' || $statusFilter !== 'all')
                                         No enquiries match your search.
                                         <a href="{{ route('admin.enquiries.index') }}" class="link-brand ml-1">Clear filters</a>
@@ -197,5 +267,36 @@
                 </div>
             @endif
         </div>
+
+        <x-modal name="confirm-bulk-enquiry-delete" maxWidth="lg" focusable>
+            <form method="POST" action="{{ route('admin.enquiries.bulk-destroy') }}" class="p-6">
+                @csrf
+                @method('DELETE')
+                <template x-for="id in selected" :key="id">
+                    <input type="hidden" name="enquiry_ids[]" :value="id" />
+                </template>
+
+                <h3 class="text-lg font-semibold text-brand-header">
+                    Are you sure you want to delete
+                    <span x-text="selectedCount"></span>
+                    <span x-text="selectedCount === 1 ? 'enquiry' : 'enquiries'"></span>?
+                </h3>
+                <p class="mt-2 text-sm text-sh-mid">
+                    This removes the selected enquiries from this admin system. Monday items are not deleted.
+                    Any active Forge bookings for these enquiries will be cancelled first.
+                </p>
+                <div class="mt-6 flex justify-end gap-3">
+                    <button type="button" class="btn-brand-outline" x-on:click="$dispatch('close-modal', 'confirm-bulk-enquiry-delete')">
+                        Cancel
+                    </button>
+                    <button
+                        type="submit"
+                        class="btn-brand-outline text-red-700 border-red-200 hover:border-red-400 hover:text-red-800"
+                    >
+                        Yes, delete selected
+                    </button>
+                </div>
+            </form>
+        </x-modal>
     </div>
 </x-app-layout>

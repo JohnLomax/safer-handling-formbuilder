@@ -78,7 +78,7 @@ class EnquiryController extends Controller
 
     public function show(Enquiry $enquiry, EnquiryProcessRetry $retry): View
     {
-        $enquiry->load('events');
+        $enquiry->load(['events', 'voucher']);
 
         return view('admin.enquiries.show', [
             'enquiry' => $enquiry,
@@ -470,7 +470,296 @@ class EnquiryController extends Controller
         }
     }
 
+    public function applyVoucher(Request $request, Enquiry $enquiry, EnquiryProcessRetry $retry): RedirectResponse
+    {
+        if ($enquiry->status === 'quote_won') {
+            return redirect()
+                ->route('admin.enquiries.show', $enquiry)
+                ->withErrors(['voucher' => 'Can\'t apply a voucher because this enquiry is Quote Won.']);
+        }
+
+        $root = dirname(base_path());
+        require_once $root.'/voucher_helpers.php';
+
+        $code = trim((string) $request->input('voucher_code', ''));
+        $originalNet = $this->resolveEnquiryBaseQuoteNet($enquiry);
+
+        if ($originalNet <= 0) {
+            return redirect()
+                ->route('admin.enquiries.show', $enquiry)
+                ->withErrors(['voucher' => 'This enquiry does not have a quote value to discount yet.']);
+        }
+
+        $result = voucherApplyToQuoteNet($originalNet, $code, (int) $enquiry->id);
+        if (! $result['ok'] || $result['voucher'] === null) {
+            return redirect()
+                ->route('admin.enquiries.show', $enquiry)
+                ->withErrors(['voucher' => $result['error'] ?? 'That voucher could not be applied.']);
+        }
+
+        voucherAttachToEnquiry(
+            (int) $enquiry->id,
+            $result['voucher'],
+            (float) $result['original'],
+            (float) $result['final'],
+            (float) $result['discount']
+        );
+
+        $enquiry->refresh();
+
+        ActivityLogger::log(
+            action: 'update',
+            description: 'Applied voucher '.$result['voucher']['code'].' (−£'.number_format((float) $result['discount'], 2).') to enquiry #'.$enquiry->id,
+            subjectType: Enquiry::class,
+            subjectId: (int) $enquiry->id,
+            properties: [
+                'area' => 'Vouchers',
+                'voucher_id' => $result['voucher']['id'],
+                'voucher_code' => $result['voucher']['code'],
+                'discount' => $result['discount'],
+                'original' => $result['original'],
+                'final' => $result['final'],
+                'source' => 'admin',
+            ],
+        );
+
+        $enquiry->events()->create([
+            'event_type' => 'voucher_applied',
+            'message' => 'Voucher '.$result['voucher']['code'].' applied by admin (−£'.number_format((float) $result['discount'], 2).').',
+            'metadata' => [
+                'voucher_id' => $result['voucher']['id'],
+                'voucher_code' => $result['voucher']['code'],
+                'discount' => $result['discount'],
+                'source' => 'admin',
+            ],
+            'created_at' => now(),
+        ]);
+
+        $status = 'Voucher '.$result['voucher']['code'].' applied. Quote net is now £'.number_format((float) $result['final'], 2).'.';
+        try {
+            $regen = $retry->regenerateQuoteAfterVoucherChange($enquiry->fresh());
+            if ($regen['regenerated']) {
+                $status .= ' '.$regen['message'];
+            } elseif ($regen['message'] !== '') {
+                $status .= ' '.$regen['message'];
+            }
+        } catch (Throwable $e) {
+            return redirect()
+                ->route('admin.enquiries.show', $enquiry)
+                ->with('status', $status)
+                ->withErrors(['voucher' => 'Voucher saved, but the Xero quote could not be regenerated: '.$e->getMessage()]);
+        }
+
+        return redirect()
+            ->route('admin.enquiries.show', $enquiry)
+            ->with('status', $status);
+    }
+
+    public function removeVoucher(Enquiry $enquiry, EnquiryProcessRetry $retry): RedirectResponse
+    {
+        if ($enquiry->status === 'quote_won') {
+            return redirect()
+                ->route('admin.enquiries.show', $enquiry)
+                ->withErrors(['voucher' => 'Can\'t change a voucher because this enquiry is Quote Won.']);
+        }
+
+        $root = dirname(base_path());
+        require_once $root.'/voucher_helpers.php';
+
+        if (! $enquiry->hasVoucher()) {
+            return redirect()
+                ->route('admin.enquiries.show', $enquiry)
+                ->with('status', 'No voucher was applied to this enquiry.');
+        }
+
+        $code = (string) ($enquiry->voucher_code ?: 'voucher');
+        voucherClearFromEnquiry((int) $enquiry->id);
+        $enquiry->refresh();
+
+        ActivityLogger::log(
+            action: 'update',
+            description: 'Removed voucher '.$code.' from enquiry #'.$enquiry->id,
+            subjectType: Enquiry::class,
+            subjectId: (int) $enquiry->id,
+            properties: [
+                'area' => 'Vouchers',
+                'voucher_code' => $code,
+                'source' => 'admin',
+            ],
+        );
+
+        $enquiry->events()->create([
+            'event_type' => 'voucher_removed',
+            'message' => 'Voucher '.$code.' removed by admin.',
+            'metadata' => [
+                'voucher_code' => $code,
+                'source' => 'admin',
+            ],
+            'created_at' => now(),
+        ]);
+
+        $status = 'Voucher removed. Quote restored to the original net.';
+        try {
+            $regen = $retry->regenerateQuoteAfterVoucherChange($enquiry->fresh());
+            if ($regen['regenerated']) {
+                $status .= ' '.$regen['message'];
+            } elseif ($regen['message'] !== '') {
+                $status .= ' '.$regen['message'];
+            }
+        } catch (Throwable $e) {
+            return redirect()
+                ->route('admin.enquiries.show', $enquiry)
+                ->with('status', $status)
+                ->withErrors(['voucher' => 'Voucher removed, but the Xero quote could not be regenerated: '.$e->getMessage()]);
+        }
+
+        return redirect()
+            ->route('admin.enquiries.show', $enquiry)
+            ->with('status', $status);
+    }
+
+    private function resolveEnquiryBaseQuoteNet(Enquiry $enquiry): float
+    {
+        if ($enquiry->quote_net_original !== null && (float) $enquiry->quote_net_original > 0) {
+            return round((float) $enquiry->quote_net_original, 2);
+        }
+
+        $form = is_array($enquiry->form_data_json) ? $enquiry->form_data_json : [];
+        foreach (['quoteValueOriginal', 'quoteValue'] as $key) {
+            $raw = trim((string) ($form[$key] ?? ''));
+            $raw = preg_replace('/[^0-9.\-]/', '', $raw) ?? '';
+            if ($raw !== '' && is_numeric($raw) && (float) $raw > 0) {
+                // If a voucher is already applied and we're reading quoteValue, prefer original.
+                if ($key === 'quoteValue' && $enquiry->hasVoucher() && empty($form['quoteValueOriginal'])) {
+                    $discount = (float) ($enquiry->voucher_amount ?? 0);
+                    if ($discount > 0) {
+                        return round((float) $raw + $discount, 2);
+                    }
+                }
+
+                return round((float) $raw, 2);
+            }
+        }
+
+        if (
+            $enquiry->audience_type === 'organisation'
+            || (
+                $enquiry->audience_type === 'me'
+                && in_array((string) $enquiry->personal_goal, ['bookCourse', ''], true)
+            )
+        ) {
+            $root = dirname(base_path());
+            require_once $root.'/training_matrix_helpers.php';
+            try {
+                $resolved = trainingMatrixResolveOrganisationSubmission([
+                    'sector' => $enquiry->sector,
+                    'orgCourse' => $enquiry->org_course,
+                    'courseFormat' => $enquiry->course_format,
+                    'formatSubOption' => $enquiry->format_sub_option,
+                    'matrixAttendees' => $enquiry->matrix_attendees ?? data_get($form, 'matrixAttendees'),
+                    'attendees' => $enquiry->attendees,
+                    'organisationCompany' => $enquiry->organisation_company,
+                    'preferredDateTime' => $enquiry->preferred_date_time,
+                    'preferredDate2' => $enquiry->preferred_date_2,
+                    'enableSecondDate' => $enquiry->enable_second_date ? '1' : '0',
+                    'dateNotSure' => $enquiry->date_not_sure ? '1' : '0',
+                    'extraNotes' => $enquiry->extra_notes,
+                ]);
+                $raw = preg_replace('/[^0-9.\-]/', '', (string) ($resolved['quoteValue'] ?? '')) ?? '';
+                if ($raw !== '' && is_numeric($raw)) {
+                    return round((float) $raw, 2);
+                }
+            } catch (Throwable) {
+                // fall through
+            }
+        }
+
+        return 0.0;
+    }
+
     public function destroy(Enquiry $enquiry, EnquiryProcessRetry $retry): RedirectResponse
+    {
+        try {
+            $result = $this->deleteEnquiryRecord($enquiry, $retry);
+        } catch (Throwable $e) {
+            return redirect()
+                ->route('admin.enquiries.show', $enquiry)
+                ->withErrors([
+                    'delete' => 'Could not cancel the Forge booking before deleting this enquiry: '.$e->getMessage(),
+                ]);
+        }
+
+        return redirect()
+            ->route('admin.enquiries.index')
+            ->with('status', $result['status']);
+    }
+
+    public function bulkDestroy(Request $request, EnquiryProcessRetry $retry): RedirectResponse
+    {
+        $validated = $request->validate([
+            'enquiry_ids' => ['required', 'array', 'min:1'],
+            'enquiry_ids.*' => ['integer', 'distinct', 'exists:enquiries,id'],
+        ]);
+
+        $ids = array_values(array_unique(array_map('intval', $validated['enquiry_ids'])));
+        $enquiries = Enquiry::query()->whereIn('id', $ids)->orderBy('id')->get();
+
+        $deleted = 0;
+        $forgeCancelled = 0;
+        $failures = [];
+
+        foreach ($enquiries as $enquiry) {
+            try {
+                $result = $this->deleteEnquiryRecord($enquiry, $retry);
+                $deleted++;
+                if ($result['forge_cancelled']) {
+                    $forgeCancelled++;
+                }
+            } catch (Throwable $e) {
+                $failures[] = '#'.$enquiry->id.': '.$e->getMessage();
+            }
+        }
+
+        $parts = [];
+        if ($deleted > 0) {
+            $parts[] = $deleted === 1
+                ? 'Deleted 1 enquiry from the system.'
+                : 'Deleted '.$deleted.' enquiries from the system.';
+            $parts[] = 'Monday enquiries were not deleted.';
+            if ($forgeCancelled > 0) {
+                $parts[] = $forgeCancelled === 1
+                    ? '1 Forge booking was cancelled.'
+                    : $forgeCancelled.' Forge bookings were cancelled.';
+            }
+        }
+
+        $redirect = redirect()->route('admin.enquiries.index');
+
+        if ($parts !== []) {
+            $redirect->with('status', implode(' ', $parts));
+        }
+
+        if ($failures !== []) {
+            $redirect->withErrors([
+                'delete' => 'Could not delete '
+                    .count($failures)
+                    .(count($failures) === 1 ? ' enquiry' : ' enquiries')
+                    .' (Forge cancel failed): '
+                    .implode(' ', $failures),
+            ]);
+        }
+
+        if ($deleted === 0 && $failures === []) {
+            $redirect->withErrors(['delete' => 'No matching enquiries were found to delete.']);
+        }
+
+        return $redirect;
+    }
+
+    /**
+     * @return array{status:string,forge_cancelled:bool}
+     */
+    private function deleteEnquiryRecord(Enquiry $enquiry, EnquiryProcessRetry $retry): array
     {
         $enquiryId = (int) $enquiry->id;
         $enquiryName = trim((string) $enquiry->name);
@@ -481,16 +770,8 @@ class EnquiryController extends Controller
 
         $forgeCancelled = false;
         if ($retry->canForgeCancel($enquiry)) {
-            try {
-                $retry->forgeCancel($enquiry);
-                $forgeCancelled = true;
-            } catch (Throwable $e) {
-                return redirect()
-                    ->route('admin.enquiries.show', $enquiry)
-                    ->withErrors([
-                        'delete' => 'Could not cancel the Forge booking before deleting this enquiry: '.$e->getMessage(),
-                    ]);
-            }
+            $retry->forgeCancel($enquiry);
+            $forgeCancelled = true;
         }
 
         $uploadDir = dirname(base_path()).'/data/booking-uploads/'.$enquiryId;
@@ -530,9 +811,10 @@ class EnquiryController extends Controller
 
         $enquiry->delete();
 
-        return redirect()
-            ->route('admin.enquiries.index')
-            ->with('status', implode(' ', $descriptionParts));
+        return [
+            'status' => implode(' ', $descriptionParts),
+            'forge_cancelled' => $forgeCancelled,
+        ];
     }
 
     public function retryEvent(Enquiry $enquiry, EnquiryEvent $event, EnquiryProcessRetry $retry): RedirectResponse

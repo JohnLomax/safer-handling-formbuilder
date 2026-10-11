@@ -408,6 +408,23 @@ if ($kajabiCoursesUrl === '') {
       white-space: pre-wrap;
     }
 
+    .max-cap-description-note {
+      margin: 8px 0 0;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid #f0c36d;
+      background: #fff8e8;
+      color: #7a4b00;
+      font-size: 0.95rem;
+      font-weight: 600;
+      line-height: 1.45;
+      white-space: pre-wrap;
+    }
+
+    .max-cap-description-note.hidden {
+      display: none !important;
+    }
+
     .stepper-btn {
       flex-shrink: 0;
       width: 40px;
@@ -593,6 +610,78 @@ if ($kajabiCoursesUrl === '') {
       padding: 11px;
     }
 
+    .path-summary {
+      margin: 12px 0 4px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid #c5ddf3;
+      background: linear-gradient(180deg, #f7fbff 0%, #eef6fc 100%);
+    }
+
+    .path-summary-label {
+      margin: 0 0 4px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #2e5d84;
+    }
+
+    .path-summary-value {
+      margin: 0;
+      font-size: 0.98rem;
+      font-weight: 600;
+      color: #16324a;
+      line-height: 1.35;
+    }
+
+    .path-summary-actions {
+      margin-top: 8px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 14px;
+      align-items: center;
+    }
+
+    .path-summary-actions a,
+    .path-summary-actions button {
+      appearance: none;
+      border: 0;
+      background: none;
+      padding: 0;
+      margin: 0;
+      font: inherit;
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--brand-blue);
+      text-decoration: underline;
+      cursor: pointer;
+    }
+
+    .path-summary-actions a:hover,
+    .path-summary-actions button:hover {
+      color: #063a66;
+    }
+
+    .note button.linkish,
+    button.linkish {
+      appearance: none;
+      border: 0;
+      background: none;
+      padding: 0;
+      margin: 0;
+      font: inherit;
+      font-weight: 700;
+      color: var(--brand-blue);
+      text-decoration: underline;
+      cursor: pointer;
+    }
+
+    .path-choice-wrap.hidden,
+    .path-summary.hidden {
+      display: none;
+    }
+
     .resume-locked-banner {
       margin: 0 0 16px;
       padding: 14px 16px;
@@ -687,6 +776,51 @@ if ($kajabiCoursesUrl === '') {
       max-width: 100%;
       overflow-wrap: anywhere;
       word-break: break-word;
+    }
+
+    .voucher-block {
+      margin-top: 14px;
+    }
+
+    .voucher-block .optional {
+      font-weight: 500;
+      color: #5a7a96;
+      font-size: 0.9em;
+    }
+
+    .voucher-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: stretch;
+    }
+
+    .voucher-row input[type="text"] {
+      flex: 1 1 160px;
+      min-width: 0;
+      text-transform: uppercase;
+    }
+
+    .voucher-message {
+      margin: 8px 0 0;
+      font-size: 0.92rem;
+      color: #2e5d84;
+      min-height: 1.2em;
+    }
+
+    .voucher-message.is-error {
+      color: #b42318;
+    }
+
+    .voucher-message.is-success {
+      color: #3f6d1c;
+    }
+
+    .voucher-row input[type="text"].is-disabled {
+      background: #f1f5f9;
+      color: #64748b;
+      cursor: not-allowed;
+      opacity: 0.75;
     }
 
     .pricing-grid #totalWithVatPrice {
@@ -981,31 +1115,53 @@ if ($kajabiCoursesUrl === '') {
           <h2>Training Enquiry</h2>
           <p class="section-intro">Complete this part if your enquiry is about training.</p>
 
-          <label>Is this for you or your organisation?</label>
-          <div class="choice-group" id="audienceTypeGroup">
-            <label class="choice">
-              <input type="radio" name="audienceType" value="me" />
-              <span>IT'S FOR ME</span>
-            </label>
-            <label class="choice">
-              <input type="radio" name="audienceType" value="organisation" />
-              <span>MY ORGANISATION</span>
-            </label>
+          <div id="trainingPathSummary" class="path-summary hidden" aria-live="polite">
+            <p class="path-summary-label">Your selection</p>
+            <p class="path-summary-value" id="trainingPathSummaryValue"></p>
+            <div class="path-summary-actions">
+              <button type="button" id="changeTrainingPathBtn">Change selection</button>
+              <button type="button" id="switchToItsForMeBtn" class="hidden">It's for me instead</button>
+              <button type="button" id="switchToOrganisationBtn" class="hidden">My organisation instead</button>
+            </div>
           </div>
 
-          <div id="forMeBlock" class="sub-section hidden">
-            <h3>It's for me</h3>
-            <div class="choice-group" id="personalGoalGroup">
+          <div id="audiencePathChoices" class="path-choice-wrap">
+            <label id="audienceTypeLabel">Is this for you or your organisation?</label>
+            <div class="choice-group" id="audienceTypeGroup">
               <label class="choice">
-                <input type="radio" name="personalGoal" value="onlineCourse" />
-                <span>I want to complete an online course</span>
+                <input type="radio" name="audienceType" value="me" />
+                <span>IT'S FOR ME</span>
               </label>
               <label class="choice">
-                <input type="radio" name="personalGoal" value="becomeTrainer" />
-                <span>I want to become a trainer</span>
+                <input type="radio" name="audienceType" value="organisation" />
+                <span>MY ORGANISATION</span>
               </label>
             </div>
-            <p id="personalGoalHint" class="note">Choose an option to continue.</p>
+
+            <div id="forMeBlock" class="sub-section hidden">
+              <h3>It's for me</h3>
+              <p class="section-intro">Choose how you’d like to train, then complete the details below.</p>
+              <div class="choice-group" id="personalGoalGroup">
+                <label class="choice">
+                  <input type="radio" name="personalGoal" value="bookCourse" />
+                  <span>I want to book a training course</span>
+                </label>
+                <label class="choice">
+                  <input type="radio" name="personalGoal" value="onlineCourse" />
+                  <span>I want to complete an online course</span>
+                </label>
+                <label class="choice">
+                  <input type="radio" name="personalGoal" value="becomeTrainer" />
+                  <span>I want to become a trainer</span>
+                </label>
+              </div>
+              <p id="personalGoalHint" class="note">Choose an option to continue.</p>
+            </div>
+
+            <p id="keepTrainingPathNote" class="note hidden">
+              Your previous choice is still selected.
+              <button type="button" id="keepTrainingPathBtn" class="linkish">Keep this selection</button>
+            </p>
           </div>
 
           <div id="trainerCoursesBlock" class="sub-section hidden">
@@ -1078,9 +1234,9 @@ if ($kajabiCoursesUrl === '') {
           </div>
 
           <div id="organisationBlock" class="sub-section hidden">
-            <h3>My organisation</h3>
+            <h3 id="matrixPathHeading">My organisation</h3>
 
-            <p class="section-intro">Selections below only show valid combinations from your approved training matrix.</p>
+            <p class="section-intro" id="matrixPathIntro">Selections below only show valid combinations from your approved training matrix.</p>
 
             <label for="sector">Sector</label>
             <select id="sector" name="sector">
@@ -1130,18 +1286,21 @@ if ($kajabiCoursesUrl === '') {
                 +
               </button>
             </div>
+            <p id="maxCapDescriptionNote" class="max-cap-description-note hidden" hidden role="status" aria-live="polite"></p>
 
-            <label for="organisationCompany">Company/Organisation</label>
-            <input
-              type="text"
-              id="organisationCompany"
-              name="organisationCompany"
-              maxlength="200"
-              autocomplete="organization"
-            />
+            <div id="organisationCompanyWrap">
+              <label for="organisationCompany">Company/Organisation</label>
+              <input
+                type="text"
+                id="organisationCompany"
+                name="organisationCompany"
+                maxlength="200"
+                autocomplete="organization"
+              />
+            </div>
 
             <div class="address-lookup-block" id="organisationAddressBlock">
-              <h4>Your address</h4>
+              <h4 id="day1AddressHeading">Your address</h4>
               <div class="postcode-lookup-row">
                 <input
                   type="text"
@@ -1159,7 +1318,7 @@ if ($kajabiCoursesUrl === '') {
               </select>
               <div class="address-fields-grid">
                 <div>
-                  <label for="addressLine1">Address line 1</label>
+                  <label for="addressLine1" id="addressLine1Label">Address line 1</label>
                   <input type="text" id="addressLine1" name="addressLine1" maxlength="200" autocomplete="address-line1" />
                 </div>
                 <div>
@@ -1179,8 +1338,47 @@ if ($kajabiCoursesUrl === '') {
               <input type="hidden" id="addressLng" name="addressLng" value="" />
             </div>
 
+            <div class="address-lookup-block hidden" id="day2AddressBlock">
+              <h4>Day 2 address</h4>
+              <div class="postcode-lookup-row">
+                <input
+                  type="text"
+                  id="day2AddressPostcodeLookup"
+                  autocomplete="postal-code"
+                  placeholder="e.g. SW1A 1AA"
+                  maxlength="16"
+                />
+                <button type="button" id="day2AddressLookupBtn">Find addresses</button>
+              </div>
+              <p id="day2AddressLookupStatus" class="note hidden" role="status" aria-live="polite"></p>
+              <label for="day2AddressPick" id="day2AddressPickLabel" class="hidden">Choose address</label>
+              <select id="day2AddressPick" class="hidden" aria-hidden="true">
+                <option value="">—</option>
+              </select>
+              <div class="address-fields-grid">
+                <div>
+                  <label for="day2AddressLine1">Address line 1</label>
+                  <input type="text" id="day2AddressLine1" name="day2AddressLine1" maxlength="200" autocomplete="off" />
+                </div>
+                <div>
+                  <label for="day2AddressLine2">Address line 2</label>
+                  <input type="text" id="day2AddressLine2" name="day2AddressLine2" maxlength="200" autocomplete="off" />
+                </div>
+                <div>
+                  <label for="day2AddressTown">Town / city</label>
+                  <input type="text" id="day2AddressTown" name="day2AddressTown" maxlength="120" autocomplete="off" />
+                </div>
+                <div>
+                  <label for="day2AddressPostcode">Postcode</label>
+                  <input type="text" id="day2AddressPostcode" name="day2AddressPostcode" maxlength="16" autocomplete="off" />
+                </div>
+              </div>
+              <input type="hidden" id="day2AddressLat" name="day2AddressLat" value="" />
+              <input type="hidden" id="day2AddressLng" name="day2AddressLng" value="" />
+            </div>
+
             <div class="datetime-block">
-              <label for="preferredDate">Preferred date</label>
+              <label for="preferredDate" id="preferredDateLabel">Preferred date</label>
               <input
                 class="datetime-input"
                 id="preferredDate"
@@ -1188,11 +1386,21 @@ if ($kajabiCoursesUrl === '') {
                 type="date"
               />
               <input type="hidden" id="preferredDateTime" name="preferredDateTime" value="" />
+              <div id="day2DateBlock" class="hidden" style="margin-top:12px;">
+                <label for="preferredDate2">Day 2 date</label>
+                <input
+                  class="datetime-input"
+                  id="preferredDate2"
+                  name="preferredDate2"
+                  type="date"
+                />
+              </div>
+              <input type="hidden" id="enableSecondDate" name="enableSecondDate" value="" />
               <label class="datetime-choice" for="dateNotSure">
                 <input type="checkbox" id="dateNotSure" name="dateNotSure" />
                 <span>Not sure on date yet</span>
               </label>
-              <p class="datetime-hint">Pick a preferred date for your session.</p>
+              <p class="datetime-hint" id="preferredDateHint">Pick a preferred date for your session.</p>
             </div>
 
             <div id="dateGuidance" class="date-guidance">
@@ -1210,7 +1418,20 @@ if ($kajabiCoursesUrl === '') {
               <h4>Live Quote</h4>
               <div class="pricing-grid">
                 <div id="totalWithVatRow"><strong>Total price estimate (Including Travel but Excluding VAT):</strong> <span id="totalWithVatPrice">-</span></div>
+                <div id="voucherDiscountRow" class="hidden"><strong>Voucher discount:</strong> <span id="voucherDiscountPrice">-</span></div>
+                <div id="voucherFinalRow" class="hidden"><strong>Quote after voucher:</strong> <span id="voucherFinalPrice">-</span></div>
               </div>
+            </div>
+
+            <div id="voucherBlock" class="voucher-block hidden">
+              <label for="voucherCodeInput">Voucher code <span class="optional">(optional)</span></label>
+              <div class="voucher-row">
+                <input type="text" id="voucherCodeInput" name="voucherCodeDisplay" autocomplete="off" placeholder="Enter code" maxlength="64" />
+                <button type="button" id="voucherApplyBtn" class="btn-secondary">Apply</button>
+                <button type="button" id="voucherClearBtn" class="btn-secondary hidden">Remove</button>
+              </div>
+              <input type="hidden" id="voucherCode" name="voucherCode" value="" />
+              <p id="voucherMessage" class="voucher-message" role="status" aria-live="polite"></p>
             </div>
 
             <div id="extraNotesBlock">
@@ -1252,6 +1473,7 @@ if ($kajabiCoursesUrl === '') {
       var MONDAY_BOOKING_VIA_COMPANY_ENDPOINT = new URL("monday_booking_via_company.php", window.location.href).toString();
       var POSTCODE_LOOKUP_ENDPOINT = new URL("postcode_lookup.php", window.location.href).toString();
       var TRAINING_MATRIX_ENDPOINT = new URL("training_matrix.php", window.location.href).toString();
+      var VOUCHER_VALIDATE_ENDPOINT = new URL("voucher_validate.php", window.location.href).toString();
 
       var form = document.getElementById("enquiryForm");
       var thankYouView = document.getElementById("thankYouView");
@@ -1266,7 +1488,17 @@ if ($kajabiCoursesUrl === '') {
       var personalGoalGroup = document.getElementById("personalGoalGroup");
       var personalGoalHint = document.getElementById("personalGoalHint");
       var forMeBlock = document.getElementById("forMeBlock");
+      var audiencePathChoices = document.getElementById("audiencePathChoices");
+      var trainingPathSummary = document.getElementById("trainingPathSummary");
+      var trainingPathSummaryValue = document.getElementById("trainingPathSummaryValue");
+      var changeTrainingPathBtn = document.getElementById("changeTrainingPathBtn");
+      var switchToItsForMeBtn = document.getElementById("switchToItsForMeBtn");
+      var switchToOrganisationBtn = document.getElementById("switchToOrganisationBtn");
+      var keepTrainingPathNote = document.getElementById("keepTrainingPathNote");
+      var keepTrainingPathBtn = document.getElementById("keepTrainingPathBtn");
       var trainerCoursesBlock = document.getElementById("trainerCoursesBlock");
+      var lastPersonalGoal = "";
+      var editingTrainingPath = false;
       var trainerCourseSelect = document.getElementById("trainerCourseSelect");
       var trainerCompanyBookingWrap = document.getElementById("trainerCompanyBookingWrap");
       var bookingViaCompanyInput = document.getElementById("bookingViaCompany");
@@ -1297,6 +1529,18 @@ if ($kajabiCoursesUrl === '') {
       var pricingCard = document.getElementById("pricingCard");
       var totalWithVatRow = document.getElementById("totalWithVatRow");
       var totalWithVatPrice = document.getElementById("totalWithVatPrice");
+      var voucherBlock = document.getElementById("voucherBlock");
+      var voucherCodeInput = document.getElementById("voucherCodeInput");
+      var voucherCodeHidden = document.getElementById("voucherCode");
+      var voucherApplyBtn = document.getElementById("voucherApplyBtn");
+      var voucherClearBtn = document.getElementById("voucherClearBtn");
+      var voucherMessage = document.getElementById("voucherMessage");
+      var voucherDiscountRow = document.getElementById("voucherDiscountRow");
+      var voucherDiscountPrice = document.getElementById("voucherDiscountPrice");
+      var voucherFinalRow = document.getElementById("voucherFinalRow");
+      var voucherFinalPrice = document.getElementById("voucherFinalPrice");
+      var appliedVoucher = null;
+      var voucherLockedForQuoteWon = false;
 
       var MATRIX_DEFAULT_ATTENDEES = 12;
       var MATRIX_MAX_ATTENDEES = 120;
@@ -1373,8 +1617,24 @@ if ($kajabiCoursesUrl === '') {
         return match ? match[1] : "";
       }
 
+      function isSecondDateEnabled() {
+        var pkg = getSelectedPackage();
+        if (pkg && pkg.enableSecondDate) {
+          return true;
+        }
+        var hidden = document.getElementById("enableSecondDate");
+        return !!(hidden && (hidden.value === "1" || hidden.value === "true"));
+      }
+
       function preferredDateComplete() {
-        return !!preferredDateInput.value.trim();
+        if (!preferredDateInput.value.trim()) {
+          return false;
+        }
+        if (isSecondDateEnabled()) {
+          var preferredDate2Input = document.getElementById("preferredDate2");
+          return !!(preferredDate2Input && preferredDate2Input.value.trim());
+        }
+        return true;
       }
 
       function syncPreferredDateTimeHidden() {
@@ -1389,28 +1649,97 @@ if ($kajabiCoursesUrl === '') {
         syncPreferredDateTimeHidden();
       }
 
+      function syncSecondDateUi() {
+        var enabled = isOrganisationStyleTrainingPath() && isSecondDateEnabled();
+        var day2AddressBlock = document.getElementById("day2AddressBlock");
+        var day2DateBlock = document.getElementById("day2DateBlock");
+        var enableSecondDateInput = document.getElementById("enableSecondDate");
+        var preferredDateLabel = document.getElementById("preferredDateLabel");
+        var preferredDateHint = document.getElementById("preferredDateHint");
+        var day1Heading = document.getElementById("day1AddressHeading");
+        var preferredDate2Input = document.getElementById("preferredDate2");
+
+        if (enableSecondDateInput) {
+          enableSecondDateInput.value = enabled ? "1" : "";
+        }
+        if (day2AddressBlock) {
+          day2AddressBlock.classList.toggle("hidden", !enabled);
+        }
+        if (day2DateBlock) {
+          day2DateBlock.classList.toggle("hidden", !enabled);
+        }
+        if (preferredDateLabel) {
+          preferredDateLabel.textContent = enabled ? "Day 1 date" : "Preferred date";
+        }
+        if (preferredDateHint) {
+          preferredDateHint.textContent = enabled
+            ? "Pick Day 1 and Day 2 dates for this course."
+            : "Pick a preferred date for your session.";
+        }
+        if (day1Heading) {
+          day1Heading.textContent = enabled ? "Day 1 address" : "Your address";
+        }
+        if (preferredDate2Input && !enabled) {
+          preferredDate2Input.value = "";
+          preferredDate2Input.required = false;
+          setInputError(preferredDate2Input, false);
+        }
+        if (!enabled) {
+          ["day2AddressLine1", "day2AddressLine2", "day2AddressTown", "day2AddressPostcode", "day2AddressLat", "day2AddressLng"].forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el) {
+              el.value = "";
+            }
+          });
+          setInputError(document.getElementById("day2AddressLine1"), false);
+          setInputError(document.getElementById("day2AddressPostcode"), false);
+        }
+        if (preferredDate2Input && enabled && dateNotSureInput && !dateNotSureInput.checked) {
+          preferredDate2Input.required = true;
+        }
+      }
+
       function syncPreferredDateUiState() {
         if (!preferredDateInput || !preferredDateTimeInput || !dateNotSureInput) {
           return;
         }
         var orgPath = isOrganisationStyleTrainingPath();
+        var preferredDate2Input = document.getElementById("preferredDate2");
         if (dateNotSureInput.checked) {
           preferredDateInput.value = "";
           preferredDateTimeInput.value = "";
           preferredDateInput.disabled = true;
           preferredDateInput.required = false;
           setInputError(preferredDateInput, false);
+          if (preferredDate2Input) {
+            preferredDate2Input.value = "";
+            preferredDate2Input.disabled = true;
+            preferredDate2Input.required = false;
+            setInputError(preferredDate2Input, false);
+          }
         } else {
           preferredDateInput.disabled = false;
           preferredDateInput.required = orgPath;
           syncPreferredDateTimeHidden();
+          if (preferredDate2Input) {
+            preferredDate2Input.disabled = false;
+            preferredDate2Input.required = orgPath && isSecondDateEnabled();
+          }
         }
+        syncSecondDateUi();
         refreshOrganisationDateGuidance();
       }
 
       function applySavedFormValue(name, value) {
         if (name === "preferredDateTime" || name === "preferredDate") {
           setPreferredDateValue(value);
+          return;
+        }
+        if (name === "preferredDate2" || name === "preferredDateTime2") {
+          var preferredDate2Input = document.getElementById("preferredDate2");
+          if (preferredDate2Input) {
+            preferredDate2Input.value = normalizePreferredDateValue(value);
+          }
           return;
         }
 
@@ -1441,7 +1770,14 @@ if ($kajabiCoursesUrl === '') {
         }
 
         Object.keys(data).forEach(function (name) {
-          if (name === "enquiryId" || name === "preferredDate" || name === "preferredDateTime" || name === "preferredTime") {
+          if (
+            name === "enquiryId"
+            || name === "preferredDate"
+            || name === "preferredDateTime"
+            || name === "preferredDate2"
+            || name === "preferredDateTime2"
+            || name === "preferredTime"
+          ) {
             return;
           }
           applySavedFormValue(name, data[name]);
@@ -1450,8 +1786,26 @@ if ($kajabiCoursesUrl === '') {
         if (data.preferredDate || data.preferredDateTime) {
           setPreferredDateValue(data.preferredDate || data.preferredDateTime);
         }
+        if (data.preferredDate2 || data.preferredDateTime2) {
+          applySavedFormValue("preferredDate2", data.preferredDate2 || data.preferredDateTime2);
+        }
 
         syncPreferredDateUiState();
+
+        if (data.voucherCode) {
+          if (voucherCodeInput) {
+            voucherCodeInput.value = String(data.voucherCode);
+          }
+          if (voucherCodeHidden) {
+            voucherCodeHidden.value = String(data.voucherCode);
+          }
+          // Re-validate once pricing is available.
+          setTimeout(function () {
+            if (quoteValueInput && quoteValueInput.value.trim()) {
+              applyVoucherCode(data.voucherCode, true);
+            }
+          }, 0);
+        }
       }
 
       function restoreOrganisationSelections(data) {
@@ -1611,11 +1965,21 @@ if ($kajabiCoursesUrl === '') {
 
             var editable = enquiry.editable !== false;
             if (!editable) {
+              if (enquiry.status === "quote_won") {
+                if (voucherBlock) {
+                  voucherBlock.classList.remove("hidden");
+                }
+                lockVoucherForQuoteWon();
+              }
               showLockedEnquiryMessage(
                 enquiry.lockMessage ||
                   "This enquiry has already been completed and can no longer be edited here. If you need to change any details, please contact Safer Handling."
               );
               return true;
+            }
+
+            if (enquiry.status === "quote_won") {
+              lockVoucherForQuoteWon();
             }
 
             if (enquiry.status === "quote_sent") {
@@ -1851,8 +2215,13 @@ if ($kajabiCoursesUrl === '') {
         }
       }
 
+      function isItsForMeMatrixPath() {
+        return getCheckedValue("audienceType") === "me"
+          && getCheckedValue("personalGoal") === "bookCourse";
+      }
+
       function isOrganisationStyleTrainingPath() {
-        return getCheckedValue("audienceType") === "organisation";
+        return getCheckedValue("audienceType") === "organisation" || isItsForMeMatrixPath();
       }
 
       function showThankYouPage() {
@@ -2003,6 +2372,35 @@ if ($kajabiCoursesUrl === '') {
         matrixAttendeesPlus.disabled = dis;
       }
 
+      function getSelectedMaxCapDescription() {
+        var pkg = getSelectedPackage();
+        if (!pkg || typeof pkg.maxCapDescription !== "string") {
+          return "";
+        }
+        return pkg.maxCapDescription.trim();
+      }
+
+      function setMaxCapDescriptionVisible(show) {
+        var note = document.getElementById("maxCapDescriptionNote");
+        if (!note) {
+          return;
+        }
+        var text = show ? getSelectedMaxCapDescription() : "";
+        if (!text) {
+          note.textContent = "";
+          note.classList.add("hidden");
+          note.hidden = true;
+          return;
+        }
+        note.textContent = text;
+        note.classList.remove("hidden");
+        note.hidden = false;
+      }
+
+      function clearMaxCapDescriptionNote() {
+        setMaxCapDescriptionVisible(false);
+      }
+
       function clampMatrixAttendeesField() {
         if (matrixAttendeesInput.disabled || !matrixAttendeesInput.value) {
           return;
@@ -2035,6 +2433,7 @@ if ($kajabiCoursesUrl === '') {
 
         if (!digitsOnly) {
           setInputError(matrixAttendeesInput, true);
+          clearMaxCapDescriptionNote();
           renderPricing(null);
           updateFinalDetailsVisibility();
           return;
@@ -2045,14 +2444,19 @@ if ($kajabiCoursesUrl === '') {
         var maxValue = Number(matrixAttendeesInput.max) || MATRIX_MAX_ATTENDEES;
         if (!Number.isFinite(nextValue)) {
           setInputError(matrixAttendeesInput, true);
+          clearMaxCapDescriptionNote();
           renderPricing(null);
           updateFinalDetailsVisibility();
           return;
         }
 
-        if (nextValue > maxValue) {
+        var attemptedOverMax = nextValue > maxValue;
+        if (attemptedOverMax) {
           nextValue = maxValue;
           matrixAttendeesInput.value = String(maxValue);
+          setMaxCapDescriptionVisible(true);
+        } else {
+          clearMaxCapDescriptionNote();
         }
 
         if (nextValue >= minValue && nextValue <= maxValue) {
@@ -2080,9 +2484,13 @@ if ($kajabiCoursesUrl === '') {
         if (!Number.isFinite(nextValue)) {
           nextValue = matrixSpinnerDefaultCount(minValue, maxValue, getPreferredDefaultAttendees(selectedPkg));
         }
+        var attemptedOverMax = nextValue > maxValue;
         var boundedValue = Math.min(maxValue, Math.max(minValue, nextValue));
         matrixAttendeesInput.value = String(boundedValue);
         setInputError(matrixAttendeesInput, !matrixAttendeesInput.value);
+        if (attemptedOverMax) {
+          setMaxCapDescriptionVisible(true);
+        }
         syncFinalAttendeesFromMatrix();
         renderPricing(getSelectedTrainingRow());
         updateFinalDetailsVisibility();
@@ -2100,6 +2508,13 @@ if ($kajabiCoursesUrl === '') {
         if (!Number.isFinite(cur)) {
           cur = matrixSpinnerDefaultCount(minValue, maxValue, getPreferredDefaultAttendees(selectedPkg));
         }
+        if (delta > 0 && cur >= maxValue) {
+          setMaxCapDescriptionVisible(true);
+          return;
+        }
+        if (delta < 0) {
+          clearMaxCapDescriptionNote();
+        }
         var next = Math.min(maxValue, Math.max(minValue, cur + delta));
         matrixAttendeesInput.value = String(next);
         setInputError(matrixAttendeesInput, !matrixAttendeesInput.value);
@@ -2109,6 +2524,7 @@ if ($kajabiCoursesUrl === '') {
       }
 
       function applyMatrixSpinnerConstraints(rows) {
+        clearMaxCapDescriptionNote();
         if (!rows.length) {
           matrixAttendeesInput.disabled = true;
           matrixAttendeesInput.value = "";
@@ -2185,6 +2601,171 @@ if ($kajabiCoursesUrl === '') {
         return match ? match[1] : "";
       }
 
+      function formatGbpAmount(amount) {
+        var n = Number(amount);
+        if (!Number.isFinite(n)) {
+          return "£0.00";
+        }
+        return "£" + n.toFixed(2);
+      }
+
+      function setVoucherMessage(text, type) {
+        if (!voucherMessage) {
+          return;
+        }
+        voucherMessage.textContent = text || "";
+        voucherMessage.classList.remove("is-error", "is-success");
+        if (type) {
+          voucherMessage.classList.add(type === "error" ? "is-error" : "is-success");
+        }
+      }
+
+      function lockVoucherForQuoteWon() {
+        voucherLockedForQuoteWon = true;
+        if (voucherCodeInput) {
+          voucherCodeInput.disabled = true;
+          voucherCodeInput.readOnly = true;
+          voucherCodeInput.classList.add("is-disabled");
+        }
+        if (voucherApplyBtn) {
+          voucherApplyBtn.disabled = true;
+          voucherApplyBtn.classList.add("hidden");
+        }
+        if (voucherClearBtn) {
+          voucherClearBtn.disabled = true;
+          voucherClearBtn.classList.add("hidden");
+        }
+        setVoucherMessage("Can't apply a voucher because this enquiry is Quote Won.", "error");
+      }
+
+      function clearAppliedVoucher(silent) {
+        appliedVoucher = null;
+        if (voucherCodeHidden) {
+          voucherCodeHidden.value = "";
+        }
+        if (voucherClearBtn) {
+          voucherClearBtn.classList.add("hidden");
+        }
+        if (voucherDiscountRow) {
+          voucherDiscountRow.classList.add("hidden");
+        }
+        if (voucherFinalRow) {
+          voucherFinalRow.classList.add("hidden");
+        }
+        if (!silent) {
+          setVoucherMessage("");
+        }
+      }
+
+      function paintAppliedVoucher() {
+        if (!appliedVoucher) {
+          if (voucherDiscountRow) {
+            voucherDiscountRow.classList.add("hidden");
+          }
+          if (voucherFinalRow) {
+            voucherFinalRow.classList.add("hidden");
+          }
+          return;
+        }
+        if (voucherDiscountPrice) {
+          voucherDiscountPrice.textContent = "−" + formatGbpAmount(appliedVoucher.discount);
+        }
+        if (voucherFinalPrice) {
+          voucherFinalPrice.textContent = formatGbpAmount(appliedVoucher.final);
+        }
+        if (voucherDiscountRow) {
+          voucherDiscountRow.classList.remove("hidden");
+        }
+        if (voucherFinalRow) {
+          voucherFinalRow.classList.remove("hidden");
+        }
+        if (voucherClearBtn) {
+          voucherClearBtn.classList.remove("hidden");
+        }
+      }
+
+      function revalidateAppliedVoucher() {
+        if (!appliedVoucher || !voucherCodeHidden || !voucherCodeHidden.value) {
+          paintAppliedVoucher();
+          return;
+        }
+        var base = quoteValueInput ? quoteValueInput.value.trim() : "";
+        if (!base) {
+          clearAppliedVoucher(true);
+          setVoucherMessage("Add a quote before applying a voucher.", "error");
+          return;
+        }
+        applyVoucherCode(voucherCodeHidden.value, true);
+      }
+
+      function applyVoucherCode(code, silent) {
+        if (voucherLockedForQuoteWon) {
+          setVoucherMessage("Can't apply a voucher because this enquiry is Quote Won.", "error");
+          return;
+        }
+        code = String(code || "").trim().toUpperCase().replace(/\s+/g, "");
+        if (!code) {
+          setVoucherMessage("Enter a voucher code.", "error");
+          return;
+        }
+        var base = quoteValueInput ? quoteValueInput.value.trim() : "";
+        if (!base) {
+          setVoucherMessage("Complete the quote details before applying a voucher.", "error");
+          return;
+        }
+        if (voucherApplyBtn) {
+          voucherApplyBtn.disabled = true;
+        }
+        var body = new FormData();
+        body.append("code", code);
+        body.append("quoteValue", base);
+        if (currentEnquiryId) {
+          body.append("enquiryId", currentEnquiryId);
+        }
+        fetch(VOUCHER_VALIDATE_ENDPOINT, { method: "POST", body: body })
+          .then(function (res) {
+            return res.json().then(function (data) {
+              return { ok: res.ok, data: data };
+            });
+          })
+          .then(function (result) {
+            if (!result.ok || !result.data || !result.data.success) {
+              clearAppliedVoucher(true);
+              setVoucherMessage((result.data && result.data.message) || "That voucher could not be applied.", "error");
+              return;
+            }
+            appliedVoucher = {
+              code: (result.data.voucher && result.data.voucher.code) || code,
+              name: (result.data.voucher && result.data.voucher.name) || "",
+              discount: Number(result.data.discount) || 0,
+              final: Number(result.data.final) || 0,
+              original: Number(result.data.original) || Number(base) || 0
+            };
+            if (voucherCodeHidden) {
+              voucherCodeHidden.value = appliedVoucher.code;
+            }
+            if (voucherCodeInput) {
+              voucherCodeInput.value = appliedVoucher.code;
+            }
+            paintAppliedVoucher();
+            if (!silent) {
+              setVoucherMessage(
+                "Voucher " + appliedVoucher.code + " applied (−" + formatGbpAmount(appliedVoucher.discount) + ").",
+                "success"
+              );
+            }
+          })
+          .catch(function () {
+            clearAppliedVoucher(true);
+            setVoucherMessage("Could not validate that voucher. Please try again.", "error");
+          })
+          .finally(function () {
+            if (voucherApplyBtn) {
+              voucherApplyBtn.disabled = false;
+            }
+          });
+      }
+
       function renderPricing(row) {
         if (!row) {
           pricingCard.classList.add("hidden");
@@ -2193,6 +2774,7 @@ if ($kajabiCoursesUrl === '') {
           quoteValueInput.value = "";
           attendeesInput.min = "1";
           attendeesInput.max = String(MATRIX_MAX_ATTENDEES);
+          clearAppliedVoucher(true);
           return;
         }
 
@@ -2213,10 +2795,16 @@ if ($kajabiCoursesUrl === '') {
           totalWithVatPrice.textContent = "-";
           totalWithVatRow.classList.add("hidden");
           quoteValueInput.value = "";
+          clearAppliedVoucher(true);
         } else {
           totalWithVatPrice.textContent = displayPrice;
           totalWithVatRow.classList.remove("hidden");
           quoteValueInput.value = extractLeadingCurrencyValue(displayPrice);
+          if (appliedVoucher && voucherCodeHidden && voucherCodeHidden.value) {
+            revalidateAppliedVoucher();
+          } else {
+            paintAppliedVoucher();
+          }
         }
 
         // Kept in a hidden field for Monday / admin — not shown on the customer quote card.
@@ -2233,14 +2821,17 @@ if ($kajabiCoursesUrl === '') {
         var shouldShowForMe = audienceType === "me" && personalGoal === "onlineCourse";
         var hasTrainerAttendees = !!trainerAttendeesInput.value && Number(trainerAttendeesInput.value) > 0;
         var shouldShowForTrainer = audienceType === "me" && personalGoal === "becomeTrainer" && !!trainerCourseSelect.value && hasTrainerAttendees;
-        var shouldShowForOrg = audienceType === "organisation" && !!orgEndStepSelected;
-        var shouldShow = !trainingSection.classList.contains("hidden") && (shouldShowForMe || shouldShowForOrg || shouldShowForTrainer);
+        var shouldShowForMatrix = isOrganisationStyleTrainingPath() && !!orgEndStepSelected;
+        var shouldShow = !trainingSection.classList.contains("hidden") && (shouldShowForMe || shouldShowForMatrix || shouldShowForTrainer);
         var isOnlineCourse = isOnlineCourseMode();
         var isTrainer = isTrainerMode();
         var bookingViaCompany = !!(bookingViaCompanyInput && bookingViaCompanyInput.checked);
 
         finalDetailsBlock.classList.toggle("hidden", !shouldShow);
         extraNotesBlock.classList.toggle("hidden", isOnlineCourse);
+        if (voucherBlock) {
+          voucherBlock.classList.toggle("hidden", isOnlineCourse || !shouldShow || (!shouldShowForMatrix && !shouldShowForTrainer));
+        }
         submitBtn.textContent = isOnlineCourse
           ? "View Online Courses"
           : isTrainer
@@ -2253,6 +2844,17 @@ if ($kajabiCoursesUrl === '') {
         trainingSection.classList.add("hidden");
         finalDetailsBlock.classList.add("hidden");
         extraNotesBlock.classList.remove("hidden");
+        if (voucherBlock) {
+          voucherBlock.classList.add("hidden");
+        }
+        editingTrainingPath = false;
+        lastPersonalGoal = "";
+        if (trainingPathSummary) {
+          trainingPathSummary.classList.add("hidden");
+        }
+        if (audiencePathChoices) {
+          audiencePathChoices.classList.remove("hidden");
+        }
         submitBtn.textContent = "Submit enquiry and generate my quote";
         attendeesInput.required = false;
         attendeesInput.min = "1";
@@ -2272,6 +2874,23 @@ if ($kajabiCoursesUrl === '') {
         preferredDateInput.value = "";
         preferredDateTimeInput.value = "";
         preferredDateInput.disabled = false;
+        var preferredDate2Input = document.getElementById("preferredDate2");
+        if (preferredDate2Input) {
+          preferredDate2Input.value = "";
+          preferredDate2Input.disabled = false;
+          preferredDate2Input.required = false;
+        }
+        ["day2AddressLine1", "day2AddressLine2", "day2AddressTown", "day2AddressPostcode", "day2AddressLat", "day2AddressLng"].forEach(function (id) {
+          var el = document.getElementById(id);
+          if (el) {
+            el.value = "";
+          }
+        });
+        var enableSecondDateInput = document.getElementById("enableSecondDate");
+        if (enableSecondDateInput) {
+          enableSecondDateInput.value = "";
+        }
+        syncSecondDateUi();
         syncMatrixStepperButtons();
         setGroupError(audienceTypeGroup, false);
         setGroupError(personalGoalGroup, false);
@@ -2283,8 +2902,11 @@ if ($kajabiCoursesUrl === '') {
         setInputError(organisationCompanyInput, false);
         setInputError(document.getElementById("addressLine1"), false);
         setInputError(document.getElementById("addressPostcode"), false);
+        setInputError(document.getElementById("day2AddressLine1"), false);
+        setInputError(document.getElementById("day2AddressPostcode"), false);
         setInputError(trainerAttendeesInput, false);
         setInputError(preferredDateInput, false);
+        setInputError(preferredDate2Input, false);
         setInputError(trainerCourseSelect, false);
         if (bookingViaCompanyInput) {
           bookingViaCompanyInput.checked = false;
@@ -2301,6 +2923,7 @@ if ($kajabiCoursesUrl === '') {
         var isForMe = audienceType === "me";
         var isOrganisation = audienceType === "organisation";
         var isTrainer = isTrainerMode();
+        var isMatrixPath = isOrganisationStyleTrainingPath();
         var hasError = false;
 
         setGroupError(audienceTypeGroup, !audienceType);
@@ -2334,7 +2957,7 @@ if ($kajabiCoursesUrl === '') {
             setInputError(trainerAttendeesInput, false);
           }
 
-          if (!personalGoal || personalGoal !== "becomeTrainer") {
+          if (!isMatrixPath) {
             setInputError(sectorSelect, false);
             setInputError(orgCourseSelect, false);
             setInputError(courseFormatSelect, false);
@@ -2343,11 +2966,14 @@ if ($kajabiCoursesUrl === '') {
             setInputError(organisationCompanyInput, false);
             setInputError(document.getElementById("addressLine1"), false);
             setInputError(document.getElementById("addressPostcode"), false);
+            setInputError(document.getElementById("day2AddressLine1"), false);
+            setInputError(document.getElementById("day2AddressPostcode"), false);
             setInputError(preferredDateInput, false);
+            setInputError(document.getElementById("preferredDate2"), false);
           }
         }
 
-        if (isOrganisation) {
+        if (isMatrixPath) {
           var missingSector = !sectorSelect.value;
           var missingCourse = !orgCourseSelect.value;
           var missingFormat = !courseFormatSelect.value;
@@ -2356,11 +2982,18 @@ if ($kajabiCoursesUrl === '') {
           var missingMatrixAttendees = !matrixAttendeesInput.value || !Number.isInteger(matrixCount) || matrixCount < 1;
           var addressLine1Input = document.getElementById("addressLine1");
           var addressPostcodeInput = document.getElementById("addressPostcode");
+          var preferredDate2Input = document.getElementById("preferredDate2");
+          var day2AddressLine1Input = document.getElementById("day2AddressLine1");
+          var day2AddressPostcodeInput = document.getElementById("day2AddressPostcode");
+          var secondDateOn = isSecondDateEnabled();
           var missingAddressLine1 = !addressLine1Input || !addressLine1Input.value.trim();
           var missingAddressPostcode = !addressPostcodeInput || !addressPostcodeInput.value.trim();
-          var missingPreferredDate = (!preferredDateComplete() && !dateNotSureInput.checked);
+          var missingPreferredDate = (!preferredDateInput.value.trim() && !dateNotSureInput.checked);
+          var missingPreferredDate2 = secondDateOn && !dateNotSureInput.checked && (!preferredDate2Input || !preferredDate2Input.value.trim());
+          var missingDay2AddressLine1 = secondDateOn && (!day2AddressLine1Input || !day2AddressLine1Input.value.trim());
+          var missingDay2AddressPostcode = secondDateOn && (!day2AddressPostcodeInput || !day2AddressPostcodeInput.value.trim());
 
-          if (isOrganisation) {
+          if (isOrganisation || isItsForMeMatrixPath()) {
             setGroupError(personalGoalGroup, false);
           }
           setInputError(sectorSelect, missingSector);
@@ -2372,6 +3005,9 @@ if ($kajabiCoursesUrl === '') {
           setInputError(addressLine1Input, missingAddressLine1);
           setInputError(addressPostcodeInput, missingAddressPostcode);
           setInputError(preferredDateInput, missingPreferredDate);
+          setInputError(preferredDate2Input, missingPreferredDate2);
+          setInputError(day2AddressLine1Input, missingDay2AddressLine1);
+          setInputError(day2AddressPostcodeInput, missingDay2AddressPostcode);
 
           if (
             missingSector
@@ -2382,6 +3018,9 @@ if ($kajabiCoursesUrl === '') {
             || missingAddressLine1
             || missingAddressPostcode
             || missingPreferredDate
+            || missingPreferredDate2
+            || missingDay2AddressLine1
+            || missingDay2AddressPostcode
           ) {
             hasError = true;
           }
@@ -2397,12 +3036,15 @@ if ($kajabiCoursesUrl === '') {
           setInputError(organisationCompanyInput, false);
           setInputError(document.getElementById("addressLine1"), false);
           setInputError(document.getElementById("addressPostcode"), false);
+          setInputError(document.getElementById("day2AddressLine1"), false);
+          setInputError(document.getElementById("day2AddressPostcode"), false);
           setInputError(preferredDateInput, false);
+          setInputError(document.getElementById("preferredDate2"), false);
           setInputError(trainerCourseSelect, false);
         }
 
         if (!finalDetailsBlock.classList.contains("hidden") && !isOnlineCourseMode()) {
-          var needsOrgPackage = isOrganisation;
+          var needsOrgPackage = isMatrixPath;
           var orgPackageReady = !needsOrgPackage || (!!sectorSelect.value && !!orgCourseSelect.value && !!courseFormatSelect.value && !!formatSubOptionSelect.value && !!matrixAttendeesInput.value);
           if (orgPackageReady) {
             var attendeesCount = Number(attendeesInput.value);
@@ -2427,15 +3069,137 @@ if ($kajabiCoursesUrl === '') {
         return !hasError;
       }
 
+      function personalGoalLabel(value) {
+        if (value === "bookCourse") {
+          return "I want to book a training course";
+        }
+        if (value === "onlineCourse") {
+          return "I want to complete an online course";
+        }
+        if (value === "becomeTrainer") {
+          return "I want to become a trainer";
+        }
+        return "";
+      }
+
+      function setRadioValue(name, value) {
+        var fields = form.querySelectorAll('input[name="' + name + '"]');
+        Array.prototype.forEach.call(fields, function (field) {
+          field.checked = String(field.value) === String(value);
+        });
+      }
+
+      function rememberPersonalGoalSelection() {
+        var personalGoal = getCheckedValue("personalGoal");
+        if (personalGoal) {
+          lastPersonalGoal = personalGoal;
+        }
+      }
+
+      function syncTrainingPathSummary() {
+        if (!trainingPathSummary || !audiencePathChoices || !trainingPathSummaryValue) {
+          return;
+        }
+
+        var audienceType = getCheckedValue("audienceType");
+        var personalGoal = getCheckedValue("personalGoal");
+        rememberPersonalGoalSelection();
+
+        var pathReady =
+          audienceType === "organisation"
+          || (audienceType === "me" && !!personalGoal);
+        var showSummary = pathReady && !editingTrainingPath;
+
+        trainingPathSummary.classList.toggle("hidden", !showSummary);
+        audiencePathChoices.classList.toggle("hidden", showSummary);
+        if (keepTrainingPathNote) {
+          keepTrainingPathNote.classList.toggle("hidden", !editingTrainingPath || !pathReady);
+        }
+
+        if (!showSummary) {
+          if (switchToItsForMeBtn) {
+            switchToItsForMeBtn.classList.add("hidden");
+          }
+          if (switchToOrganisationBtn) {
+            switchToOrganisationBtn.classList.add("hidden");
+          }
+          return;
+        }
+
+        if (audienceType === "me") {
+          trainingPathSummaryValue.textContent =
+            "It's for me · " + (personalGoalLabel(personalGoal) || "Personal training");
+          if (switchToItsForMeBtn) {
+            switchToItsForMeBtn.classList.add("hidden");
+          }
+          if (switchToOrganisationBtn) {
+            switchToOrganisationBtn.classList.remove("hidden");
+          }
+        } else {
+          trainingPathSummaryValue.textContent = "My organisation";
+          if (switchToItsForMeBtn) {
+            switchToItsForMeBtn.classList.remove("hidden");
+          }
+          if (switchToOrganisationBtn) {
+            switchToOrganisationBtn.classList.add("hidden");
+          }
+        }
+      }
+
+      function openTrainingPathEditor(options) {
+        options = options || {};
+        editingTrainingPath = true;
+        if (options.selectItsForMe) {
+          setRadioValue("audienceType", "me");
+          var goalToRestore = lastPersonalGoal || "bookCourse";
+          setRadioValue("personalGoal", goalToRestore);
+          editingTrainingPath = false;
+          updateAudienceBlocks();
+        } else if (options.selectOrganisation) {
+          rememberPersonalGoalSelection();
+          setRadioValue("audienceType", "organisation");
+          // Clear personal goal radios so they don't linger while hidden.
+          var personalGoalInputs = form.querySelectorAll('input[name="personalGoal"]');
+          Array.prototype.forEach.call(personalGoalInputs, function (field) {
+            field.checked = false;
+          });
+          editingTrainingPath = false;
+          updateAudienceBlocks();
+        } else {
+          syncTrainingPathSummary();
+        }
+        if (audiencePathChoices && typeof audiencePathChoices.scrollIntoView === "function") {
+          audiencePathChoices.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      }
+
       function updateAudienceBlocks() {
         var audienceType = getCheckedValue("audienceType");
         var personalGoal = getCheckedValue("personalGoal");
         var orgStylePath = isOrganisationStyleTrainingPath();
         var trainerPath = isTrainerMode();
+        var itsForMeMatrix = isItsForMeMatrixPath();
+        var matrixHeading = document.getElementById("matrixPathHeading");
+        var matrixIntro = document.getElementById("matrixPathIntro");
+        var organisationCompanyWrap = document.getElementById("organisationCompanyWrap");
+
         forMeBlock.classList.toggle("hidden", audienceType !== "me");
         trainerCoursesBlock.classList.toggle("hidden", !trainerPath);
         organisationBlock.classList.toggle("hidden", !orgStylePath);
         personalGoalHint.classList.toggle("hidden", !(audienceType === "me" && !personalGoal));
+        rememberPersonalGoalSelection();
+
+        if (matrixHeading) {
+          matrixHeading.textContent = itsForMeMatrix ? "It's for me — choose your course" : "My organisation";
+        }
+        if (matrixIntro) {
+          matrixIntro.textContent = itsForMeMatrix
+            ? "Pick sector, course, format, course style, and attendees for your booking."
+            : "Selections below only show valid combinations from your approved training matrix.";
+        }
+        if (organisationCompanyWrap) {
+          organisationCompanyWrap.classList.toggle("hidden", itsForMeMatrix);
+        }
 
         var personalGoalInputs = form.querySelectorAll('input[name="personalGoal"]');
         Array.prototype.forEach.call(personalGoalInputs, function (input) {
@@ -2449,6 +3213,7 @@ if ($kajabiCoursesUrl === '') {
         matrixAttendeesInput.required = orgStylePath && !matrixAttendeesInput.disabled;
         organisationCompanyInput.required = false;
         preferredDateInput.required = orgStylePath && !dateNotSureInput.checked;
+        syncPreferredDateUiState();
         trainerCourseSelect.required = trainerPath;
         trainerAttendeesInput.required = trainerPath;
         if (!trainerPath) {
@@ -2476,7 +3241,9 @@ if ($kajabiCoursesUrl === '') {
         if (!orgStylePath) {
           dateNotSureInput.checked = false;
           preferredDateInput.disabled = false;
-          organisationCompanyInput.value = "";
+          if (!itsForMeMatrix) {
+            organisationCompanyInput.value = "";
+          }
           setInputError(sectorSelect, false);
           setInputError(orgCourseSelect, false);
           setInputError(courseFormatSelect, false);
@@ -2501,6 +3268,7 @@ if ($kajabiCoursesUrl === '') {
 
         syncTrainerCompanyBookingOption();
         refreshOrganisationDateGuidance();
+        syncTrainingPathSummary();
         updateFinalDetailsVisibility();
       }
 
@@ -2785,6 +3553,7 @@ if ($kajabiCoursesUrl === '') {
         }
 
         syncMondaySpecificCourse();
+        syncSecondDateUi();
 
         if (isOrganisationStyleTrainingPath()) {
           matrixAttendeesInput.required = !matrixAttendeesInput.disabled;
@@ -2800,6 +3569,7 @@ if ($kajabiCoursesUrl === '') {
         var groups = [
           ["addressLine1", "addressLine2", "addressTown", "addressPostcode", "addressLat", "addressLng"],
           ["tmAddressLine1", "tmAddressLine2", "tmAddressTown", "tmAddressPostcode", "tmAddressLat", "tmAddressLng"],
+          ["day2AddressLine1", "day2AddressLine2", "day2AddressTown", "day2AddressPostcode", "day2AddressLat", "day2AddressLng"],
         ];
         groups.forEach(function (ids) {
           ids.forEach(function (id) {
@@ -2958,6 +3728,20 @@ if ($kajabiCoursesUrl === '') {
         lngId: "tmAddressLng",
       });
 
+      initAddressLookup({
+        postcodeInputId: "day2AddressPostcodeLookup",
+        lookupBtnId: "day2AddressLookupBtn",
+        statusId: "day2AddressLookupStatus",
+        pickId: "day2AddressPick",
+        pickLabelId: "day2AddressPickLabel",
+        line1Id: "day2AddressLine1",
+        line2Id: "day2AddressLine2",
+        townId: "day2AddressTown",
+        postcodeFieldId: "day2AddressPostcode",
+        latId: "day2AddressLat",
+        lngId: "day2AddressLng",
+      });
+
       continueBtn.addEventListener("click", function () {
         var name = nameInput.value.trim();
         var email = emailInput.value.trim();
@@ -3062,11 +3846,13 @@ if ($kajabiCoursesUrl === '') {
 
         if (name === "audienceType") {
           setGroupError(audienceTypeGroup, false);
+          editingTrainingPath = false;
           updateAudienceBlocks();
         }
 
         if (name === "personalGoal") {
           setGroupError(personalGoalGroup, false);
+          editingTrainingPath = false;
           updateAudienceBlocks();
         }
         if (name === "trainerCourseSelect") {
@@ -3235,9 +4021,48 @@ if ($kajabiCoursesUrl === '') {
       preferredDateInput.addEventListener("input", onPreferredDateInput);
       preferredDateInput.addEventListener("change", onPreferredDateInput);
 
+      var preferredDate2InputEl = document.getElementById("preferredDate2");
+      if (preferredDate2InputEl) {
+        function onPreferredDate2Input() {
+          if (!dateNotSureInput.checked && isSecondDateEnabled()) {
+            setInputError(preferredDate2InputEl, !preferredDate2InputEl.value.trim());
+          }
+          updateFinalDetailsVisibility();
+        }
+        preferredDate2InputEl.addEventListener("input", onPreferredDate2Input);
+        preferredDate2InputEl.addEventListener("change", onPreferredDate2Input);
+      }
+
       organisationCompanyInput.addEventListener("input", function () {
         setInputError(organisationCompanyInput, false);
       });
+
+      if (voucherApplyBtn) {
+        voucherApplyBtn.addEventListener("click", function () {
+          applyVoucherCode(voucherCodeInput ? voucherCodeInput.value : "");
+        });
+      }
+      if (voucherClearBtn) {
+        voucherClearBtn.addEventListener("click", function () {
+          if (voucherLockedForQuoteWon) {
+            setVoucherMessage("Can't apply a voucher because this enquiry is Quote Won.", "error");
+            return;
+          }
+          clearAppliedVoucher(false);
+          if (voucherCodeInput) {
+            voucherCodeInput.value = "";
+          }
+          setVoucherMessage("Voucher removed.");
+        });
+      }
+      if (voucherCodeInput) {
+        voucherCodeInput.addEventListener("keydown", function (event) {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            applyVoucherCode(voucherCodeInput.value);
+          }
+        });
+      }
 
       ["addressLine1", "addressPostcode"].forEach(function (id) {
         var el = document.getElementById(id);
@@ -3256,6 +4081,28 @@ if ($kajabiCoursesUrl === '') {
         updateFinalDetailsVisibility();
         renderPricing(getSelectedTrainingRow());
       });
+
+      if (changeTrainingPathBtn) {
+        changeTrainingPathBtn.addEventListener("click", function () {
+          openTrainingPathEditor();
+        });
+      }
+      if (switchToItsForMeBtn) {
+        switchToItsForMeBtn.addEventListener("click", function () {
+          openTrainingPathEditor({ selectItsForMe: true });
+        });
+      }
+      if (switchToOrganisationBtn) {
+        switchToOrganisationBtn.addEventListener("click", function () {
+          openTrainingPathEditor({ selectOrganisation: true });
+        });
+      }
+      if (keepTrainingPathBtn) {
+        keepTrainingPathBtn.addEventListener("click", function () {
+          editingTrainingPath = false;
+          syncTrainingPathSummary();
+        });
+      }
 
       form.addEventListener("submit", function (event) {
         event.preventDefault();

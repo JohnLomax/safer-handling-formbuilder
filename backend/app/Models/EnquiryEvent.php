@@ -87,6 +87,8 @@ class EnquiryEvent extends Model
         'lead_notification_failed' => 'New lead email failed',
         'storage_saved' => 'Enquiry saved locally',
         'storage_failed' => 'Local save failed',
+        'voucher_applied' => 'Voucher applied',
+        'voucher_removed' => 'Voucher removed',
     ];
 
     public function enquiry(): BelongsTo

@@ -1075,6 +1075,39 @@ function xeroFindItemByCodeOrName(string $codeOrName): ?array
 }
 
 /**
+ * Build a short voucher line for Xero quote/invoice descriptions.
+ *
+ * @param array<string, mixed> $quoteData
+ */
+function xeroVoucherDescriptionSnippet(array $quoteData, float $finalNet): string
+{
+    $code = strtoupper(trim((string)($quoteData['voucherCode'] ?? '')));
+    if ($code === '') {
+        return '';
+    }
+
+    $discountRaw = preg_replace('/[^0-9.\-]/', '', (string)($quoteData['voucherAmount'] ?? '')) ?? '';
+    $originalRaw = preg_replace('/[^0-9.\-]/', '', (string)($quoteData['quoteValueOriginal'] ?? '')) ?? '';
+
+    $discount = ($discountRaw !== '' && is_numeric($discountRaw)) ? round((float)$discountRaw, 2) : 0.0;
+    $original = ($originalRaw !== '' && is_numeric($originalRaw)) ? round((float)$originalRaw, 2) : 0.0;
+
+    if ($discount <= 0 && $original > $finalNet) {
+        $discount = round($original - $finalNet, 2);
+    }
+
+    $parts = ['Voucher ' . $code];
+    if ($discount > 0) {
+        $parts[0] .= ' (−' . number_format($discount, 2, '.', '') . ')';
+    }
+    if ($original > 0 && $original !== $finalNet) {
+        $parts[] = 'was ' . number_format($original, 2, '.', '');
+    }
+
+    return implode('; ', $parts);
+}
+
+/**
  * @param array<string, mixed> $quoteData
  * @return array{net:float,vat:float,gross:float,rate:float,description:string,item:?array<string,mixed>}
  */
@@ -1113,6 +1146,12 @@ function xeroBuildQuoteLineFromEnquiry(array $quoteData): array
     if ($trainingType !== '') {
         $descriptionParts[] = 'Training: ' . $trainingType;
     }
+
+    $voucherSnippet = xeroVoucherDescriptionSnippet($quoteData, $net);
+    if ($voucherSnippet !== '') {
+        $descriptionParts[] = $voucherSnippet;
+    }
+
     $descriptionParts[] = 'Including Travel but Excluding VAT: ' . number_format($net, 2, '.', '');
     $descriptionParts[] = 'VAT (' . rtrim(rtrim(number_format($rate, 2, '.', ''), '0'), '.') . '%): ' . number_format($vat, 2, '.', '');
     $descriptionParts[] = 'Total including VAT: ' . number_format($gross, 2, '.', '');

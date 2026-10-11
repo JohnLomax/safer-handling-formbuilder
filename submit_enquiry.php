@@ -18,7 +18,18 @@ require_once __DIR__ . '/voucher_helpers.php';
 /**
  * Apply a posted voucher code to a quote net and persist on the enquiry.
  *
- * @return array{quoteValue:string,applied:bool,changed:bool,error:?string,discount:float,original:float}
+ * @return array{
+ *   quoteValue:string,
+ *   applied:bool,
+ *   changed:bool,
+ *   error:?string,
+ *   discount:float,
+ *   original:float,
+ *   voucherCode:string,
+ *   voucherName:string,
+ *   voucherAmount:string,
+ *   quoteValueOriginal:string
+ * }
  */
 function submitEnquiryApplyVoucher(?int $enquiryId, string $quoteValue, array $post): array
 {
@@ -34,6 +45,10 @@ function submitEnquiryApplyVoucher(?int $enquiryId, string $quoteValue, array $p
         'error' => null,
         'discount' => 0.0,
         'original' => $original,
+        'voucherCode' => '',
+        'voucherName' => '',
+        'voucherAmount' => '',
+        'quoteValueOriginal' => '',
     ];
 
     if ($enquiryId !== null) {
@@ -88,6 +103,10 @@ function submitEnquiryApplyVoucher(?int $enquiryId, string $quoteValue, array $p
     $out['changed'] = true;
     $out['discount'] = (float) $result['discount'];
     $out['original'] = (float) $result['original'];
+    $out['voucherCode'] = (string) $result['voucher']['code'];
+    $out['voucherName'] = (string) $result['voucher']['name'];
+    $out['voucherAmount'] = voucherFormatQuoteValue((float) $result['discount']);
+    $out['quoteValueOriginal'] = voucherFormatQuoteValue((float) $result['original']);
 
     if ($enquiryId !== null) {
         voucherAttachToEnquiry(
@@ -1015,6 +1034,14 @@ try {
         $voucherChanged = !empty($voucherResult['changed']);
         $quoteValue = $voucherResult['quoteValue'];
         $_POST['quoteValue'] = $quoteValue;
+        if (!empty($voucherResult['applied'])) {
+            $_POST['voucherCode'] = $voucherResult['voucherCode'];
+            $_POST['voucherName'] = $voucherResult['voucherName'];
+            $_POST['voucherAmount'] = $voucherResult['voucherAmount'];
+            $_POST['quoteValueOriginal'] = $voucherResult['quoteValueOriginal'];
+        } else {
+            unset($_POST['voucherCode'], $_POST['voucherName'], $_POST['voucherAmount'], $_POST['quoteValueOriginal']);
+        }
 
         updateMondayTrainerSubmission($email, [
             'specificCourse' => $trainerCourse,
@@ -1051,6 +1078,27 @@ try {
         $voucherChanged = $voucherChanged || !empty($voucherResult['changed']);
         $resolvedOrganisation['quoteValue'] = $voucherResult['quoteValue'];
         $_POST['quoteValue'] = $voucherResult['quoteValue'];
+        if (!empty($voucherResult['applied'])) {
+            $resolvedOrganisation['voucherCode'] = $voucherResult['voucherCode'];
+            $resolvedOrganisation['voucherName'] = $voucherResult['voucherName'];
+            $resolvedOrganisation['voucherAmount'] = $voucherResult['voucherAmount'];
+            $resolvedOrganisation['quoteValueOriginal'] = $voucherResult['quoteValueOriginal'];
+            $_POST['voucherCode'] = $voucherResult['voucherCode'];
+            $_POST['voucherName'] = $voucherResult['voucherName'];
+            $_POST['voucherAmount'] = $voucherResult['voucherAmount'];
+            $_POST['quoteValueOriginal'] = $voucherResult['quoteValueOriginal'];
+        } else {
+            unset(
+                $resolvedOrganisation['voucherCode'],
+                $resolvedOrganisation['voucherName'],
+                $resolvedOrganisation['voucherAmount'],
+                $resolvedOrganisation['quoteValueOriginal'],
+                $_POST['voucherCode'],
+                $_POST['voucherName'],
+                $_POST['voucherAmount'],
+                $_POST['quoteValueOriginal']
+            );
+        }
 
         updateMondayOrganisationSubmission($email, array_merge(
             $resolvedOrganisation,

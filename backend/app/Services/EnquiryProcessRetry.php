@@ -119,6 +119,26 @@ class EnquiryProcessRetry
             $quoteData['quoteValue'] = number_format((float) $enquiry->quote_net_original, 2, '.', '');
         }
 
+        if ($enquiry->hasVoucher()) {
+            $quoteData['voucherCode'] = (string) ($enquiry->voucher_code ?: ($quoteData['voucherCode'] ?? ''));
+            $quoteData['voucherAmount'] = $enquiry->voucher_amount !== null
+                ? number_format((float) $enquiry->voucher_amount, 2, '.', '')
+                : (string) ($quoteData['voucherAmount'] ?? '');
+            $quoteData['quoteValueOriginal'] = $enquiry->quote_net_original !== null
+                ? number_format((float) $enquiry->quote_net_original, 2, '.', '')
+                : (string) ($quoteData['quoteValueOriginal'] ?? '');
+            if ($enquiry->relationLoaded('voucher') && $enquiry->voucher) {
+                $quoteData['voucherName'] = (string) $enquiry->voucher->name;
+            } elseif (! isset($quoteData['voucherName'])) {
+                $quoteData['voucherName'] = '';
+            }
+        } else {
+            $quoteData['voucherCode'] = '';
+            $quoteData['voucherName'] = '';
+            $quoteData['voucherAmount'] = '';
+            $quoteData['quoteValueOriginal'] = '';
+        }
+
         $quoteData['enquiryId'] = (int) $enquiry->id;
         $quoteData['resumeToken'] = enquiryLoggerEnsureResumeToken((int) $enquiry->id);
         $quoteData['email'] = (string) $enquiry->email;
@@ -887,6 +907,22 @@ class EnquiryProcessRetry
         if (! isset($payload['quoteValue']) || trim((string) $payload['quoteValue']) === '') {
             // Keep any stored quote value from the original submission payload.
             $payload['quoteValue'] = $payload['quoteValue'] ?? '';
+        }
+
+        // Prefer enquiry voucher columns so regenerated Xero descriptions stay accurate.
+        if ($enquiry->hasVoucher()) {
+            $payload['voucherCode'] = (string) ($enquiry->voucher_code ?: ($payload['voucherCode'] ?? ''));
+            if ($enquiry->voucher_amount !== null) {
+                $payload['voucherAmount'] = number_format((float) $enquiry->voucher_amount, 2, '.', '');
+            }
+            if ($enquiry->quote_net_original !== null) {
+                $payload['quoteValueOriginal'] = number_format((float) $enquiry->quote_net_original, 2, '.', '');
+            }
+            if ($enquiry->quote_net_final !== null) {
+                $payload['quoteValue'] = number_format((float) $enquiry->quote_net_final, 2, '.', '');
+            }
+        } else {
+            unset($payload['voucherCode'], $payload['voucherName'], $payload['voucherAmount'], $payload['quoteValueOriginal']);
         }
 
         // Enquiry columns are the source of truth for preferred date. Stale

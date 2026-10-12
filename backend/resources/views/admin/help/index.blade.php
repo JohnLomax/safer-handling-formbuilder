@@ -2,7 +2,7 @@
     <x-slot name="header">
         <x-admin.page-header
             title="Help & Support"
-            description="How to use the Safer Handling enquiry system and manage the Training Matrix."
+            description="How to use the Safer Handling enquiry system — Training Matrix, Day 1 / Day 2 courses, vouchers, and integrations."
         />
     </x-slot>
 
@@ -318,7 +318,7 @@
                         <a href="#walkthrough"><span class="help-nav-dot"></span>Video walkthrough</a>
                         <a href="#enquiry-journey"><span class="help-nav-dot"></span>Enquiry journey</a>
                         <a href="#form-paths"><span class="help-nav-dot"></span>Form paths (It's for me)</a>
-                        <a href="#second-date"><span class="help-nav-dot"></span>Second date courses</a>
+                        <a href="#second-date"><span class="help-nav-dot"></span>Day 1 &amp; Day 2 courses</a>
                         <a href="#enquiry-page"><span class="help-nav-dot"></span>Working an enquiry</a>
                         <a href="#delete-enquiry"><span class="help-nav-dot"></span>Delete an enquiry</a>
                         <a href="#activity-log"><span class="help-nav-dot"></span>Activity log</a>
@@ -408,7 +408,7 @@
                             </div>
                             <div>
                                 <h4>It's for me — book a course</h4>
-                                <p>Individuals can pick Sector → Course → Format → Course Style → Attendees from the Training Matrix (same live quote as organisations). See <a href="#form-paths" class="link-brand">Form paths</a>.</p>
+                                <p>Individuals pick Sector → Course → Format → Course Style → Attendees from the Training Matrix (same live quote as organisations). Switch paths with Change selection / My organisation instead. See <a href="#form-paths" class="link-brand">Form paths</a>.</p>
                             </div>
                         </div>
                         <div class="help-feature-card">
@@ -416,8 +416,8 @@
                                 <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" /></svg>
                             </div>
                             <div>
-                                <h4>Enable second date</h4>
-                                <p>Matrix rows can collect Day 1 + Day 2 dates and addresses. Both go to Monday, emails, and Forge <code class="rounded bg-sh-surface px-1 text-xs">session_dates</code>. See <a href="#second-date" class="link-brand">Second date courses</a>.</p>
+                                <h4>Day 1 &amp; Day 2 (second date)</h4>
+                                <p>Tick <strong class="text-sh-text">Enable second date</strong> on a matrix row to collect Day 1 and Day 2 dates + addresses. Both sync to Monday, quote emails, and Forge. See <a href="#second-date" class="link-brand">Day 1 &amp; Day 2</a>.</p>
                             </div>
                         </div>
                         <div class="help-feature-card">
@@ -426,7 +426,7 @@
                             </div>
                             <div>
                                 <h4>Vouchers</h4>
-                                <p>Fixed £ discount codes with optional max redemptions and date windows. Customers and staff can apply them on live quotes. See <a href="#vouchers" class="link-brand">Vouchers</a>.</p>
+                                <p>Fixed £ discount codes with optional max redemptions and date windows. The discounted net and voucher code appear on the Xero quote and invoice line description. See <a href="#vouchers" class="link-brand">Vouchers</a>.</p>
                             </div>
                         </div>
                         <div class="help-feature-card">
@@ -436,6 +436,24 @@
                             <div>
                                 <h4>Max capacity description</h4>
                                 <p>Optional note on a matrix row explaining why attendees cannot exceed the max — shown on the form when someone tries to go over.</p>
+                            </div>
+                        </div>
+                        <div class="help-feature-card">
+                            <div class="help-icon" style="background:#eef7ff;color:#0255a4;">
+                                <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" /></svg>
+                            </div>
+                            <div>
+                                <h4>Icon actions in admin lists</h4>
+                                <p>Enquiries, Training Matrix, Vouchers, and Users use icon-only actions (eye / pencil / bin) instead of text links, with tooltips on hover.</p>
+                            </div>
+                        </div>
+                        <div class="help-feature-card">
+                            <div class="help-icon">
+                                <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" /></svg>
+                            </div>
+                            <div>
+                                <h4>Bulk delete enquiries</h4>
+                                <p>On the Enquiries list, select multiple rows and use Delete selected. Monday items are left unchanged; Forge bookings are cancelled first when present. See <a href="#delete-enquiry" class="link-brand">Delete an enquiry</a>.</p>
                             </div>
                         </div>
                     </div>
@@ -603,8 +621,8 @@
                 <section id="second-date" class="brand-panel help-section help-stack scroll-mt-6">
                     <div class="help-section-head">
                         <div>
-                            <h3 class="text-base font-semibold text-brand-header">Second date courses</h3>
-                            <p class="text-sm text-sh-mid">Two-day matrix courses with Day 1 and Day 2 dates and addresses.</p>
+                            <h3 class="text-base font-semibold text-brand-header">Day 1 &amp; Day 2 courses</h3>
+                            <p class="text-sm text-sh-mid">Two-day matrix courses collect a preferred date and venue for each day (Enable second date).</p>
                         </div>
                         <a href="{{ route('admin.training-matrix.index') }}" class="btn-brand-outline text-xs">Open Training Matrix</a>
                     </div>
@@ -616,7 +634,7 @@
                             </div>
                             <div>
                                 <h4>Turn it on</h4>
-                                <p>Edit a Training Matrix row and tick <strong class="text-sh-text">Enable second date</strong>.</p>
+                                <p>Edit a Training Matrix row and tick <strong class="text-sh-text">Enable second date</strong>. Only that combination shows Day 1 / Day 2 on the form.</p>
                             </div>
                         </div>
                         <div class="help-feature-card">
@@ -625,7 +643,11 @@
                             </div>
                             <div>
                                 <h4>On the form</h4>
-                                <p>Customers enter Day 1 date + address and Day 2 date + address (each with postcode lookup). “Not sure yet” clears both dates.</p>
+                                <p>
+                                    Customers enter <strong class="text-sh-text">Day 1</strong> date + address and <strong class="text-sh-text">Day 2</strong> date + address (each with postcode lookup).
+                                    Applies to both My organisation and It’s for me → book a course.
+                                    “Not sure yet” clears both dates.
+                                </p>
                             </div>
                         </div>
                         <div class="help-feature-card">
@@ -634,7 +656,7 @@
                             </div>
                             <div>
                                 <h4>Emails &amp; admin</h4>
-                                <p>Quote and lead emails show Day 1 / Day 2. The enquiry page lists both dates and addresses.</p>
+                                <p>Quote confirmation and office lead emails show Day 1 / Day 2. The enquiry page lists both dates and addresses clearly labelled.</p>
                             </div>
                         </div>
                         <div class="help-feature-card">
@@ -643,10 +665,19 @@
                             </div>
                             <div>
                                 <h4>Monday &amp; Forge</h4>
-                                <p>Monday notes include Day 1 / Day 2 (and a Day 2 date column if the board has one). Forge receives two objects in <code class="rounded bg-sh-surface px-1 text-xs">session_dates</code>.</p>
+                                <p>
+                                    Monday notes include Day 1 / Day 2 (and a Day 2 date column if the board has one).
+                                    Forge receives two objects in <code class="rounded bg-sh-surface px-1 text-xs">session_dates</code> (one per day with date and address).
+                                </p>
                             </div>
                         </div>
                     </div>
+
+                    <ul class="list-disc text-sm text-sh-mid">
+                        <li>Leave <strong class="text-sh-text">Enable second date</strong> unticked for single-day courses — the form keeps the normal one-date / one-address fields.</li>
+                        <li>Day 2 address can differ from Day 1 (useful for different venues).</li>
+                        <li>When testing, pick a matrix combination with second date on, confirm both date blocks appear, then check the enquiry admin page and Monday notes after submit.</li>
+                    </ul>
                 </section>
 
                 <section id="enquiry-page" class="brand-panel help-section help-stack scroll-mt-6">
@@ -662,8 +693,9 @@
                         <li><strong class="text-sh-text">Edit form</strong> opens the customer enquiry form with saved details.</li>
                         <li><strong class="text-sh-text">View / Edit booking</strong> lets staff complete Accept Quote details for the client.</li>
                         <li>Preferred date can be “Not sure yet”; staff can set it later in booking edit.</li>
-                        <li>Matrix rows with <strong class="text-sh-text">Enable second date</strong> collect Day 1 + Day 2 dates and addresses; Forge receives both as <code class="rounded bg-sh-surface px-1 text-xs">session_dates</code>.</li>
-                        <li>Once Quote Won, the customer enquiry form is locked from further online edits.</li>
+                        <li>Matrix rows with <strong class="text-sh-text">Enable second date</strong> show Day 1 + Day 2 on the enquiry; Forge receives both as <code class="rounded bg-sh-surface px-1 text-xs">session_dates</code>. See <a href="#second-date" class="link-brand">Day 1 &amp; Day 2</a>.</li>
+                        <li>Apply or remove a <strong class="text-sh-text">voucher</strong> on the enquiry page (locked once Quote Won). See <a href="#vouchers" class="link-brand">Vouchers</a>.</li>
+                        <li>Once Quote Won, the customer enquiry form is locked from further online edits (including vouchers).</li>
                         <li><strong class="text-sh-text">Delete enquiry</strong> removes the record from this admin system — see <a href="#delete-enquiry" class="link-brand">Delete an enquiry</a>.</li>
                     </ul>
                 </section>
@@ -785,7 +817,7 @@
                             <div class="help-icon"><x-xero-badge compact class="!h-5 !w-5" /></div>
                             <div>
                                 <h4>Xero</h4>
-                                <p>Quotes and draft invoices; email the invoice to the customer from the enquiry page.</p>
+                                <p>Quotes and draft invoices; email the invoice from the enquiry page. Applied vouchers appear in the quote/invoice line description (discounted net amount).</p>
                             </div>
                         </div>
                         <div class="help-feature-card">
@@ -939,12 +971,12 @@
                         <div class="help-step-card">
                             <div class="help-step-num">1</div>
                             <h4>Create a voucher</h4>
-                            <p>Add a code, name, and fixed £ amount. Optionally set active dates, a redemption limit, and notes. Codes are stored uppercase with spaces removed.</p>
+                            <p>Add a code, name, and fixed £ amount. Optionally set active dates, a redemption limit (max redemptions), and notes. Codes are stored uppercase with spaces removed.</p>
                         </div>
                         <div class="help-step-card">
                             <div class="help-step-num">2</div>
                             <h4>See assigned quotes</h4>
-                            <p>Open a voucher to list every enquiry that used it, with original quote net, discount, and final net.</p>
+                            <p>Open a voucher (eye icon) to list every enquiry that used it, with original quote net, discount, and final net.</p>
                         </div>
                         <div class="help-step-card">
                             <div class="help-step-num">3</div>
@@ -958,13 +990,40 @@
                         </div>
                     </div>
 
-                    <ul class="mt-4 list-disc space-y-2 pl-5 text-sm text-sh-mid">
+                    <div class="help-card-grid" style="margin-top:var(--help-gap);">
+                        <div class="help-feature-card">
+                            <div class="help-icon" style="background:#fff7e8;color:#9a6700;">
+                                <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>
+                            </div>
+                            <div>
+                                <h4>Xero quote &amp; invoice description</h4>
+                                <p>
+                                    When a voucher is applied, the Xero line description includes the voucher code, discount amount, and original net
+                                    (for example <code class="rounded bg-sh-surface px-1 text-xs">Voucher SAVE50 (−50.00; was 450.00)</code>).
+                                    Invoices created from that quote copy the same description.
+                                </p>
+                            </div>
+                        </div>
+                        <div class="help-feature-card">
+                            <div class="help-icon" style="background:#fff7e8;color:#9a6700;">
+                                <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                            </div>
+                            <div>
+                                <h4>Max redemptions</h4>
+                                <p>
+                                    Optional cap on how many enquiries can use the code. Leave blank for unlimited.
+                                    When the limit is reached the voucher shows as Fully used and new applications are blocked.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <ul class="list-disc text-sm text-sh-mid">
+                        <li>The Xero Unit Amount is the <strong class="text-sh-text">discounted</strong> net (ex VAT). The voucher is recorded in the line description rather than as a separate Xero discount field.</li>
                         <li>Discounts never go below £0.00 — a £100 voucher on an £80 quote becomes £0.00.</li>
-                        <li><strong class="text-sh-text">Max redemptions</strong> (optional) caps how many enquiries can use the code. Leave blank for unlimited. When the limit is reached the voucher shows as Fully used.</li>
                         <li>Valid from / until dates restrict when the code can be applied (optional).</li>
                         <li>Applying or removing a voucher regenerates and emails a new Xero quote when one was already sent.</li>
                         <li>Quote Won enquiries cannot have vouchers applied or changed — the field is greyed out with an explanation.</li>
-                        <li>If a quote was already emailed, applying a voucher later updates the stored net and regenerates the Xero quote PDF email.</li>
                         <li>Deleting a voucher clears the link on enquiries but keeps the discount history fields on those enquiries.</li>
                         <li>It's for me (book a course) and organisation paths both show the voucher field under the live quote.</li>
                     </ul>
@@ -1136,7 +1195,7 @@
                     </div>
                     <p class="text-sm text-sh-mid">
                         After editing matrix rows, test sector → course → format → style → attendees on the public form and confirm the Live Quote before using it with customers.
-                        Check that a single format/style appears as a label, and that Enable Kajabi on/off matches whether Quote Won sends the Legal Briefing invite for that combination.
+                        Check that a single format/style appears as a label, that Enable Kajabi on/off matches whether Quote Won sends the Legal Briefing invite, and that Enable second date shows Day 1 / Day 2 when expected.
                     </p>
                 </section>
 

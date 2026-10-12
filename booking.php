@@ -529,7 +529,7 @@ function bookingH(string $value): string
               <label for="venueRequirements">
                 Venue Requirements * — I confirm our venue can meet the following requirements:
                 Legal Briefing: a TV or projector with screen, so the trainer can connect their laptop or USB drive for the presentation.
-                Physical Skills: a clear space large enough for delegates to practise techniques in groups of three, plus chairs available for the seated exercises.
+                Physical Skills: a clear space large enough for delegates to practice techniques in groups of three, plus chairs available for the seated exercises.
               </label>
             </div>
           </div>

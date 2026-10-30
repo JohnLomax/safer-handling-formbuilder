@@ -1437,6 +1437,54 @@ function buildQuoteEmailText(array $data): string
 }
 
 /**
+ * Recipients for "Your Safer Handling Training Quote":
+ * always the person who filled the form, plus invoice/accounts when filled.
+ *
+ * @param array<string, mixed> $quoteData
+ * @return list<array{email:string,name:string}>
+ */
+function brevoQuoteEmailRecipients(string $toEmail, string $toName, array $quoteData): array
+{
+    $recipients = [];
+    $seen = [];
+
+    $add = static function (string $email, string $name) use (&$recipients, &$seen): void {
+        $email = strtolower(trim($email));
+        if ($email === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return;
+        }
+        if (isset($seen[$email])) {
+            return;
+        }
+        $seen[$email] = true;
+        $name = trim($name);
+        $recipients[] = [
+            'email' => $email,
+            'name' => $name !== '' ? $name : $email,
+        ];
+    };
+
+    // Form filler first.
+    $add(
+        (string) ($quoteData['enquiryContactEmail'] ?? ''),
+        (string) ($quoteData['enquiryContactName'] ?? '')
+    );
+    // Resolved send target (may be accounts, or same as form filler).
+    $add($toEmail, $toName);
+    // Explicit invoice / accounts fields when present.
+    $add(
+        (string) ($quoteData['invoiceQuoteEmail'] ?? ''),
+        (string) ($quoteData['invoiceQuoteName'] ?? '')
+    );
+
+    if ($recipients === []) {
+        throw new RuntimeException('A valid customer email is required to send the quote.');
+    }
+
+    return $recipients;
+}
+
+/**
  * @param array<string, mixed> $quoteData
  * @param array{content?:string,filename?:string}|null $pdfAttachment Raw PDF bytes + filename
  */
@@ -1445,12 +1493,7 @@ function sendQuoteEmailViaBrevo(string $toEmail, string $toName, array $quoteDat
     $sender = brevoSenderConfig();
     $payload = [
         'sender' => $sender,
-        'to' => [
-            [
-                'email' => $toEmail,
-                'name' => $toName,
-            ],
-        ],
+        'to' => brevoQuoteEmailRecipients($toEmail, $toName, $quoteData),
         'replyTo' => [
             'email' => brevoContactEmail(),
             'name' => $sender['name'],

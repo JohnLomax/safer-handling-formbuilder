@@ -420,7 +420,7 @@
                             </div>
                             <div>
                                 <h4>Day 1 &amp; Day 2 (second date)</h4>
-                                <p>Tick <strong class="text-sh-text">Enable second date</strong> on a matrix row to collect Day 1 and Day 2 dates + addresses. Both sync to Monday, quote emails, and Forge. See <a href="#second-date" class="link-brand">Day 1 &amp; Day 2</a>.</p>
+                                <p>Tick <strong class="text-sh-text">Enable second date</strong> on a matrix row to collect Day 1 and Day 2 dates (Day 2 address is optional). Syncs to Monday, quote emails, and Forge. See <a href="#second-date" class="link-brand">Day 1 &amp; Day 2</a>.</p>
                             </div>
                         </div>
                         <div class="help-feature-card">
@@ -483,7 +483,7 @@
                             </div>
                             <div>
                                 <h4>Quote / invoice recipient</h4>
-                                <p>Optional name and email on the public form for who should receive Xero quotes and invoices (when different from the main contact). Highlighted on the enquiry page. See <a href="#quote-recipient" class="link-brand">Quote / invoice recipient</a>.</p>
+                                <p>Optional accounts name/email on the public form. Quote emails go to the form filler and, when set, accounts too; Xero uses accounts for billing. Highlighted on the enquiry page. See <a href="#quote-recipient" class="link-brand">Quote / invoice recipient</a>.</p>
                             </div>
                         </div>
                         <div class="help-feature-card">
@@ -692,7 +692,7 @@
                             <div>
                                 <h4>On the form</h4>
                                 <p>
-                                    Customers enter <strong class="text-sh-text">Day 1</strong> date + address and <strong class="text-sh-text">Day 2</strong> date + address (each with postcode lookup).
+                                    Customers enter <strong class="text-sh-text">Day 1</strong> date + address and <strong class="text-sh-text">Day 2</strong> date (Day 2 address is optional; leave blank if the same venue).
                                     Applies to both My organisation and It’s for me → book a course.
                                     “Not sure yet” clears both dates.
                                 </p>
@@ -723,7 +723,7 @@
 
                     <ul class="list-disc text-sm text-sh-mid">
                         <li>Leave <strong class="text-sh-text">Enable second date</strong> unticked for single-day courses — the form keeps the normal one-date / one-address fields.</li>
-                        <li>Day 2 address can differ from Day 1 (useful for different venues).</li>
+                        <li>Day 2 address is <strong class="text-sh-text">optional</strong> — leave it blank if Day 2 is at the same venue as Day 1, or enter a different venue when needed.</li>
                         <li>When testing, pick a matrix combination with second date on, confirm both date blocks appear, then check the enquiry admin page and Monday notes after submit.</li>
                     </ul>
                 </section>
@@ -749,12 +749,13 @@
                     <div class="help-section-head">
                         <div>
                             <h3 class="text-base font-semibold text-brand-header">Quote / invoice recipient</h3>
-                            <p class="text-sm text-sh-mid">Optional details when quotes and invoices should go to someone other than the main contact.</p>
+                            <p class="text-sm text-sh-mid">Optional accounts details so quotes can be copied to invoice contacts as well as the person who filled the form.</p>
                         </div>
                     </div>
                     <ul class="list-disc text-sm text-sh-mid">
                         <li>On the public form (after phone number), customers can enter an optional <strong class="text-sh-text">Name</strong> and <strong class="text-sh-text">Email</strong> under Quote / invoice recipient.</li>
-                        <li>When set, Xero quotes and invoices use these details as the recipient.</li>
+                        <li>The quote email always goes to the person who filled the form. When an accounts email is set (and different), they are included on the same quote email.</li>
+                        <li>Xero quotes and invoices still use the accounts recipient when set.</li>
                         <li>The main enquiry contact email is still used for Edit Enquiry / form resume links.</li>
                         <li>On the admin enquiry page the recipient is highlighted (header chip and a dedicated card under Enquiry details).</li>
                         <li>The Enquiries list shows an <strong class="text-sh-text">Invoice to</strong> badge when a custom recipient is set.</li>

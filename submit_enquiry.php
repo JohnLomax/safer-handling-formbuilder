@@ -1210,10 +1210,15 @@ try {
             $quoteEmailData['name'] = $quoteRecipient['name'];
             $quoteEmailData['enquiryContactName'] = $name;
             $quoteEmailData['enquiryContactEmail'] = $email;
-            if ($quoteRecipient['custom']) {
-                $quoteEmailData['invoiceQuoteName'] = trim((string) ($_POST['invoiceQuoteName'] ?? ''));
-                $quoteEmailData['invoiceQuoteEmail'] = trim((string) ($_POST['invoiceQuoteEmail'] ?? ''));
+            $invoiceQuoteName = trim((string) ($_POST['invoiceQuoteName'] ?? ''));
+            $invoiceQuoteEmail = trim((string) ($_POST['invoiceQuoteEmail'] ?? ''));
+            if ($invoiceQuoteName !== '') {
+                $quoteEmailData['invoiceQuoteName'] = $invoiceQuoteName;
             }
+            if ($invoiceQuoteEmail !== '') {
+                $quoteEmailData['invoiceQuoteEmail'] = $invoiceQuoteEmail;
+            }
+            // Brevo sends to form filler + accounts (if filled). Xero contact still prefers accounts.
             $quoteSendResult = sendQuoteToClient($quoteRecipient['email'], $quoteRecipient['name'], $quoteEmailData);
             if ($enquiryId !== null) {
                 enquiryLoggerSafe(function () use ($enquiryId, $quoteSendResult, $name, $email, $shouldRegenerateQuoteForVoucher): void {

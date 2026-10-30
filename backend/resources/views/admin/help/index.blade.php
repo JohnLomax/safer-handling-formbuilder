@@ -420,7 +420,7 @@
                             </div>
                             <div>
                                 <h4>Day 1 &amp; Day 2 (second date)</h4>
-                                <p>Tick <strong class="text-sh-text">Enable second date</strong> on a matrix row to collect Day 1 and Day 2 dates + addresses. Both sync to Monday, quote emails, and Forge. See <a href="#second-date" class="link-brand">Day 1 &amp; Day 2</a>.</p>
+                                <p>Tick <strong class="text-sh-text">Enable second date</strong> on a matrix row to collect Day 1 and Day 2 dates (Day 2 address is optional). Syncs to Monday, quote emails, and Forge. See <a href="#second-date" class="link-brand">Day 1 &amp; Day 2</a>.</p>
                             </div>
                         </div>
                         <div class="help-feature-card">
@@ -692,7 +692,7 @@
                             <div>
                                 <h4>On the form</h4>
                                 <p>
-                                    Customers enter <strong class="text-sh-text">Day 1</strong> date + address and <strong class="text-sh-text">Day 2</strong> date + address (each with postcode lookup).
+                                    Customers enter <strong class="text-sh-text">Day 1</strong> date + address and <strong class="text-sh-text">Day 2</strong> date (Day 2 address is optional; leave blank if the same venue).
                                     Applies to both My organisation and It’s for me → book a course.
                                     “Not sure yet” clears both dates.
                                 </p>
@@ -723,7 +723,7 @@
 
                     <ul class="list-disc text-sm text-sh-mid">
                         <li>Leave <strong class="text-sh-text">Enable second date</strong> unticked for single-day courses — the form keeps the normal one-date / one-address fields.</li>
-                        <li>Day 2 address can differ from Day 1 (useful for different venues).</li>
+                        <li>Day 2 address is <strong class="text-sh-text">optional</strong> — leave it blank if Day 2 is at the same venue as Day 1, or enter a different venue when needed.</li>
                         <li>When testing, pick a matrix combination with second date on, confirm both date blocks appear, then check the enquiry admin page and Monday notes after submit.</li>
                     </ul>
                 </section>

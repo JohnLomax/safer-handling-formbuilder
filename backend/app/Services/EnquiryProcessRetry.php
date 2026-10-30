@@ -234,7 +234,10 @@ class EnquiryProcessRetry
 
     public function canRetryResumeEmail(Enquiry $enquiry): bool
     {
-        return trim((string) $enquiry->email) !== ''
+        $this->bootFormHelpers();
+
+        return brevoResumeEmailEnabled()
+            && trim((string) $enquiry->email) !== ''
             && trim((string) $enquiry->name) !== ''
             && $enquiry->resume_email_sent_at === null
             && ! $this->hasSuccessfulEvent($enquiry, 'resume_email_sent');
@@ -249,7 +252,10 @@ class EnquiryProcessRetry
 
     public function canResendResumeEmail(Enquiry $enquiry): bool
     {
-        return trim((string) $enquiry->email) !== ''
+        $this->bootFormHelpers();
+
+        return brevoResumeEmailEnabled()
+            && trim((string) $enquiry->email) !== ''
             && trim((string) $enquiry->name) !== ''
             && brevoApiKey() !== '';
     }
@@ -597,6 +603,12 @@ class EnquiryProcessRetry
 
     public function retryResumeEmail(Enquiry $enquiry): void
     {
+        $this->bootFormHelpers();
+
+        if (! brevoResumeEmailEnabled()) {
+            throw new RuntimeException('Edit Enquiry Emails are disabled in Integration settings.');
+        }
+
         if (! $this->canRetryResumeEmail($enquiry)) {
             throw new RuntimeException('Edit Enquiry Email has already been sent, or cannot be sent for this enquiry.');
         }

@@ -783,7 +783,8 @@ if ($kajabiCoursesUrl === '') {
     }
 
     .voucher-block .optional,
-    .invoice-quote-recipient .optional {
+    .invoice-quote-recipient .optional,
+    .address-lookup-block .optional {
       font-weight: 500;
       color: #5a7a96;
       font-size: 0.9em;
@@ -1429,7 +1430,8 @@ if ($kajabiCoursesUrl === '') {
             </div>
 
             <div class="address-lookup-block hidden" id="day2AddressBlock">
-              <h4>Day 2 address</h4>
+              <h4>Day 2 address <span class="optional">(optional)</span></h4>
+              <p class="note" style="margin-top:0;">Leave blank if Day 2 is at the same venue as Day 1.</p>
               <div class="postcode-lookup-row">
                 <input
                   type="text"
@@ -1447,7 +1449,7 @@ if ($kajabiCoursesUrl === '') {
               </select>
               <div class="address-fields-grid">
                 <div>
-                  <label for="day2AddressLine1">Address line 1</label>
+                  <label for="day2AddressLine1">Address line 1 <span class="optional">(optional)</span></label>
                   <input type="text" id="day2AddressLine1" name="day2AddressLine1" maxlength="200" autocomplete="off" />
                 </div>
                 <div>
@@ -1459,7 +1461,7 @@ if ($kajabiCoursesUrl === '') {
                   <input type="text" id="day2AddressTown" name="day2AddressTown" maxlength="120" autocomplete="off" />
                 </div>
                 <div>
-                  <label for="day2AddressPostcode">Postcode</label>
+                  <label for="day2AddressPostcode">Postcode <span class="optional">(optional)</span></label>
                   <input type="text" id="day2AddressPostcode" name="day2AddressPostcode" maxlength="16" autocomplete="off" />
                 </div>
               </div>
@@ -3073,15 +3075,11 @@ if ($kajabiCoursesUrl === '') {
           var addressLine1Input = document.getElementById("addressLine1");
           var addressPostcodeInput = document.getElementById("addressPostcode");
           var preferredDate2Input = document.getElementById("preferredDate2");
-          var day2AddressLine1Input = document.getElementById("day2AddressLine1");
-          var day2AddressPostcodeInput = document.getElementById("day2AddressPostcode");
           var secondDateOn = isSecondDateEnabled();
           var missingAddressLine1 = !addressLine1Input || !addressLine1Input.value.trim();
           var missingAddressPostcode = !addressPostcodeInput || !addressPostcodeInput.value.trim();
           var missingPreferredDate = (!preferredDateInput.value.trim() && !dateNotSureInput.checked);
           var missingPreferredDate2 = secondDateOn && !dateNotSureInput.checked && (!preferredDate2Input || !preferredDate2Input.value.trim());
-          var missingDay2AddressLine1 = secondDateOn && (!day2AddressLine1Input || !day2AddressLine1Input.value.trim());
-          var missingDay2AddressPostcode = secondDateOn && (!day2AddressPostcodeInput || !day2AddressPostcodeInput.value.trim());
 
           if (isOrganisation || isItsForMeMatrixPath()) {
             setGroupError(personalGoalGroup, false);
@@ -3096,8 +3094,8 @@ if ($kajabiCoursesUrl === '') {
           setInputError(addressPostcodeInput, missingAddressPostcode);
           setInputError(preferredDateInput, missingPreferredDate);
           setInputError(preferredDate2Input, missingPreferredDate2);
-          setInputError(day2AddressLine1Input, missingDay2AddressLine1);
-          setInputError(day2AddressPostcodeInput, missingDay2AddressPostcode);
+          setInputError(document.getElementById("day2AddressLine1"), false);
+          setInputError(document.getElementById("day2AddressPostcode"), false);
 
           if (
             missingSector
@@ -3109,8 +3107,6 @@ if ($kajabiCoursesUrl === '') {
             || missingAddressPostcode
             || missingPreferredDate
             || missingPreferredDate2
-            || missingDay2AddressLine1
-            || missingDay2AddressPostcode
           ) {
             hasError = true;
           }

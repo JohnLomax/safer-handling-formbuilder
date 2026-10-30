@@ -1872,9 +1872,21 @@ function xeroDeleteDraftInvoice(string $invoiceId): void
         return;
     }
 
-    $resp = xeroApiRequest('DELETE', 'Invoices/' . rawurlencode($invoiceId));
+    // Xero often returns 404 for HTTP DELETE on ACCREC drafts; Status=DELETED via POST works.
+    $resp = xeroApiRequest('POST', 'Invoices', [
+        'Invoices' => [[
+            'InvoiceID' => $invoiceId,
+            'Status' => 'DELETED',
+        ]],
+    ]);
     if ($resp['status'] >= 400) {
-        throw new RuntimeException(xeroApiErrorMessage($resp['body'], 'Could not delete mismatched Xero draft invoice.'));
+        $fallback = xeroApiRequest('DELETE', 'Invoices/' . rawurlencode($invoiceId));
+        if ($fallback['status'] >= 400) {
+            throw new RuntimeException(xeroApiErrorMessage(
+                is_array($resp['body']) ? $resp['body'] : $fallback['body'],
+                'Could not delete mismatched Xero draft invoice.'
+            ));
+        }
     }
 }
 

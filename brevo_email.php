@@ -1491,33 +1491,59 @@ function brevoQuoteEmailRecipients(string $toEmail, string $toName, array $quote
 function sendQuoteEmailViaBrevo(string $toEmail, string $toName, array $quoteData, ?array $pdfAttachment = null): string
 {
     $sender = brevoSenderConfig();
-    $payload = [
-        'sender' => $sender,
-        'to' => brevoQuoteEmailRecipients($toEmail, $toName, $quoteData),
-        'replyTo' => [
-            'email' => brevoContactEmail(),
-            'name' => $sender['name'],
-        ],
-        'subject' => 'Your Safer Handling Training Quote',
-        'htmlContent' => buildQuoteEmailHtml($quoteData),
-        'textContent' => buildQuoteEmailText($quoteData),
-    ];
+    $recipients = brevoQuoteEmailRecipients($toEmail, $toName, $quoteData);
+    $html = buildQuoteEmailHtml($quoteData);
+    $text = buildQuoteEmailText($quoteData);
+    $enquiryId = (int) ($quoteData['enquiryId'] ?? 0);
 
-    $pdfContent = is_array($pdfAttachment) ? (string)($pdfAttachment['content'] ?? '') : '';
+    $attachment = null;
+    $pdfContent = is_array($pdfAttachment) ? (string) ($pdfAttachment['content'] ?? '') : '';
     if ($pdfContent !== '') {
-        $filename = trim((string)($pdfAttachment['filename'] ?? 'Safer-Handling-Quote.pdf'));
+        $filename = trim((string) ($pdfAttachment['filename'] ?? 'Safer-Handling-Quote.pdf'));
         if ($filename === '') {
             $filename = 'Safer-Handling-Quote.pdf';
         }
-        $payload['attachment'] = [[
+        $attachment = [[
             'content' => base64_encode($pdfContent),
             'name' => $filename,
         ]];
     }
 
-    $payload = brevoWithEnquiryTracking($payload, (int) ($quoteData['enquiryId'] ?? 0), 'quote');
+    // One Brevo send per recipient — multi-TO can look "delivered" while one inbox never shows it.
+    $messageId = '';
+    $lastError = null;
+    foreach ($recipients as $recipient) {
+        $payload = [
+            'sender' => $sender,
+            'to' => [$recipient],
+            'replyTo' => [
+                'email' => brevoContactEmail(),
+                'name' => $sender['name'],
+            ],
+            'subject' => 'Your Safer Handling Training Quote',
+            'htmlContent' => $html,
+            'textContent' => $text,
+        ];
+        if ($attachment !== null) {
+            $payload['attachment'] = $attachment;
+        }
+        $payload = brevoWithEnquiryTracking($payload, $enquiryId, 'quote');
 
-    return brevoExecuteSmtpSend($payload);
+        try {
+            $messageId = brevoExecuteSmtpSend($payload);
+        } catch (Throwable $e) {
+            $lastError = $e;
+        }
+    }
+
+    if ($messageId === '' && $lastError instanceof Throwable) {
+        throw $lastError;
+    }
+    if ($messageId === '') {
+        throw new RuntimeException('Quote email could not be sent to any recipient.');
+    }
+
+    return $messageId;
 }
 
 /**

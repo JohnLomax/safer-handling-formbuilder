@@ -758,7 +758,7 @@
                         <li>Xero quotes and invoices still use the accounts recipient when set.</li>
                         <li>The main enquiry contact email is still used for Edit Enquiry / form resume links.</li>
                         <li>On the admin enquiry page the recipient is highlighted (header chip and a dedicated card under Enquiry details).</li>
-                        <li>The Enquiries list shows an <strong class="text-sh-text">Invoice to</strong> badge when a custom recipient is set.</li>
+                        <li>The Enquiries list shows an <strong class="text-sh-text">Invoice sent to</strong> badge when a custom recipient is set — hover the eye to see name and email.</li>
                     </ul>
                 </section>
 
@@ -1002,6 +1002,11 @@
                                         <td>No</td>
                                         <td>Email the new invoice PDF via Brevo (default <code class="rounded bg-sh-surface px-1 text-xs">true</code>).</td>
                                     </tr>
+                                    <tr>
+                                        <td><code class="rounded bg-sh-surface px-1 text-xs">Idempotency-Key</code> header</td>
+                                        <td>No</td>
+                                        <td>Optional unique key per add. Retries with the same key return the first result and do not add attendees or create another invoice.</td>
+                                    </tr>
                                 </tbody>
                             </table>
                         </div>
@@ -1012,17 +1017,19 @@
                         <pre class="mt-3 overflow-x-auto rounded-[12px] border border-[#d8e8f8] bg-[#0b1f33] p-4 text-xs leading-relaxed text-[#e8f4ff]"><code>curl -X POST "{{ str_replace('{id}', '123', $attendeesApiUrl) }}" \
   -H "Authorization: Bearer YOUR_API_TOKEN" \
   -H "Content-Type: application/json" \
+  -H "Idempotency-Key: forge-123-attendees-2" \
   -d '{"count": 2, "source": "Forge", "email_invoice": true}'</code></pre>
                     </div>
 
                     <div>
                         <h4 class="text-sm font-semibold text-brand-header">What happens</h4>
                         <ul class="mt-2 list-disc space-y-2 pl-5 text-sm text-sh-mid">
-                            <li>Attendee count on the enquiry is increased by <code class="rounded bg-sh-surface px-1 text-xs">count</code>.</li>
+                            <li>Quote attendees stay as selected on the form; <strong class="text-sh-text">Total Attendees</strong> increases by <code class="rounded bg-sh-surface px-1 text-xs">count</code>. The enquiry page shows each API add and when it happened.</li>
                             <li>Timeline shows e.g. <strong class="text-sh-text">2 new attendees from Forge</strong>.</li>
                             <li>A separate Xero draft invoice is created (does not replace the main course invoice) charging £{{ $additionalAttendeeUnitPrice }} × attendees (ex VAT + VAT).</li>
                             <li>Unless <code class="rounded bg-sh-surface px-1 text-xs">email_invoice</code> is false, the invoice PDF is emailed to the customer.</li>
                             <li>The enquiry must already have a Xero contact and an invoice/booking address (same requirements as the main invoice).</li>
+                            <li>Duplicate protection: same <code class="rounded bg-sh-surface px-1 text-xs">count</code> + <code class="rounded bg-sh-surface px-1 text-xs">source</code> within 90 seconds returns <code class="rounded bg-sh-surface px-1 text-xs">409</code> without adding again. Prefer an <code class="rounded bg-sh-surface px-1 text-xs">Idempotency-Key</code> for retries.</li>
                         </ul>
                     </div>
 

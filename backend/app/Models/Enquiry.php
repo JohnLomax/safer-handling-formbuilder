@@ -126,6 +126,83 @@ class Enquiry extends Model
     }
 
     /**
+     * Original quote headcount from the form (matrix/trainer), before API additions.
+     */
+    public function quoteAttendeeCount(): int
+    {
+        $matrix = max(0, (int) ($this->matrix_attendees ?? 0));
+        if ($matrix > 0) {
+            return $matrix;
+        }
+
+        $trainer = max(0, (int) ($this->trainer_attendees ?? 0));
+        if ($trainer > 0) {
+            return $trainer;
+        }
+
+        return max(0, (int) ($this->attendees ?? 0));
+    }
+
+    /**
+     * Running total including attendees added via the Attendees API.
+     */
+    public function totalAttendeeCount(): int
+    {
+        return max(
+            max(0, (int) ($this->attendees ?? 0)),
+            $this->quoteAttendeeCount()
+        );
+    }
+
+    /**
+     * Positive API attendee additions (excludes admin corrections).
+     *
+     * @return list<array{delta:int,source:string,at:?\Illuminate\Support\Carbon,message:string}>
+     */
+    public function apiAttendeeAdditions(): array
+    {
+        $events = $this->relationLoaded('events')
+            ? $this->events
+            : $this->events()->get();
+
+        $additions = [];
+        foreach ($events as $event) {
+            if ($event->event_type !== 'attendees_added') {
+                continue;
+            }
+
+            $source = trim((string) data_get($event->metadata, 'source', ''));
+            if ($source === '' || $source === 'admin_correction') {
+                continue;
+            }
+
+            $delta = (int) data_get($event->metadata, 'delta', 0);
+            if ($delta < 1) {
+                continue;
+            }
+
+            $additions[] = [
+                'delta' => $delta,
+                'source' => $source,
+                'at' => $event->created_at,
+                'message' => (string) $event->message,
+            ];
+        }
+
+        return $additions;
+    }
+
+    public function apiAttendeeAdditionsTotal(): int
+    {
+        return array_sum(array_column($this->apiAttendeeAdditions(), 'delta'));
+    }
+
+    public function hasApiAttendeeAdditions(): bool
+    {
+        return $this->apiAttendeeAdditionsTotal() > 0;
+    }
+
+    /**
      * @return array{name:string,email:string}
      */
     public function invoiceQuoteRecipient(): array

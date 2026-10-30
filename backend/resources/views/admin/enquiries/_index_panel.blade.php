@@ -215,10 +215,11 @@
                                     <x-kajabi-badge compact />
                                 @endif
                                 @if ($enquiry->hasInvoiceQuoteRecipient())
-                                    <span
-                                        class="inline-flex items-center rounded-full bg-[#fff8eb] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#9a6700]"
-                                        title="Quote/invoice recipient set"
-                                    >Invoice to</span>
+                                    @php $invoiceRecipient = $enquiry->invoiceQuoteRecipient(); @endphp
+                                    <x-invoice-recipient-badge
+                                        :name="$invoiceRecipient['name'] ?? ''"
+                                        :email="$invoiceRecipient['email'] ?? ''"
+                                    />
                                 @endif
                             </div>
                         </div>

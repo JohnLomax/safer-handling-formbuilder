@@ -295,11 +295,34 @@
                                     <dd class="enquiry-detail-value">{{ $enquiry->course_format }} · {{ $enquiry->format_sub_option }}</dd>
                                 </div>
                             @endif
-                            @if ($enquiry->matrix_attendees)
+                            @php
+                                $quoteAttendees = $enquiry->quoteAttendeeCount();
+                                $totalAttendees = $enquiry->totalAttendeeCount();
+                                $apiAttendeeAdds = $enquiry->apiAttendeeAdditions();
+                                $hasApiAttendeeAdds = $enquiry->hasApiAttendeeAdditions();
+                            @endphp
+                            @if ($quoteAttendees > 0 || $totalAttendees > 0)
                                 <div class="enquiry-detail-row">
-                                    <dt class="enquiry-detail-label">Attendees</dt>
-                                    <dd class="enquiry-detail-value">{{ $enquiry->matrix_attendees }}</dd>
+                                    <dt class="enquiry-detail-label">{{ $hasApiAttendeeAdds ? 'Quote attendees' : 'Attendees' }}</dt>
+                                    <dd class="enquiry-detail-value">{{ $hasApiAttendeeAdds ? $quoteAttendees : $totalAttendees }}</dd>
                                 </div>
+                                @if ($hasApiAttendeeAdds)
+                                    @foreach ($apiAttendeeAdds as $addition)
+                                        <div class="enquiry-detail-row">
+                                            <dt class="enquiry-detail-label">Added via {{ $addition['source'] }}</dt>
+                                            <dd class="enquiry-detail-value">
+                                                +{{ $addition['delta'] }}
+                                                @if ($addition['at'])
+                                                    <span class="mt-0.5 block text-xs font-normal text-sh-mid">{{ $addition['at']->timezone(config('app.timezone'))->format('d M Y · H:i') }}</span>
+                                                @endif
+                                            </dd>
+                                        </div>
+                                    @endforeach
+                                    <div class="enquiry-detail-row">
+                                        <dt class="enquiry-detail-label">Total Attendees</dt>
+                                        <dd class="enquiry-detail-value font-semibold text-brand-header">{{ $totalAttendees }}</dd>
+                                    </div>
+                                @endif
                             @endif
                             @if ($enquiry->organisation_company)
                                 <div class="enquiry-detail-row">
@@ -313,11 +336,36 @@
                                 <dt class="enquiry-detail-label">Trainer course</dt>
                                 <dd class="enquiry-detail-value">{{ $enquiry->trainer_course_select }}</dd>
                             </div>
-                            @if ($enquiry->trainer_attendees)
-                                <div class="enquiry-detail-row">
-                                    <dt class="enquiry-detail-label">Attendees</dt>
-                                    <dd class="enquiry-detail-value">{{ $enquiry->trainer_attendees }}</dd>
-                                </div>
+                            @if (empty($enquiry->sector))
+                                @php
+                                    $quoteAttendees = $enquiry->quoteAttendeeCount();
+                                    $totalAttendees = $enquiry->totalAttendeeCount();
+                                    $apiAttendeeAdds = $enquiry->apiAttendeeAdditions();
+                                    $hasApiAttendeeAdds = $enquiry->hasApiAttendeeAdditions();
+                                @endphp
+                                @if ($quoteAttendees > 0 || $totalAttendees > 0)
+                                    <div class="enquiry-detail-row">
+                                        <dt class="enquiry-detail-label">{{ $hasApiAttendeeAdds ? 'Quote attendees' : 'Attendees' }}</dt>
+                                        <dd class="enquiry-detail-value">{{ $hasApiAttendeeAdds ? $quoteAttendees : $totalAttendees }}</dd>
+                                    </div>
+                                    @if ($hasApiAttendeeAdds)
+                                        @foreach ($apiAttendeeAdds as $addition)
+                                            <div class="enquiry-detail-row">
+                                                <dt class="enquiry-detail-label">Added via {{ $addition['source'] }}</dt>
+                                                <dd class="enquiry-detail-value">
+                                                    +{{ $addition['delta'] }}
+                                                    @if ($addition['at'])
+                                                        <span class="mt-0.5 block text-xs font-normal text-sh-mid">{{ $addition['at']->timezone(config('app.timezone'))->format('d M Y · H:i') }}</span>
+                                                    @endif
+                                                </dd>
+                                            </div>
+                                        @endforeach
+                                        <div class="enquiry-detail-row">
+                                            <dt class="enquiry-detail-label">Total Attendees</dt>
+                                            <dd class="enquiry-detail-value font-semibold text-brand-header">{{ $totalAttendees }}</dd>
+                                        </div>
+                                    @endif
+                                @endif
                             @endif
                         @endif
                         @if ($enquiry->preferredDateTimeLabel() !== '')

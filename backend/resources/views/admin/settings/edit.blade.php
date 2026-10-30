@@ -189,6 +189,7 @@
                     <div>
                         <x-input-label for="brevo_sender_email" value="Sender email" />
                         <x-text-input id="brevo_sender_email" name="brevo_sender_email" type="email" class="mt-1 block w-full" :value="old('brevo_sender_email', $settings['brevo_sender_email'] ?? '')" />
+                        <p class="mt-1 text-xs text-sh-mid">Must be an active Brevo sender. For Gmail delivery, SPF on the domain should include <code class="rounded bg-sh-surface px-1">spf.brevo.com</code>.</p>
                     </div>
                     <div>
                         <x-input-label for="brevo_sender_name" value="Sender name" />
@@ -209,7 +210,7 @@
                 <div>
                     <x-input-label for="brevo_office_email" value="Office notification email" />
                     <x-text-input id="brevo_office_email" name="brevo_office_email" type="email" class="mt-1 block w-full" :value="old('brevo_office_email', $settings['brevo_office_email'] ?? 'office@safer-handling.co.uk')" />
-                    <p class="mt-1 text-xs text-sh-mid">Receives a new lead email from training@ when an enquiry is submitted.</p>
+                    <p class="mt-1 text-xs text-sh-mid">Receives a new lead email when an enquiry is submitted.</p>
                 </div>
 
                 <div>
@@ -502,6 +503,12 @@
                                         <td class="px-3 py-2">No</td>
                                         <td class="px-3 py-2 text-sh-mid">Email the new invoice PDF via Brevo. Defaults to <code>true</code>.</td>
                                     </tr>
+                                    <tr class="border-t border-[#e8eef5]">
+                                        <td class="px-3 py-2 font-mono text-xs">Idempotency-Key</td>
+                                        <td class="px-3 py-2">header</td>
+                                        <td class="px-3 py-2">No</td>
+                                        <td class="px-3 py-2 text-sh-mid">Optional. Same key within 24h returns the first result without adding again. Duplicate count/source posts within 90s are also rejected (HTTP 409).</td>
+                                    </tr>
                                 </tbody>
                             </table>
                         </div>
@@ -513,6 +520,7 @@
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json" \
+  -H "Idempotency-Key: forge-enquiry-123-batch-1" \
   -d '{"count": 2, "source": "Forge", "email_invoice": true}'</pre>
                         <p class="mt-1 text-xs text-sh-mid">In the URL above, replace <code>{id}</code> with the real enquiry ID (for example <code>123</code>).</p>
                     </div>

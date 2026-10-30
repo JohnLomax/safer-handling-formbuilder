@@ -64,8 +64,16 @@ if ($enquiryIdParam === null || $token === '') {
             'email' => trim((string)($enquiry['email'] ?? '')),
             'phone' => trim((string)($formData['phone'] ?? ($formData['phoneNumber'] ?? ''))),
             'venueAddress' => implode("\n", $addressParts),
-            'invoiceName' => trim((string)($enquiry['name'] ?? '')),
-            'invoiceEmail' => trim((string)($enquiry['email'] ?? '')),
+            'invoiceName' => trim((string)(
+                $enquiry['invoice_quote_name']
+                ?? ($formData['invoiceQuoteName'] ?? null)
+                ?? ($enquiry['name'] ?? '')
+            )),
+            'invoiceEmail' => trim((string)(
+                $enquiry['invoice_quote_email']
+                ?? ($formData['invoiceQuoteEmail'] ?? null)
+                ?? ($enquiry['email'] ?? '')
+            )),
             'invoiceAddress' => implode("\n", $addressParts),
             'preferredDate' => $preferredDate,
             'dateNotSure' => $dateNotSure,

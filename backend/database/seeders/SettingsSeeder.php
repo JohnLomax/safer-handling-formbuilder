@@ -27,7 +27,7 @@ class SettingsSeeder extends Seeder
             'brevo_logo_url' => 'https://img.mailinblue.com/8246699/images/content_library/original/6a02cfcf9d7025c9e500ab4b.jpg',
             'brevo_quote_accept_url' => '',
             'form_base_url' => '',
-            'brevo_resume_email_enabled' => '1',
+            'brevo_resume_email_enabled' => '0',
             'office_auto_reply_enabled' => '0',
             'office_auto_reply_hours' => '8',
             'office_imap_host' => 'outlook.office365.com',
@@ -53,6 +53,8 @@ class SettingsSeeder extends Seeder
             'forge_enabled' => '0',
             'forge_webhook_url' => 'https://portal.saferhandling.co.uk/safer_production/webhooks/bookings/',
             'forge_webhook_token' => '',
+            'enquiry_api_token' => '',
+            'additional_attendee_unit_price' => '80',
         ];
 
         foreach ($defaults as $key => $value) {

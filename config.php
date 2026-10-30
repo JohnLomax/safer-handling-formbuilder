@@ -58,7 +58,7 @@ $brevoLogoUrl = 'https://img.mailinblue.com/8246699/images/content_library/origi
 $brevoQuoteAcceptUrl = '';
 
 $formBaseUrl = '';
-$brevoResumeEmailEnabled = true;
+$brevoResumeEmailEnabled = false;
 $brevoWebhookSecret = '';
 
 $officeAutoReplyEnabled = false;

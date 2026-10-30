@@ -1392,7 +1392,8 @@ function xeroEmailInvoiceToCustomer(int $enquiryId): array
 
     $pdo = enquiryLoggerPdo();
     $stmt = $pdo->prepare(
-        'SELECT id, name, email, xero_invoice_id, xero_invoice_number, xero_invoice_sent_at, booking_details_json
+        'SELECT id, name, email, invoice_quote_name, invoice_quote_email, form_data_json,
+                xero_invoice_id, xero_invoice_number, xero_invoice_sent_at, booking_details_json
          FROM enquiries WHERE id = :id LIMIT 1'
     );
     $stmt->execute([':id' => $enquiryId]);
@@ -1437,7 +1438,25 @@ function xeroEmailInvoiceToCustomer(int $enquiryId): array
         }
     }
 
+    $formData = [];
+    $rawForm = trim((string) ($row['form_data_json'] ?? ''));
+    if ($rawForm !== '') {
+        $decodedForm = json_decode($rawForm, true);
+        if (is_array($decodedForm)) {
+            $formData = $decodedForm;
+        }
+    }
+    $quoteRecipient = enquiryResolveInvoiceQuoteRecipient(
+        $formData,
+        $row,
+        trim((string) ($bookingDetails['bookerName'] ?? $row['name'] ?? '')),
+        trim((string) ($bookingDetails['email'] ?? $row['email'] ?? ''))
+    );
+
     $toEmail = trim((string) ($bookingDetails['invoiceEmail'] ?? ''));
+    if ($toEmail === '' || ! filter_var($toEmail, FILTER_VALIDATE_EMAIL)) {
+        $toEmail = $quoteRecipient['email'];
+    }
     if ($toEmail === '' || ! filter_var($toEmail, FILTER_VALIDATE_EMAIL)) {
         $toEmail = trim((string) ($row['email'] ?? ''));
     }
@@ -1445,7 +1464,13 @@ function xeroEmailInvoiceToCustomer(int $enquiryId): array
         throw new RuntimeException('A valid customer email is required to send the invoice.');
     }
 
-    $toName = trim((string) ($bookingDetails['invoiceName'] ?? $bookingDetails['bookerName'] ?? $row['name'] ?? ''));
+    $toName = trim((string) ($bookingDetails['invoiceName'] ?? ''));
+    if ($toName === '') {
+        $toName = $quoteRecipient['name'];
+    }
+    if ($toName === '') {
+        $toName = trim((string) ($bookingDetails['bookerName'] ?? $row['name'] ?? ''));
+    }
     if ($toName === '') {
         $toName = $toEmail;
     }
@@ -2083,7 +2108,8 @@ function xeroMaybeCreateDraftInvoiceAfterQuoteAccepted(int $enquiryId, array $bo
 
     $pdo = enquiryLoggerPdo();
     $stmt = $pdo->prepare(
-        'SELECT xero_quote_id, xero_quote_number, xero_contact_id, name, email, form_data_json
+        'SELECT xero_quote_id, xero_quote_number, xero_contact_id, name, email,
+                invoice_quote_name, invoice_quote_email, form_data_json
          FROM enquiries WHERE id = :id LIMIT 1'
     );
     $stmt->execute([':id' => $enquiryId]);
@@ -2101,6 +2127,27 @@ function xeroMaybeCreateDraftInvoiceAfterQuoteAccepted(int $enquiryId, array $bo
         );
 
         return null;
+    }
+
+    $formData = [];
+    $rawFormEarly = trim((string) ($row['form_data_json'] ?? ''));
+    if ($rawFormEarly !== '') {
+        $decodedEarly = json_decode($rawFormEarly, true);
+        if (is_array($decodedEarly)) {
+            $formData = $decodedEarly;
+        }
+    }
+    $quoteRecipient = enquiryResolveInvoiceQuoteRecipient(
+        $formData,
+        is_array($row) ? $row : null,
+        trim((string) ($row['name'] ?? '')),
+        trim((string) ($row['email'] ?? ''))
+    );
+    if (trim((string) ($bookingDetails['invoiceName'] ?? '')) === '' && $quoteRecipient['custom']) {
+        $bookingDetails['invoiceName'] = $quoteRecipient['name'];
+    }
+    if (trim((string) ($bookingDetails['invoiceEmail'] ?? '')) === '' && $quoteRecipient['custom']) {
+        $bookingDetails['invoiceEmail'] = $quoteRecipient['email'];
     }
 
     // Prefer booking invoice address; fall back to enquiry form address.
@@ -2452,4 +2499,306 @@ function xeroSyncSentInvoices(?int $onlyEnquiryId = null): array
     }
 
     return $stats;
+}
+
+/**
+ * Unit price (ex VAT) for additional attendees added via API.
+ */
+function xeroAdditionalAttendeeUnitAmount(): float
+{
+    $fromEnv = trim((string) (getenv('ADDITIONAL_ATTENDEE_UNIT_PRICE') ?: ''));
+    $fromDb = function_exists('appSetting')
+        ? trim((string) appSetting('additional_attendee_unit_price', ''))
+        : '';
+    $raw = $fromEnv !== '' ? $fromEnv : ($fromDb !== '' ? $fromDb : '80');
+    if (! is_numeric($raw)) {
+        return 80.0;
+    }
+    $amount = round((float) $raw, 2);
+
+    return $amount > 0 ? $amount : 80.0;
+}
+
+/**
+ * Create a supplemental DRAFT Xero invoice for additional attendees (£80 each by default).
+ * Does not overwrite the enquiry's primary xero_invoice_id.
+ *
+ * @return array{
+ *   InvoiceID:string,
+ *   InvoiceNumber:string,
+ *   Status:string,
+ *   Total:float,
+ *   TotalTax:float,
+ *   SubTotal:float,
+ *   UnitAmount:float,
+ *   Quantity:int,
+ *   ContactID:string
+ * }
+ */
+function xeroCreateAdditionalAttendeesInvoice(int $enquiryId, int $attendeeCount, string $source = ''): array
+{
+    require_once __DIR__ . '/enquiry_logger.php';
+
+    if (! xeroEnabled()) {
+        throw new RuntimeException('Xero is disabled.');
+    }
+
+    $attendeeCount = (int) $attendeeCount;
+    if ($attendeeCount < 1) {
+        throw new RuntimeException('Attendee count must be at least 1.');
+    }
+
+    $pdo = enquiryLoggerPdo();
+    $stmt = $pdo->prepare(
+        'SELECT id, name, email, invoice_quote_name, invoice_quote_email,
+                xero_contact_id, xero_quote_id, xero_quote_number,
+                form_data_json, booking_details_json
+         FROM enquiries WHERE id = :id LIMIT 1'
+    );
+    $stmt->execute([':id' => $enquiryId]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (! is_array($row)) {
+        throw new RuntimeException('Enquiry not found.');
+    }
+
+    $contactId = trim((string) ($row['xero_contact_id'] ?? ''));
+    if ($contactId === '') {
+        $quoteId = trim((string) ($row['xero_quote_id'] ?? ''));
+        if ($quoteId !== '') {
+            try {
+                $quote = xeroGetQuote($quoteId);
+                $contactId = trim((string) ($quote['Contact']['ContactID'] ?? ''));
+            } catch (Throwable $e) {
+                // Fall through to missing-contact error below.
+            }
+        }
+    }
+    if ($contactId === '') {
+        throw new RuntimeException('This enquiry has no Xero contact. Send a quote first.');
+    }
+
+    $bookingDetails = [];
+    $rawBooking = trim((string) ($row['booking_details_json'] ?? ''));
+    if ($rawBooking !== '') {
+        $decoded = json_decode($rawBooking, true);
+        if (is_array($decoded)) {
+            $bookingDetails = $decoded;
+        }
+    }
+
+    $formData = [];
+    $rawForm = trim((string) ($row['form_data_json'] ?? ''));
+    if ($rawForm !== '') {
+        $decodedForm = json_decode($rawForm, true);
+        if (is_array($decodedForm)) {
+            $formData = $decodedForm;
+        }
+    }
+
+    $quoteRecipient = enquiryResolveInvoiceQuoteRecipient(
+        $formData,
+        $row,
+        trim((string) ($bookingDetails['bookerName'] ?? $row['name'] ?? '')),
+        trim((string) ($bookingDetails['email'] ?? $row['email'] ?? ''))
+    );
+    if (trim((string) ($bookingDetails['invoiceName'] ?? '')) === '' && $quoteRecipient['custom']) {
+        $bookingDetails['invoiceName'] = $quoteRecipient['name'];
+    }
+    if (trim((string) ($bookingDetails['invoiceEmail'] ?? '')) === '' && $quoteRecipient['custom']) {
+        $bookingDetails['invoiceEmail'] = $quoteRecipient['email'];
+    }
+
+    $address = xeroAddressPartsFromBookingDetails($bookingDetails);
+    if (! xeroAddressHasContent($address)) {
+        require_once __DIR__ . '/monday_helpers.php';
+        $address = xeroNormalizeAddressParts(mondayAddressFromPost($formData));
+    }
+    if (! xeroAddressHasContent($address)) {
+        throw new RuntimeException(
+            'Contact address is required for tax invoice compliance. Add an invoice address on the booking form before creating the invoice.'
+        );
+    }
+
+    $bookingDetails = array_merge($bookingDetails, $address);
+    xeroEnsureContactAddress(
+        $contactId,
+        $address,
+        trim((string) ($bookingDetails['invoiceName'] ?? $bookingDetails['bookerName'] ?? $row['name'] ?? '')),
+        trim((string) ($bookingDetails['invoiceEmail'] ?? $bookingDetails['email'] ?? $row['email'] ?? '')),
+        trim((string) ($bookingDetails['invoicePhone'] ?? $bookingDetails['phone'] ?? ''))
+    );
+
+    $unitAmount = xeroAdditionalAttendeeUnitAmount();
+    $net = round($unitAmount * $attendeeCount, 2);
+    $rate = xeroVatRate();
+    $label = $attendeeCount === 1 ? '1 additional attendee' : ($attendeeCount . ' additional attendees');
+    $sourceLabel = trim($source);
+    $description = $label . ' @ £' . number_format($unitAmount, 2, '.', '') . ' each (ex VAT)';
+    if ($sourceLabel !== '') {
+        $description .= ' — added from ' . $sourceLabel;
+    }
+
+    $referenceParts = ['Additional attendees'];
+    $quoteNumber = trim((string) ($row['xero_quote_number'] ?? ''));
+    if ($quoteNumber !== '') {
+        $referenceParts[] = 'Quote ' . $quoteNumber;
+    }
+    $po = trim((string) ($bookingDetails['purchaseOrderNumber'] ?? ''));
+    if ($po !== '') {
+        $referenceParts[] = 'PO ' . $po;
+    }
+
+    $invoicePayload = [
+        'Type' => 'ACCREC',
+        'Contact' => ['ContactID' => $contactId],
+        'Date' => gmdate('Y-m-d'),
+        'DueDate' => gmdate('Y-m-d', strtotime('+30 days')),
+        'LineAmountTypes' => 'Exclusive',
+        'LineItems' => [[
+            'Description' => $description,
+            'Quantity' => $attendeeCount,
+            'UnitAmount' => $unitAmount,
+            'AccountCode' => xeroSalesAccountCode(),
+            'TaxType' => 'OUTPUT2',
+            'LineAmount' => $net,
+        ]],
+        'Status' => 'DRAFT',
+        'CurrencyCode' => 'GBP',
+        'Reference' => implode(' · ', $referenceParts),
+    ];
+
+    $brandingThemeId = xeroBrandThemeId();
+    if ($brandingThemeId !== '') {
+        $invoicePayload['BrandingThemeID'] = $brandingThemeId;
+    }
+
+    $resp = xeroApiRequest('POST', 'Invoices', [
+        'Invoices' => [$invoicePayload],
+    ]);
+
+    if ($resp['status'] >= 400 || empty($resp['body']['Invoices'][0]['InvoiceID'])) {
+        throw new RuntimeException(xeroApiErrorMessage($resp['body'], 'Could not create additional attendees invoice in Xero.'));
+    }
+
+    $invoice = $resp['body']['Invoices'][0];
+
+    return [
+        'InvoiceID' => (string) $invoice['InvoiceID'],
+        'InvoiceNumber' => (string) ($invoice['InvoiceNumber'] ?? ''),
+        'Status' => (string) ($invoice['Status'] ?? 'DRAFT'),
+        'Total' => round((float) ($invoice['Total'] ?? 0), 2),
+        'TotalTax' => round((float) ($invoice['TotalTax'] ?? 0), 2),
+        'SubTotal' => round((float) ($invoice['SubTotal'] ?? $net), 2),
+        'UnitAmount' => $unitAmount,
+        'Quantity' => $attendeeCount,
+        'ContactID' => $contactId,
+        'VatRate' => $rate,
+    ];
+}
+
+/**
+ * Email a specific (e.g. additional attendees) Xero invoice PDF via Brevo.
+ * Does not run Monday / Forge / Kajabi quote-won progression.
+ *
+ * @return array{emailed:bool,to_email:string,to_name:string,brevo_message_id:?string,invoice_number:string}
+ */
+function xeroEmailAdditionalInvoiceToCustomer(int $enquiryId, string $invoiceId, string $invoiceNumber = ''): array
+{
+    require_once __DIR__ . '/enquiry_logger.php';
+    require_once __DIR__ . '/brevo_email.php';
+
+    if (! xeroEnabled()) {
+        throw new RuntimeException('Xero is disabled.');
+    }
+    if (brevoApiKey() === '') {
+        throw new RuntimeException('Brevo API key is not configured.');
+    }
+
+    $invoiceId = trim($invoiceId);
+    if ($invoiceId === '') {
+        throw new RuntimeException('Xero invoice ID is missing.');
+    }
+
+    $pdo = enquiryLoggerPdo();
+    $stmt = $pdo->prepare(
+        'SELECT id, name, email, invoice_quote_name, invoice_quote_email, form_data_json, booking_details_json
+         FROM enquiries WHERE id = :id LIMIT 1'
+    );
+    $stmt->execute([':id' => $enquiryId]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (! is_array($row)) {
+        throw new RuntimeException('Enquiry not found.');
+    }
+
+    $bookingDetails = [];
+    $rawBooking = trim((string) ($row['booking_details_json'] ?? ''));
+    if ($rawBooking !== '') {
+        $decoded = json_decode($rawBooking, true);
+        if (is_array($decoded)) {
+            $bookingDetails = $decoded;
+        }
+    }
+
+    $formData = [];
+    $rawForm = trim((string) ($row['form_data_json'] ?? ''));
+    if ($rawForm !== '') {
+        $decodedForm = json_decode($rawForm, true);
+        if (is_array($decodedForm)) {
+            $formData = $decodedForm;
+        }
+    }
+
+    $quoteRecipient = enquiryResolveInvoiceQuoteRecipient(
+        $formData,
+        $row,
+        trim((string) ($bookingDetails['bookerName'] ?? $row['name'] ?? '')),
+        trim((string) ($bookingDetails['email'] ?? $row['email'] ?? ''))
+    );
+
+    $toEmail = trim((string) ($bookingDetails['invoiceEmail'] ?? ''));
+    if ($toEmail === '' || ! filter_var($toEmail, FILTER_VALIDATE_EMAIL)) {
+        $toEmail = $quoteRecipient['email'];
+    }
+    if ($toEmail === '' || ! filter_var($toEmail, FILTER_VALIDATE_EMAIL)) {
+        $toEmail = trim((string) ($row['email'] ?? ''));
+    }
+    if ($toEmail === '' || ! filter_var($toEmail, FILTER_VALIDATE_EMAIL)) {
+        throw new RuntimeException('A valid customer email is required to send the invoice.');
+    }
+
+    $toName = trim((string) ($bookingDetails['invoiceName'] ?? ''));
+    if ($toName === '') {
+        $toName = $quoteRecipient['name'];
+    }
+    if ($toName === '') {
+        $toName = trim((string) ($bookingDetails['bookerName'] ?? $row['name'] ?? ''));
+    }
+    if ($toName === '') {
+        $toName = $toEmail;
+    }
+
+    try {
+        $invoice = xeroGetInvoice($invoiceId);
+        $invoiceNumber = trim((string) ($invoice['InvoiceNumber'] ?? $invoiceNumber));
+    } catch (Throwable $e) {
+        // PDF download may still work with the provided number.
+    }
+
+    $pdf = xeroDownloadInvoicePdf($invoiceId, $invoiceNumber);
+    $messageId = sendInvoiceEmailViaBrevo($toEmail, $toName, [
+        'name' => $toName,
+        'email' => $toEmail,
+        'enquiryId' => $enquiryId,
+        'invoiceNumber' => $invoiceNumber,
+    ], $pdf);
+
+    xeroMarkInvoiceSentToContact($invoiceId);
+
+    return [
+        'emailed' => true,
+        'to_email' => $toEmail,
+        'to_name' => $toName,
+        'brevo_message_id' => $messageId !== '' ? $messageId : null,
+        'invoice_number' => $invoiceNumber,
+    ];
 }

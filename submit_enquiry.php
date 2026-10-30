@@ -1193,20 +1193,28 @@ try {
     }
     if ($shouldSendQuoteEmail || $shouldRegenerateQuoteForVoucher) {
         try {
+            $quoteRecipient = enquiryResolveInvoiceQuoteRecipient($_POST, null, $name, $email);
             $quoteEmailData = $resolvedOrganisation !== null
                 ? buildQuoteEmailDataFromResolvedOrganisation(
                     array_merge($resolvedOrganisation, mondayAddressFromPost($_POST)),
-                    $name,
-                    $email
+                    $quoteRecipient['name'],
+                    $quoteRecipient['email']
                 )
-                : buildQuoteEmailDataFromSubmission($_POST, $name, $email);
+                : buildQuoteEmailDataFromSubmission($_POST, $quoteRecipient['name'], $quoteRecipient['email']);
             if ($enquiryId !== null) {
                 // Accept Quote must open /booking (venue + terms), never /enquiry edit.
                 $quoteEmailData['enquiryId'] = $enquiryId;
                 $quoteEmailData['resumeToken'] = enquiryLoggerEnsureResumeToken($enquiryId);
-                $quoteEmailData['email'] = $email;
             }
-            $quoteSendResult = sendQuoteToClient($email, $name, $quoteEmailData);
+            $quoteEmailData['email'] = $quoteRecipient['email'];
+            $quoteEmailData['name'] = $quoteRecipient['name'];
+            $quoteEmailData['enquiryContactName'] = $name;
+            $quoteEmailData['enquiryContactEmail'] = $email;
+            if ($quoteRecipient['custom']) {
+                $quoteEmailData['invoiceQuoteName'] = trim((string) ($_POST['invoiceQuoteName'] ?? ''));
+                $quoteEmailData['invoiceQuoteEmail'] = trim((string) ($_POST['invoiceQuoteEmail'] ?? ''));
+            }
+            $quoteSendResult = sendQuoteToClient($quoteRecipient['email'], $quoteRecipient['name'], $quoteEmailData);
             if ($enquiryId !== null) {
                 enquiryLoggerSafe(function () use ($enquiryId, $quoteSendResult, $name, $email, $shouldRegenerateQuoteForVoucher): void {
                     enquiryLoggerMarkQuoteEmailSent($enquiryId);

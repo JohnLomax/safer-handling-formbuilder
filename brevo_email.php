@@ -339,6 +339,38 @@ function resolveQuoteAcceptUrl(array &$quoteData): string
     return '';
 }
 
+/**
+ * Resolve the Edit Your Quote CTA to the enquiry form for this enquiry.
+ *
+ * @param array<string, mixed> $quoteData
+ */
+function resolveQuoteEditUrl(array &$quoteData): string
+{
+    $existing = trim((string)($quoteData['resumeUrl'] ?? ''));
+    if ($existing !== '') {
+        return $existing;
+    }
+
+    $enquiryId = (int)($quoteData['enquiryId'] ?? 0);
+    if ($enquiryId <= 0) {
+        return '';
+    }
+
+    require_once __DIR__ . '/enquiry_logger.php';
+    $token = trim((string)($quoteData['resumeToken'] ?? ''));
+    if ($token === '') {
+        $token = enquiryLoggerEnsureResumeToken($enquiryId);
+        $quoteData['resumeToken'] = $token;
+    }
+
+    $editUrl = buildEnquiryResumeUrl($enquiryId, $token);
+    if ($editUrl !== '') {
+        $quoteData['resumeUrl'] = $editUrl;
+    }
+
+    return $editUrl;
+}
+
 function brevoResumeEmailEnabled(): bool
 {
     $env = getenv('BREVO_RESUME_EMAIL_ENABLED');
@@ -1237,14 +1269,33 @@ function buildQuoteEmailHtml(array $data): string
     }
     $acceptHref = htmlspecialchars($acceptUrl, ENT_QUOTES, 'UTF-8');
 
+    $editUrl = resolveQuoteEditUrl($data);
+    $editHref = htmlspecialchars($editUrl, ENT_QUOTES, 'UTF-8');
+    $editButtonRow = $editUrl !== ''
+        ? <<<HTML
+          <tr>
+            <td align="center" style="padding:16px 20px 8px;">
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="300" style="width:300px; background-color:#0255a4; border-radius:4px;">
+                <tr>
+                  <td align="center" style="padding:14px 20px; border-radius:4px;">
+                    <a href="{$editHref}" target="_blank" style="display:block; font-family:Arial,Helvetica,sans-serif; font-size:16px; font-weight:700; color:#ffffff; text-decoration:none; line-height:1.2;">Edit Your Quote</a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+HTML
+        : '';
+
     $body = <<<HTML
           <tr>
             <td align="center" style="padding:0 20px 10px; font-family:Arial,Helvetica,sans-serif; font-size:16px; line-height:1.6; color:#414141; text-align:center;">
               <p style="margin:0 0 12px;">Hello {$name} 👋</p>
               <p style="margin:0 0 12px;">Thank you for requesting a quote for our <strong style="color:#0255a4;">Safer Handling Training</strong>.</p>
-              <p style="margin:0;">Please find your quote referenced below for your review.</p>
+              <p style="margin:0;">Please find your quote referenced below for your review. You can also edit your quote by clicking the Edit Your Quote button below.</p>
             </td>
           </tr>
+{$editButtonRow}
           <tr>
             <td align="center" style="padding:24px 20px 8px; font-family:Arial,Helvetica,sans-serif; text-align:center;">
               <h1 style="margin:0; font-size:26px; font-weight:700; color:#0255a4; line-height:1.3;">Your Training Quote</h1>
@@ -1317,18 +1368,28 @@ HTML;
 function buildQuoteEmailText(array $data): string
 {
     $acceptUrl = resolveQuoteAcceptUrl($data);
+    $editUrl = resolveQuoteEditUrl($data);
 
     $lines = [
         'Hello ' . (string)($data['name'] ?? '') . ',',
         '',
         'Thank you for requesting a quote for our Safer Handling Training.',
-        'Please find your quote referenced below for your review.',
+        'Please find your quote referenced below for your review. You can also edit your quote by clicking the Edit Your Quote button below.',
+    ];
+
+    if ($editUrl !== '') {
+        $lines[] = '';
+        $lines[] = 'Edit Your Quote:';
+        $lines[] = $editUrl;
+    }
+
+    $lines = array_merge($lines, [
         '',
         'If you are happy to proceed, open the booking form to accept your quote and add venue details:',
         $acceptUrl !== '' ? $acceptUrl : ('Email ' . brevoContactEmail() . ' to accept your quote.'),
         '',
         '--- Your Quote Summary ---',
-    ];
+    ]);
 
     foreach (
         array_merge(

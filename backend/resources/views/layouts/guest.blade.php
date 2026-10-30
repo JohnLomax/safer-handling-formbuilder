@@ -26,9 +26,9 @@
                 </div>
             </div>
 
-            <p class="mt-5 text-center text-xs text-sh-mid">
+            <p class="mt-6 text-center text-sm text-sh-mid">
                 Created by
-                <a href="https://d3-digital.com" target="_blank" rel="noopener noreferrer" class="font-semibold text-brand-header hover:underline">
+                <a href="https://d3-digital.com" target="_blank" rel="noopener noreferrer" class="font-medium text-brand-header hover:underline">
                     D3 Digital
                 </a>
             </p>

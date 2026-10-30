@@ -6,6 +6,14 @@
                 <p class="mt-2 text-xs font-semibold uppercase tracking-wide text-sh-mid">Enquiry #{{ $enquiry->id }}</p>
                 <h2 class="mt-1 brand-section-title">{{ $enquiry->name }}</h2>
                 <p class="mt-1 text-sm text-sh-mid">{{ $enquiry->email }}</p>
+                @if ($enquiry->hasInvoiceQuoteRecipient())
+                    @php $headerRecipient = $enquiry->invoiceQuoteRecipient(); @endphp
+                    <p class="mt-2 inline-flex flex-wrap items-center gap-2 rounded-full bg-[#fff8eb] px-3 py-1 text-xs font-semibold text-[#9a6700]">
+                        Quote / invoice to
+                        <span class="text-sh-text">{{ $headerRecipient['name'] }}</span>
+                        <a href="mailto:{{ $headerRecipient['email'] }}" class="link-brand">{{ $headerRecipient['email'] }}</a>
+                    </p>
+                @endif
                 @php $headerPhone = trim((string) data_get($enquiry->form_data_json, 'phone', '')); @endphp
                 @if ($headerPhone !== '')
                     <p class="mt-0.5 text-sm text-sh-mid">
@@ -205,6 +213,46 @@
             <div class="grid gap-6 lg:grid-cols-5">
                 <div class="brand-panel lg:col-span-3">
                     <h3 class="text-base font-semibold text-brand-header">Enquiry details</h3>
+
+                    @php
+                        $invoiceQuoteName = trim((string) ($enquiry->invoice_quote_name ?: data_get($enquiry->form_data_json, 'invoiceQuoteName', '')));
+                        $invoiceQuoteEmail = trim((string) ($enquiry->invoice_quote_email ?: data_get($enquiry->form_data_json, 'invoiceQuoteEmail', '')));
+                        $hasInvoiceQuoteRecipient = $invoiceQuoteName !== '' || $invoiceQuoteEmail !== '';
+                    @endphp
+                    @if ($hasInvoiceQuoteRecipient)
+                        <div class="mt-4 overflow-hidden rounded-[14px] border border-[#f0d48a] bg-[#fffaf0] shadow-[0_4px_14px_rgba(154,103,0,0.08)]">
+                            <div class="flex items-start gap-3 border-b border-[#f0d48a]/60 bg-gradient-to-b from-[#fff3d6] to-[#fffaf0] px-4 py-3">
+                                <span class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-[#9a6700] text-white" aria-hidden="true">
+                                    <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                        <path d="M3 4a2 2 0 012-2h10a2 2 0 012 2v1H3V4z" />
+                                        <path fill-rule="evenodd" d="M3 7h14v7a2 2 0 01-2 2H5a2 2 0 01-2-2V7zm4 2a1 1 0 000 2h6a1 1 0 100-2H7z" clip-rule="evenodd" />
+                                    </svg>
+                                </span>
+                                <div class="min-w-0">
+                                    <p class="text-sm font-bold text-[#7a5200]">Quote / invoice recipient</p>
+                                    <p class="mt-0.5 text-xs text-[#9a6700]">
+                                        Xero quotes and invoices use these details when set.
+                                    </p>
+                                </div>
+                            </div>
+                            <dl class="grid gap-2 px-4 py-3 sm:grid-cols-2">
+                                @if ($invoiceQuoteName !== '')
+                                    <div class="rounded-[10px] bg-white/80 px-3 py-2">
+                                        <dt class="text-[11px] font-semibold uppercase tracking-wide text-[#9a6700]">Name</dt>
+                                        <dd class="mt-0.5 text-sm font-semibold text-sh-text">{{ $invoiceQuoteName }}</dd>
+                                    </div>
+                                @endif
+                                @if ($invoiceQuoteEmail !== '')
+                                    <div class="rounded-[10px] bg-white/80 px-3 py-2">
+                                        <dt class="text-[11px] font-semibold uppercase tracking-wide text-[#9a6700]">Email</dt>
+                                        <dd class="mt-0.5 text-sm">
+                                            <a href="mailto:{{ $invoiceQuoteEmail }}" class="font-semibold link-brand break-all">{{ $invoiceQuoteEmail }}</a>
+                                        </dd>
+                                    </div>
+                                @endif
+                            </dl>
+                        </div>
+                    @endif
 
                     <div class="mt-2 divide-y divide-sh-border/70">
                         <div class="enquiry-detail-row">

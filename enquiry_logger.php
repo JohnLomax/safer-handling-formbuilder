@@ -115,9 +115,47 @@ function enquiryLoggerEnsureSchema(PDO $pdo): void
     enquiryLoggerEnsureColumn($pdo, 'enquiries', 'forge_booking_status', 'TEXT');
     enquiryLoggerEnsureColumn($pdo, 'enquiries', 'preferred_date_2', 'TEXT');
     enquiryLoggerEnsureColumn($pdo, 'enquiries', 'enable_second_date', 'INTEGER DEFAULT 0');
+    enquiryLoggerEnsureColumn($pdo, 'enquiries', 'invoice_quote_name', 'TEXT');
+    enquiryLoggerEnsureColumn($pdo, 'enquiries', 'invoice_quote_email', 'TEXT');
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_enquiries_resume_token ON enquiries(resume_token)');
 
     $ready = true;
+}
+
+/**
+ * Resolve who should receive Xero quotes/invoices.
+ * Prefers optional "Name/Email to receive invoices/quote" when filled.
+ *
+ * @param array<string, mixed>|null $formOrPost
+ * @param array<string, mixed>|null $enquiryRow
+ * @return array{name:string,email:string,custom:bool}
+ */
+function enquiryResolveInvoiceQuoteRecipient(?array $formOrPost, ?array $enquiryRow, string $fallbackName, string $fallbackEmail): array
+{
+    $formOrPost = is_array($formOrPost) ? $formOrPost : [];
+    $enquiryRow = is_array($enquiryRow) ? $enquiryRow : [];
+
+    $customName = trim((string) ($formOrPost['invoiceQuoteName'] ?? $enquiryRow['invoice_quote_name'] ?? ''));
+    $customEmail = trim((string) ($formOrPost['invoiceQuoteEmail'] ?? $enquiryRow['invoice_quote_email'] ?? ''));
+
+    $name = $customName !== '' ? $customName : trim($fallbackName);
+    $email = $customEmail !== '' ? $customEmail : trim($fallbackEmail);
+
+    if ($email === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $email = trim($fallbackEmail);
+    }
+    if ($name === '') {
+        $name = trim($fallbackName);
+    }
+    if ($name === '') {
+        $name = $email;
+    }
+
+    return [
+        'name' => $name,
+        'email' => $email,
+        'custom' => $customName !== '' || $customEmail !== '',
+    ];
 }
 
 function enquiryLoggerEnsureColumn(PDO $pdo, string $table, string $column, string $definition): void
@@ -671,10 +709,21 @@ function enquiryLoggerUpdateFromPost(int $enquiryId, array $post, string $status
         $status = $currentStatus;
     }
 
+    enquiryLoggerEnsureColumn($pdo, 'enquiries', 'invoice_quote_name', 'TEXT');
+    enquiryLoggerEnsureColumn($pdo, 'enquiries', 'invoice_quote_email', 'TEXT');
+
+    $invoiceQuoteName = trim((string) ($post['invoiceQuoteName'] ?? ''));
+    $invoiceQuoteEmail = trim((string) ($post['invoiceQuoteEmail'] ?? ''));
+    if ($invoiceQuoteEmail !== '' && ! filter_var($invoiceQuoteEmail, FILTER_VALIDATE_EMAIL)) {
+        $invoiceQuoteEmail = '';
+    }
+
     $stmt = $pdo->prepare(
         'UPDATE enquiries SET
             name = :name,
             email = :email,
+            invoice_quote_name = :invoice_quote_name,
+            invoice_quote_email = :invoice_quote_email,
             enquiry_type = :enquiry_type,
             status = :status,
             audience_type = :audience_type,
@@ -703,6 +752,8 @@ function enquiryLoggerUpdateFromPost(int $enquiryId, array $post, string $status
         ':id' => $enquiryId,
         ':name' => trim((string)($post['name'] ?? '')),
         ':email' => trim((string)($post['email'] ?? '')),
+        ':invoice_quote_name' => $invoiceQuoteName !== '' ? $invoiceQuoteName : null,
+        ':invoice_quote_email' => $invoiceQuoteEmail !== '' ? $invoiceQuoteEmail : null,
         ':enquiry_type' => trim((string)($post['enquiryType'] ?? '')),
         ':status' => $status,
         ':audience_type' => trim((string)($post['audienceType'] ?? '')),

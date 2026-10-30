@@ -1,271 +1,25 @@
 <x-app-layout>
     <x-slot name="header">
-        <x-admin.page-header title="Enquiries" description="Search, filter, and open customer forms. Built for large enquiry volumes." />
+        <x-admin.page-header
+            title="Enquiries"
+            description="Search, filter, and open customer forms. Live shows the last 30 days; older enquiries move to Archive."
+        />
     </x-slot>
 
     <div
         class="admin-shell"
-        x-data="{
-            selected: [],
-            pageIds: @js($enquiries->pluck('id')->map(fn ($id) => (int) $id)->values()),
-            toggleAll(checked) {
-                this.selected = checked ? [...this.pageIds] : [];
-            },
-            isSelected(id) {
-                return this.selected.includes(id);
-            },
-            toggleOne(id, checked) {
-                if (checked) {
-                    if (! this.selected.includes(id)) {
-                        this.selected.push(id);
-                    }
-                    return;
-                }
-                this.selected = this.selected.filter((value) => value !== id);
-            },
-            get allSelected() {
-                return this.pageIds.length > 0 && this.pageIds.every((id) => this.selected.includes(id));
-            },
-            get selectedCount() {
-                return this.selected.length;
-            },
-            openBulkDelete() {
-                if (this.selectedCount < 1) {
-                    return;
-                }
-                $dispatch('open-modal', 'confirm-bulk-enquiry-delete');
-            }
-        }"
+        id="enquiries-app"
+        data-index-url="{{ route('admin.enquiries.index') }}"
+        data-initial-tab="{{ $tab }}"
+        data-page-ids='@json($enquiries->pluck('id')->map(fn ($id) => (int) $id)->values())'
+        x-data="enquiriesIndex"
     >
         <div class="brand-panel !p-0">
             @include('admin.partials.alerts')
 
-            <div class="space-y-4 border-b border-sh-border/80 px-6 py-5">
-                <form method="GET" action="{{ route('admin.enquiries.index') }}" class="admin-search-bar">
-                    <div class="min-w-0 flex-1">
-                        <label for="enquiry-search" class="sr-only">Search enquiries</label>
-                        <input
-                            id="enquiry-search"
-                            type="search"
-                            name="q"
-                            value="{{ $search }}"
-                            placeholder="Search by name, email, ID, course, sector, Monday ID…"
-                            class="admin-search-input"
-                            autocomplete="off"
-                        />
-                    </div>
-
-                    <div class="flex flex-wrap items-center gap-2">
-                        <label for="per_page" class="sr-only">Rows per page</label>
-                        <select
-                            id="per_page"
-                            name="per_page"
-                            class="rounded-[10px] border border-[#b7d3ee] bg-white px-3 py-2 text-sm text-sh-text shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30"
-                        >
-                            @foreach ([25, 50, 100] as $size)
-                                <option value="{{ $size }}" @selected($perPage === $size)>{{ $size }} / page</option>
-                            @endforeach
-                        </select>
-
-                        @if ($statusFilter !== 'all')
-                            <input type="hidden" name="status" value="{{ $statusFilter }}" />
-                        @endif
-
-                        <button type="submit" class="btn-brand whitespace-nowrap">Search</button>
-
-                        @if ($search !== '' || $statusFilter !== 'all' || $perPage !== 25)
-                            <a href="{{ route('admin.enquiries.index') }}" class="btn-brand-outline whitespace-nowrap">Clear</a>
-                        @endif
-                    </div>
-                </form>
-
-                <div class="flex flex-wrap items-center justify-between gap-3">
-                    <div class="inline-flex flex-wrap gap-2">
-                        @foreach ([
-                            'all' => 'All',
-                            'in_progress' => 'In progress',
-                            'contacted' => 'Contacted',
-                            'quote_sent' => 'Quote Sent',
-                            'quote_accepted' => 'Quote Accepted',
-                            'quote_won' => 'Quote Won',
-                            'submitted' => 'Submitted',
-                            'failed' => 'Failed',
-                        ] as $value => $label)
-                            <a
-                                href="{{ route('admin.enquiries.index', array_filter(['q' => $search ?: null, 'status' => $value === 'all' ? null : $value, 'per_page' => $perPage !== 25 ? $perPage : null])) }}"
-                                @class([
-                                    'admin-filter-chip',
-                                    'admin-filter-chip-active' => $statusFilter === $value,
-                                    'admin-filter-chip-idle' => $statusFilter !== $value,
-                                ])
-                            >
-                                {{ $label }}
-                                <span class="ml-1 opacity-70">{{ number_format($statusCounts[$value] ?? 0) }}</span>
-                            </a>
-                        @endforeach
-                    </div>
-
-                    <div class="flex flex-wrap items-center gap-3">
-                        <p class="text-sm text-sh-mid">
-                            Showing
-                            <span class="font-semibold text-sh-text">{{ number_format($enquiries->firstItem() ?? 0) }}–{{ number_format($enquiries->lastItem() ?? 0) }}</span>
-                            of
-                            <span class="font-semibold text-sh-text">{{ number_format($enquiries->total()) }}</span>
-                            @if ($search !== '')
-                                for “{{ $search }}”
-                            @endif
-                        </p>
-
-                        <button
-                            type="button"
-                            class="btn-brand-outline whitespace-nowrap text-xs"
-                            x-show="selectedCount > 0"
-                            x-cloak
-                            x-on:click="openBulkDelete()"
-                        >
-                            Delete selected (<span x-text="selectedCount"></span>)
-                        </button>
-                    </div>
-                </div>
+            <div id="enquiries-panel">
+                @include('admin.enquiries._index_panel')
             </div>
-
-            <div class="admin-table-wrap !rounded-none !border-0">
-                <table class="admin-table">
-                    <thead>
-                        <tr>
-                            <th class="w-[3rem]">
-                                <label class="sr-only" for="select-all-enquiries">Select all on this page</label>
-                                <input
-                                    id="select-all-enquiries"
-                                    type="checkbox"
-                                    class="rounded border-[#b9d4ef] text-brand shadow-sm focus:ring-brand"
-                                    x-bind:checked="allSelected"
-                                    x-on:change="toggleAll($event.target.checked)"
-                                    @disabled($enquiries->isEmpty())
-                                />
-                            </th>
-                            <th class="w-[26%]">Customer</th>
-                            <th class="w-[12%]">Type</th>
-                            <th class="w-[12%]">Status</th>
-                            <th class="w-[14%]">Started</th>
-                            <th class="w-[14%]">Submitted</th>
-                            <th class="w-[8%] text-center">Events</th>
-                            <th class="w-[12%]">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @forelse ($enquiries as $enquiry)
-                            <tr>
-                                <td>
-                                    <label class="sr-only" for="enquiry-select-{{ $enquiry->id }}">Select enquiry #{{ $enquiry->id }}</label>
-                                    <input
-                                        id="enquiry-select-{{ $enquiry->id }}"
-                                        type="checkbox"
-                                        value="{{ $enquiry->id }}"
-                                        class="rounded border-[#b9d4ef] text-brand shadow-sm focus:ring-brand"
-                                        x-bind:checked="isSelected({{ (int) $enquiry->id }})"
-                                        x-on:change="toggleOne({{ (int) $enquiry->id }}, $event.target.checked)"
-                                    />
-                                </td>
-                                <td>
-                                    <div class="flex min-w-0 items-start gap-2.5">
-                                        <div class="min-w-0 flex-1">
-                                            <div class="truncate font-medium text-sh-text" title="{{ $enquiry->name }}">
-                                                {{ $enquiry->name }}
-                                            </div>
-                                            <div class="truncate text-xs text-sh-mid" title="{{ $enquiry->email }}">
-                                                {{ $enquiry->email }}
-                                            </div>
-                                            <div class="mt-0.5 text-[11px] text-sh-mid/80">#{{ $enquiry->id }}</div>
-                                        </div>
-                                        <div class="mt-0.5 flex shrink-0 items-center gap-1">
-                                            @if ($enquiry->isMondaySynced())
-                                                <x-monday-badge compact />
-                                            @endif
-                                            @if (in_array($enquiry->status, ['quote_sent', 'quote_accepted', 'quote_won'], true)
-                                                || $enquiry->quote_email_sent_at
-                                                || filled($enquiry->xero_quote_id))
-                                                <x-xero-badge compact />
-                                            @endif
-                                            @if ($enquiry->kajabi_enrolled_at || filled($enquiry->kajabi_contact_id))
-                                                <x-kajabi-badge compact />
-                                            @endif
-                                        </div>
-                                    </div>
-                                </td>
-                                <td class="whitespace-nowrap text-sh-mid">{{ $enquiry->enquiryTypeLabel() }}</td>
-                                <td>
-                                    @if ($enquiry->status === 'submitted')
-                                        <span class="status-pill status-pill-submitted">Submitted</span>
-                                    @elseif ($enquiry->status === 'quote_sent')
-                                        <span class="status-pill status-pill-success">Quote Sent</span>
-                                    @elseif ($enquiry->status === 'quote_accepted')
-                                        <span class="status-pill status-pill-success">Quote Accepted</span>
-                                    @elseif ($enquiry->status === 'quote_won')
-                                        <span class="status-pill status-pill-success inline-flex items-center gap-1">
-                                            <svg class="h-3.5 w-3.5 shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                                                <path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd" />
-                                            </svg>
-                                            Quote Won
-                                        </span>
-                                    @elseif ($enquiry->status === 'contacted')
-                                        <span class="status-pill status-pill-success">Contacted</span>
-                                    @elseif ($enquiry->status === 'failed')
-                                        <span class="status-pill status-pill-muted">Failed</span>
-                                    @else
-                                        <span class="status-pill status-pill-progress">{{ $enquiry->statusLabel() }}</span>
-                                    @endif
-                                </td>
-                                <td class="whitespace-nowrap text-sh-mid">
-                                    <div>{{ $enquiry->created_at?->format('d M Y') }}</div>
-                                    <div class="text-xs">{{ $enquiry->created_at?->format('H:i') }}</div>
-                                </td>
-                                <td class="whitespace-nowrap text-sh-mid">
-                                    @if ($enquiry->submitted_at)
-                                        <div>{{ $enquiry->submitted_at->format('d M Y') }}</div>
-                                        <div class="text-xs">{{ $enquiry->submitted_at->format('H:i') }}</div>
-                                    @else
-                                        —
-                                    @endif
-                                </td>
-                                <td class="text-center text-sh-mid">{{ number_format($enquiry->events_count) }}</td>
-                                <td>
-                                    <div class="admin-table-actions">
-                                        <x-admin.table-action
-                                            :href="route('admin.enquiries.show', $enquiry)"
-                                            icon="eye"
-                                            title="View"
-                                            aria-label="View"
-                                        />
-                                    </div>
-                                </td>
-                            </tr>
-                        @empty
-                            <tr>
-                                <td colspan="8" class="px-4 py-12 text-center text-sm text-sh-mid">
-                                    @if ($search !== '' || $statusFilter !== 'all')
-                                        No enquiries match your search.
-                                        <a href="{{ route('admin.enquiries.index') }}" class="link-brand ml-1">Clear filters</a>
-                                    @else
-                                        No enquiries yet. They will appear here when someone uses the form.
-                                    @endif
-                                </td>
-                            </tr>
-                        @endforelse
-                    </tbody>
-                </table>
-            </div>
-
-            @if ($enquiries->hasPages() || $enquiries->total() > 0)
-                <div class="flex flex-col gap-3 border-t border-sh-border/80 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
-                    <p class="text-xs text-sh-mid">
-                        Page {{ $enquiries->currentPage() }} of {{ max(1, $enquiries->lastPage()) }}
-                    </p>
-                    <div>
-                        {{ $enquiries->links() }}
-                    </div>
-                </div>
-            @endif
         </div>
 
         <x-modal name="confirm-bulk-enquiry-delete" maxWidth="lg" focusable>
@@ -299,4 +53,253 @@
             </form>
         </x-modal>
     </div>
+
+    <script>
+        document.addEventListener('alpine:init', () => {
+            Alpine.data('enquiriesIndex', () => ({
+                tab: 'live',
+                selected: [],
+                pageIds: [],
+                loading: false,
+                requestId: 0,
+
+                init() {
+                    const root = this.$el;
+                    this.tab = root.dataset.initialTab === 'archive' ? 'archive' : 'live';
+                    try {
+                        this.pageIds = JSON.parse(root.dataset.pageIds || '[]').map(Number);
+                    } catch (e) {
+                        this.pageIds = [];
+                    }
+
+                    // Event delegation — survives panel HTML swaps without Alpine.initTree.
+                    root.addEventListener('click', (event) => {
+                        const tabBtn = event.target.closest('[data-enquiry-tab]');
+                        if (tabBtn) {
+                            event.preventDefault();
+                            this.switchTab(tabBtn.getAttribute('data-enquiry-tab'));
+                            return;
+                        }
+
+                        const statusLink = event.target.closest('[data-enquiry-status]');
+                        if (statusLink) {
+                            event.preventDefault();
+                            this.applyStatus(statusLink.getAttribute('data-enquiry-status'));
+                            return;
+                        }
+
+                        const clearBtn = event.target.closest('[data-enquiry-clear]');
+                        if (clearBtn) {
+                            event.preventDefault();
+                            this.clearFilters();
+                            return;
+                        }
+
+                        const pageLink = event.target.closest('#enquiries-panel .pagination a, #enquiries-panel nav[role=\"navigation\"] a');
+                        if (pageLink && pageLink.href) {
+                            event.preventDefault();
+                            this.loadPanel(new URL(pageLink.href, window.location.origin), true);
+                        }
+                    });
+
+                    window.addEventListener('popstate', () => {
+                        const url = new URL(window.location.href);
+                        this.tab = url.searchParams.get('tab') === 'archive' ? 'archive' : 'live';
+                        this.loadPanel(url, false);
+                    });
+                },
+
+                toggleAll(checked) {
+                    this.selected = checked ? [...this.pageIds] : [];
+                },
+                isSelected(id) {
+                    return this.selected.includes(id);
+                },
+                toggleOne(id, checked) {
+                    if (checked) {
+                        if (! this.selected.includes(id)) {
+                            this.selected.push(id);
+                        }
+                        return;
+                    }
+                    this.selected = this.selected.filter((value) => value !== id);
+                },
+                get allSelected() {
+                    return this.pageIds.length > 0 && this.pageIds.every((id) => this.selected.includes(id));
+                },
+                get selectedCount() {
+                    return this.selected.length;
+                },
+                openBulkDelete() {
+                    if (this.selectedCount < 1) {
+                        return;
+                    }
+                    this.$dispatch('open-modal', 'confirm-bulk-enquiry-delete');
+                },
+
+                buildUrl({ tab = this.tab, status = null, clearSearch = false } = {}) {
+                    const url = new URL(window.location.href);
+                    const params = url.searchParams;
+
+                    params.delete('page');
+
+                    if (clearSearch) {
+                        params.delete('q');
+                        params.delete('status');
+                        params.delete('per_page');
+                        params.delete('tab');
+                        return url;
+                    }
+
+                    if (tab === 'archive') {
+                        params.set('tab', 'archive');
+                    } else {
+                        params.delete('tab');
+                    }
+
+                    if (status && status !== 'all') {
+                        params.set('status', status);
+                    } else {
+                        params.delete('status');
+                    }
+
+                    return url;
+                },
+
+                async switchTab(nextTab) {
+                    if (nextTab !== 'live' && nextTab !== 'archive') {
+                        return;
+                    }
+                    if (this.loading || this.tab === nextTab) {
+                        return;
+                    }
+                    this.tab = nextTab;
+                    await this.loadPanel(this.buildUrl({ tab: nextTab, status: null }), true);
+                },
+
+                async applyStatus(status) {
+                    await this.loadPanel(this.buildUrl({ tab: this.tab, status }), true);
+                },
+
+                async clearFilters() {
+                    this.tab = 'live';
+                    await this.loadPanel(this.buildUrl({ clearSearch: true }), true);
+                },
+
+                syncFromPanel() {
+                    const marker = document.querySelector('#enquiries-panel [data-page-ids]');
+                    if (! marker) {
+                        this.pageIds = [];
+                        return;
+                    }
+                    try {
+                        this.pageIds = JSON.parse(marker.getAttribute('data-page-ids') || '[]').map(Number);
+                    } catch (e) {
+                        this.pageIds = [];
+                    }
+                    const currentTab = marker.getAttribute('data-current-tab');
+                    if (currentTab === 'live' || currentTab === 'archive') {
+                        this.tab = currentTab;
+                    }
+                    this.updateTabStyles();
+                },
+
+                updateTabStyles() {
+                    document.querySelectorAll('[data-enquiry-tab]').forEach((btn) => {
+                        const active = btn.getAttribute('data-enquiry-tab') === this.tab;
+                        btn.classList.toggle('bg-white', active);
+                        btn.classList.toggle('text-brand-header', active);
+                        btn.classList.toggle('shadow-sm', active);
+                        btn.classList.toggle('text-sh-mid', ! active);
+                        btn.classList.toggle('hover:text-brand-header', ! active);
+                        if (active) {
+                            btn.setAttribute('aria-current', 'page');
+                        } else {
+                            btn.removeAttribute('aria-current');
+                        }
+                        const badge = btn.querySelector('[data-enquiry-tab-badge]');
+                        if (badge) {
+                            badge.classList.toggle('bg-[#e8f4ff]', active);
+                            badge.classList.toggle('text-brand', active);
+                            badge.classList.toggle('bg-white/80', ! active);
+                            badge.classList.toggle('text-sh-mid', ! active);
+                        }
+                    });
+
+                    const hint = document.querySelector('[data-enquiry-tab-hint]');
+                    if (hint) {
+                        hint.textContent = this.tab === 'archive'
+                            ? 'Archive shows enquiries older than 30 days.'
+                            : 'Live shows enquiries from the last 30 days. Older ones move to Archive automatically.';
+                    }
+
+                    const label = document.querySelector('[data-enquiry-tab-label]');
+                    if (label) {
+                        label.textContent = this.tab === 'archive' ? 'Archive' : 'Live';
+                    }
+                },
+
+                async loadPanel(url, pushHistory) {
+                    const requestId = ++this.requestId;
+                    this.loading = true;
+                    this.selected = [];
+                    this.updateTabStyles();
+
+                    const panel = document.getElementById('enquiries-panel');
+                    if (panel) {
+                        panel.classList.add('opacity-60', 'pointer-events-none');
+                    }
+
+                    try {
+                        const response = await fetch(url.toString(), {
+                            headers: {
+                                Accept: 'text/html',
+                                'X-Requested-With': 'XMLHttpRequest',
+                            },
+                            credentials: 'same-origin',
+                        });
+
+                        if (! response.ok) {
+                            throw new Error('Could not load enquiries (' + response.status + ').');
+                        }
+
+                        const html = await response.text();
+                        if (requestId !== this.requestId) {
+                            return;
+                        }
+
+                        if (! panel) {
+                            throw new Error('Enquiry panel missing.');
+                        }
+
+                        panel.innerHTML = html;
+                        if (window.Alpine) {
+                            window.Alpine.initTree(panel);
+                        }
+                        this.syncFromPanel();
+
+                        if (pushHistory) {
+                            history.pushState({ enquiriesTab: this.tab }, '', url.toString());
+                        }
+                    } catch (error) {
+                        if (requestId !== this.requestId) {
+                            return;
+                        }
+                        console.error(error);
+                        // Keep the user on the page — do not force a full reload.
+                        this.syncFromPanel();
+                    } finally {
+                        if (requestId === this.requestId) {
+                            this.loading = false;
+                            if (panel) {
+                                panel.classList.remove('opacity-60', 'pointer-events-none');
+                            }
+                            this.updateTabStyles();
+                        }
+                    }
+                },
+            }));
+        });
+
+    </script>
 </x-app-layout>

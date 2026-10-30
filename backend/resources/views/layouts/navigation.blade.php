@@ -57,6 +57,10 @@
                         Integration settings
                     </x-dropdown-link>
 
+                    <x-dropdown-link :href="route('admin.system.index')">
+                        System configuration
+                    </x-dropdown-link>
+
                     <x-dropdown-link :href="route('admin.activity.index')">
                         Activity log
                     </x-dropdown-link>
@@ -119,6 +123,10 @@
 
                 <x-responsive-nav-link :href="route('admin.settings.edit')" :active="request()->routeIs('admin.settings.*')">
                     Integration settings
+                </x-responsive-nav-link>
+
+                <x-responsive-nav-link :href="route('admin.system.index')" :active="request()->routeIs('admin.system.*')">
+                    System configuration
                 </x-responsive-nav-link>
 
                 <x-responsive-nav-link :href="route('admin.activity.index')" :active="request()->routeIs('admin.activity.*')">

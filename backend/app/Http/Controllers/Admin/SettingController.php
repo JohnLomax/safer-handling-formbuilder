@@ -57,6 +57,8 @@ class SettingController extends Controller
         'forge_enabled',
         'forge_webhook_url',
         'forge_webhook_token',
+        'enquiry_api_token',
+        'additional_attendee_unit_price',
     ];
 
     public function edit(): View
@@ -74,6 +76,9 @@ class SettingController extends Controller
             $brevoWebhookUrl .= '?token='.rawurlencode($brevoWebhookSecret);
         }
 
+        $enquiryApiToken = trim((string) ($settings['enquiry_api_token'] ?? ''));
+        $enquiryAttendeesApiUrl = rtrim((string) config('app.url'), '/').'/api/enquiries/{id}/attendees';
+
         return view('admin.settings.edit', [
             'settings' => $settings,
             'brevoWebhookSecretConfigured' => $brevoWebhookSecret !== '',
@@ -83,6 +88,8 @@ class SettingController extends Controller
             'xeroConnected' => trim((string) ($settings['xero_refresh_token'] ?? '')) !== ''
                 && trim((string) ($settings['xero_tenant_id'] ?? '')) !== '',
             'xeroTokenExpiresAt' => (int) ($settings['xero_token_expires_at'] ?? 0),
+            'enquiryApiTokenConfigured' => $enquiryApiToken !== '',
+            'enquiryAttendeesApiUrl' => $enquiryAttendeesApiUrl,
         ]);
     }
 
@@ -130,6 +137,8 @@ class SettingController extends Controller
             'forge_enabled' => ['nullable', 'boolean'],
             'forge_webhook_url' => ['nullable', 'url', 'max:500'],
             'forge_webhook_token' => ['nullable', 'string', 'max:255'],
+            'enquiry_api_token' => ['nullable', 'string', 'max:255'],
+            'additional_attendee_unit_price' => ['nullable', 'numeric', 'min:0.01', 'max:10000'],
         ]);
 
         foreach ($this->keys as $key) {
@@ -157,12 +166,23 @@ class SettingController extends Controller
                 'xero_client_secret',
                 'xero_webhook_key',
                 'forge_webhook_token',
+                'enquiry_api_token',
             ], true)) {
                 continue;
             }
 
             if (in_array($key, ['office_auto_reply_hours', 'office_imap_port'], true)) {
                 Setting::setValue($key, (string) ((int) ($incoming !== '' ? $incoming : ($key === 'office_imap_port' ? 993 : 8))));
+
+                continue;
+            }
+
+            if ($key === 'additional_attendee_unit_price') {
+                $price = is_numeric($incoming) ? round((float) $incoming, 2) : 80.0;
+                if ($price <= 0) {
+                    $price = 80.0;
+                }
+                Setting::setValue($key, (string) $price);
 
                 continue;
             }

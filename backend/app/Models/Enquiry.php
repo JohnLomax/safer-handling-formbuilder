@@ -14,6 +14,8 @@ class Enquiry extends Model
     protected $fillable = [
         'name',
         'email',
+        'invoice_quote_name',
+        'invoice_quote_email',
         'enquiry_type',
         'status',
         'audience_type',
@@ -110,6 +112,32 @@ class Enquiry extends Model
     public function hasVoucher(): bool
     {
         return $this->voucher_id !== null || filled($this->voucher_code);
+    }
+
+    public function hasInvoiceQuoteRecipient(): bool
+    {
+        if (filled($this->invoice_quote_name) || filled($this->invoice_quote_email)) {
+            return true;
+        }
+
+        $form = is_array($this->form_data_json) ? $this->form_data_json : [];
+
+        return filled($form['invoiceQuoteName'] ?? null) || filled($form['invoiceQuoteEmail'] ?? null);
+    }
+
+    /**
+     * @return array{name:string,email:string}
+     */
+    public function invoiceQuoteRecipient(): array
+    {
+        $form = is_array($this->form_data_json) ? $this->form_data_json : [];
+        $name = trim((string) ($this->invoice_quote_name ?: ($form['invoiceQuoteName'] ?? '')));
+        $email = trim((string) ($this->invoice_quote_email ?: ($form['invoiceQuoteEmail'] ?? '')));
+
+        return [
+            'name' => $name !== '' ? $name : (string) $this->name,
+            'email' => $email !== '' ? $email : (string) $this->email,
+        ];
     }
 
     public function isMondaySynced(): bool

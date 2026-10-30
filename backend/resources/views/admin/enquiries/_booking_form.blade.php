@@ -1,5 +1,14 @@
 @php
     $booking = is_array($enquiry->booking_details_json) ? $enquiry->booking_details_json : [];
+    $formData = is_array($enquiry->form_data_json) ? $enquiry->form_data_json : [];
+    $defaultInvoiceName = $booking['invoiceName']
+        ?? ($enquiry->invoice_quote_name ?: null)
+        ?? ($formData['invoiceQuoteName'] ?? null)
+        ?? $enquiry->name;
+    $defaultInvoiceEmail = $booking['invoiceEmail']
+        ?? ($enquiry->invoice_quote_email ?: null)
+        ?? ($formData['invoiceQuoteEmail'] ?? null)
+        ?? $enquiry->email;
     $formId = $formId ?? 'booking-edit-form';
 @endphp
 
@@ -151,11 +160,11 @@
     <div class="grid gap-4 sm:grid-cols-2">
         <div>
             <x-input-label for="invoiceName" value="Invoice name" />
-            <x-text-input id="invoiceName" name="invoiceName" type="text" class="mt-1 block w-full" :value="old('invoiceName', $booking['invoiceName'] ?? $enquiry->name)" required />
+            <x-text-input id="invoiceName" name="invoiceName" type="text" class="mt-1 block w-full" :value="old('invoiceName', $defaultInvoiceName)" required />
         </div>
         <div>
             <x-input-label for="invoiceEmail" value="Invoice email" />
-            <x-text-input id="invoiceEmail" name="invoiceEmail" type="email" class="mt-1 block w-full" :value="old('invoiceEmail', $booking['invoiceEmail'] ?? $enquiry->email)" required />
+            <x-text-input id="invoiceEmail" name="invoiceEmail" type="email" class="mt-1 block w-full" :value="old('invoiceEmail', $defaultInvoiceEmail)" required />
         </div>
     </div>
 

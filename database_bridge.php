@@ -425,7 +425,7 @@ function applyAppSettingsToGlobals(): void
     $GLOBALS['brevoLogoUrl'] = appSetting('brevo_logo_url', (string)($GLOBALS['brevoLogoUrl'] ?? ''));
     $GLOBALS['brevoQuoteAcceptUrl'] = appSetting('brevo_quote_accept_url', (string)($GLOBALS['brevoQuoteAcceptUrl'] ?? ''));
     $GLOBALS['formBaseUrl'] = appSetting('form_base_url', (string)($GLOBALS['formBaseUrl'] ?? ''));
-    $GLOBALS['brevoResumeEmailEnabled'] = appSettingBool('brevo_resume_email_enabled', (bool)($GLOBALS['brevoResumeEmailEnabled'] ?? true));
+    $GLOBALS['brevoResumeEmailEnabled'] = appSettingBool('brevo_resume_email_enabled', (bool)($GLOBALS['brevoResumeEmailEnabled'] ?? false));
     $GLOBALS['brevoWebhookSecret'] = appSetting('brevo_webhook_secret', (string)($GLOBALS['brevoWebhookSecret'] ?? ''));
     $GLOBALS['officeAutoReplyEnabled'] = appSettingBool('office_auto_reply_enabled', (bool)($GLOBALS['officeAutoReplyEnabled'] ?? false));
     $GLOBALS['officeAutoReplyHours'] = appSetting('office_auto_reply_hours', (string)($GLOBALS['officeAutoReplyHours'] ?? '8'));
@@ -454,6 +454,11 @@ function applyAppSettingsToGlobals(): void
         (string)($GLOBALS['forgeWebhookUrl'] ?? 'https://portal.saferhandling.co.uk/safer_production/webhooks/bookings/')
     );
     $GLOBALS['forgeWebhookToken'] = appSetting('forge_webhook_token', (string)($GLOBALS['forgeWebhookToken'] ?? ''));
+    $GLOBALS['enquiryApiToken'] = appSetting('enquiry_api_token', (string)($GLOBALS['enquiryApiToken'] ?? ''));
+    $GLOBALS['additionalAttendeeUnitPrice'] = appSetting(
+        'additional_attendee_unit_price',
+        (string)($GLOBALS['additionalAttendeeUnitPrice'] ?? '80')
+    );
 }
 
 /**

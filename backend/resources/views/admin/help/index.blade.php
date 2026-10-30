@@ -483,7 +483,7 @@
                             </div>
                             <div>
                                 <h4>Quote / invoice recipient</h4>
-                                <p>Optional name and email on the public form for who should receive Xero quotes and invoices (when different from the main contact). Highlighted on the enquiry page. See <a href="#quote-recipient" class="link-brand">Quote / invoice recipient</a>.</p>
+                                <p>Optional accounts name/email on the public form. Quote emails go to the form filler and, when set, accounts too; Xero uses accounts for billing. Highlighted on the enquiry page. See <a href="#quote-recipient" class="link-brand">Quote / invoice recipient</a>.</p>
                             </div>
                         </div>
                         <div class="help-feature-card">
@@ -749,12 +749,13 @@
                     <div class="help-section-head">
                         <div>
                             <h3 class="text-base font-semibold text-brand-header">Quote / invoice recipient</h3>
-                            <p class="text-sm text-sh-mid">Optional details when quotes and invoices should go to someone other than the main contact.</p>
+                            <p class="text-sm text-sh-mid">Optional accounts details so quotes can be copied to invoice contacts as well as the person who filled the form.</p>
                         </div>
                     </div>
                     <ul class="list-disc text-sm text-sh-mid">
                         <li>On the public form (after phone number), customers can enter an optional <strong class="text-sh-text">Name</strong> and <strong class="text-sh-text">Email</strong> under Quote / invoice recipient.</li>
-                        <li>When set, Xero quotes and invoices use these details as the recipient.</li>
+                        <li>The quote email always goes to the person who filled the form. When an accounts email is set (and different), they are included on the same quote email.</li>
+                        <li>Xero quotes and invoices still use the accounts recipient when set.</li>
                         <li>The main enquiry contact email is still used for Edit Enquiry / form resume links.</li>
                         <li>On the admin enquiry page the recipient is highlighted (header chip and a dedicated card under Enquiry details).</li>
                         <li>The Enquiries list shows an <strong class="text-sh-text">Invoice to</strong> badge when a custom recipient is set.</li>

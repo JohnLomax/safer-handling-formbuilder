@@ -1168,7 +1168,7 @@ if ($kajabiCoursesUrl === '') {
               <div>
                 <p class="invoice-quote-recipient-title">Quote / invoice recipient</p>
                 <p class="invoice-quote-recipient-copy">
-                  If quotes and invoices should go to someone else, add their details below.
+                  Quotes are emailed to you. Add accounts details below if they should receive a copy too (and for invoices).
                 </p>
               </div>
             </div>

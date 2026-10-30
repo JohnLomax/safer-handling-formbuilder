@@ -147,8 +147,15 @@ class EnquiryProcessRetry
         $quoteData['enquiryContactName'] = (string) $enquiry->name;
         $quoteData['enquiryContactEmail'] = (string) $enquiry->email;
         if ($recipient['custom']) {
-            $quoteData['invoiceQuoteName'] = $recipient['name'];
-            $quoteData['invoiceQuoteEmail'] = $recipient['email'];
+            $form = is_array($enquiry->form_data_json) ? $enquiry->form_data_json : [];
+            $invoiceQuoteName = trim((string) ($enquiry->invoice_quote_name ?: ($form['invoiceQuoteName'] ?? '')));
+            $invoiceQuoteEmail = trim((string) ($enquiry->invoice_quote_email ?: ($form['invoiceQuoteEmail'] ?? '')));
+            if ($invoiceQuoteName !== '') {
+                $quoteData['invoiceQuoteName'] = $invoiceQuoteName;
+            }
+            if ($invoiceQuoteEmail !== '') {
+                $quoteData['invoiceQuoteEmail'] = $invoiceQuoteEmail;
+            }
         }
 
         try {
@@ -482,8 +489,15 @@ class EnquiryProcessRetry
         $quoteData['enquiryContactName'] = (string) $enquiry->name;
         $quoteData['enquiryContactEmail'] = (string) $enquiry->email;
         if ($recipient['custom']) {
-            $quoteData['invoiceQuoteName'] = $recipient['name'];
-            $quoteData['invoiceQuoteEmail'] = $recipient['email'];
+            $form = is_array($enquiry->form_data_json) ? $enquiry->form_data_json : [];
+            $invoiceQuoteName = trim((string) ($enquiry->invoice_quote_name ?: ($form['invoiceQuoteName'] ?? '')));
+            $invoiceQuoteEmail = trim((string) ($enquiry->invoice_quote_email ?: ($form['invoiceQuoteEmail'] ?? '')));
+            if ($invoiceQuoteName !== '') {
+                $quoteData['invoiceQuoteName'] = $invoiceQuoteName;
+            }
+            if ($invoiceQuoteEmail !== '') {
+                $quoteData['invoiceQuoteEmail'] = $invoiceQuoteEmail;
+            }
         }
 
         try {

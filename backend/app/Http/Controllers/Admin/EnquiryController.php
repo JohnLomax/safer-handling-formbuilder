@@ -88,6 +88,57 @@ class EnquiryController extends Controller
     }
 
     /**
+     * Start a blank public enquiry form so staff can fill it in on behalf of a customer.
+     */
+    public function create(Request $request): RedirectResponse
+    {
+        $user = $request->user();
+        $token = bin2hex(random_bytes(24));
+
+        $enquiry = Enquiry::query()->create([
+            'name' => '',
+            'email' => '',
+            'enquiry_type' => '',
+            'status' => 'in_progress',
+            'form_data_json' => [],
+            'resume_token' => $token,
+        ]);
+
+        EnquiryEvent::query()->create([
+            'enquiry_id' => $enquiry->id,
+            'event_type' => 'admin_enquiry_started',
+            'message' => 'Enquiry started by admin '
+                .($user?->name ?: 'staff')
+                .' on behalf of a customer.',
+            'metadata' => [
+                'assisted' => true,
+                'admin_id' => $user?->id,
+                'admin_name' => $user?->name,
+                'admin_email' => $user?->email,
+            ],
+            'created_at' => now(),
+        ]);
+
+        ActivityLogger::log(
+            action: 'enquiry.admin_create',
+            description: 'Started a new enquiry form on behalf of a customer (#'.$enquiry->id.')',
+            user: $user,
+            request: $request,
+            subjectType: Enquiry::class,
+            subjectId: (int) $enquiry->id,
+            properties: [
+                'enquiry_id' => (int) $enquiry->id,
+                'assisted' => true,
+            ],
+        );
+
+        $formUrl = $enquiry->formEditUrl();
+        $separator = str_contains($formUrl, '?') ? '&' : '?';
+
+        return redirect()->away($formUrl.$separator.'assisted=1');
+    }
+
+    /**
      * @param  \Illuminate\Database\Eloquent\Builder<\App\Models\Enquiry>  $query
      * @param  \Illuminate\Support\Carbon  $archiveBefore
      */

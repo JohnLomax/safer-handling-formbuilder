@@ -682,6 +682,29 @@ if ($kajabiCoursesUrl === '') {
       display: none;
     }
 
+    .admin-assisted-banner {
+      margin: 0 0 16px;
+      padding: 14px 16px;
+      border-radius: 12px;
+      border: 1px solid #b7d3ee;
+      background: #f4f9ff;
+      color: #0f4a78;
+    }
+
+    .admin-assisted-banner strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 0.98rem;
+      color: #0255a4;
+    }
+
+    .admin-assisted-banner p {
+      margin: 0;
+      font-size: 0.92rem;
+      line-height: 1.45;
+      color: #2e5d84;
+    }
+
     .resume-locked-banner {
       margin: 0 0 16px;
       padding: 14px 16px;
@@ -1140,6 +1163,10 @@ if ($kajabiCoursesUrl === '') {
       <form id="enquiryForm" action="submit_enquiry.php" method="post" novalidate>
         <input type="hidden" id="enquiryId" name="enquiryId" value="" />
         <input type="hidden" id="resumeToken" name="resumeToken" value="" />
+        <div id="adminAssistedBanner" class="admin-assisted-banner hidden" role="status" aria-live="polite">
+          <strong>Filling this form for a customer</strong>
+          <p>You’re completing the enquiry on their behalf. Use their name and email — quotes and invoices will go to those details.</p>
+        </div>
         <div id="resumeLockedBanner" class="resume-locked-banner hidden" role="status" aria-live="polite">
           <strong>This enquiry can no longer be edited</strong>
           <p id="resumeLockedMessage">If you need to change any details, please contact Safer Handling.</p>
@@ -1156,6 +1183,7 @@ if ($kajabiCoursesUrl === '') {
 
           <label for="phone">Phone Number</label>
           <input id="phone" name="phone" type="tel" required maxlength="40" autocomplete="tel" placeholder="e.g. +44 7700 900123" />
+          <p class="datetime-hint" id="phoneHint">Needs to be a contactable number.</p>
 
           <div class="invoice-quote-recipient">
             <div class="invoice-quote-recipient-header">
@@ -2007,6 +2035,17 @@ if ($kajabiCoursesUrl === '') {
         }, 800);
       }
 
+      function showAdminAssistedBannerIfNeeded() {
+        var params = new URLSearchParams(window.location.search);
+        if (params.get("assisted") !== "1") {
+          return;
+        }
+        var banner = document.getElementById("adminAssistedBanner");
+        if (banner) {
+          banner.classList.remove("hidden");
+        }
+      }
+
       function tryRestoreEnquiryFromUrl() {
         if (window.location.protocol === "file:") {
           return Promise.resolve(false);
@@ -2015,6 +2054,7 @@ if ($kajabiCoursesUrl === '') {
         var params = new URLSearchParams(window.location.search);
         var enquiryId = params.get("enquiry") || params.get("enquiryId");
         var token = params.get("token");
+        showAdminAssistedBannerIfNeeded();
         if (!enquiryId || !token) {
           return Promise.resolve(false);
         }

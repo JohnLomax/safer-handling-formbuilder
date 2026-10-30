@@ -26,6 +26,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::get('/dashboard/chart', [DashboardController::class, 'chart'])->name('dashboard.chart');
 
     Route::get('/enquiries', [EnquiryController::class, 'index'])->name('enquiries.index');
+    Route::post('/enquiries/create', [EnquiryController::class, 'create'])->name('enquiries.create');
     Route::delete('/enquiries/bulk', [EnquiryController::class, 'bulkDestroy'])->name('enquiries.bulk-destroy');
     Route::get('/enquiries/{enquiry}', [EnquiryController::class, 'show'])->name('enquiries.show');
     Route::delete('/enquiries/{enquiry}', [EnquiryController::class, 'destroy'])->name('enquiries.destroy');

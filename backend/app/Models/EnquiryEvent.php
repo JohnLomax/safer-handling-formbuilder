@@ -33,6 +33,7 @@ class EnquiryEvent extends Model
      */
     public const LABELS = [
         'details_entered' => 'Initial details entered',
+        'admin_enquiry_started' => 'Started by admin for customer',
         'details_updated' => 'Enquiry details updated',
         'monday_item_created' => 'Data entered into Monday',
         'monday_item_exists' => 'Existing Monday record found',

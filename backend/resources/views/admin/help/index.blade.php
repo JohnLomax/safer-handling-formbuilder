@@ -772,6 +772,7 @@
                     </div>
                     <ul class="list-disc text-sm text-sh-mid">
                         <li>Use the journey timeline to see successes/failures and retry failed steps — including additional attendees invoices from the API.</li>
+                        <li><strong class="text-sh-text">Create new enquiry</strong> opens a blank public form so staff can fill it in on behalf of a customer (opens in a new tab; timeline notes it was started by admin).</li>
                         <li><strong class="text-sh-text">Edit form</strong> opens the customer enquiry form with saved details.</li>
                         <li><strong class="text-sh-text">View / Edit booking</strong> lets staff complete Accept Quote details for the client.</li>
                         <li>Preferred date can be “Not sure yet”; staff can set it later in booking edit.</li>

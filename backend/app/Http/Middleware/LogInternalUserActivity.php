@@ -166,6 +166,7 @@ class LogInternalUserActivity
     private function descriptionFromRoute(?string $routeName, string $method, ?Model $subject = null): string
     {
         $labels = [
+            'admin.enquiries.create' => 'Started enquiry form for a customer',
             'admin.enquiries.booking.update' => 'Updated enquiry booking details',
             'admin.enquiries.retry.quote-email' => 'Retried quote email',
             'admin.enquiries.retry.lead-notification' => 'Retried lead notification',

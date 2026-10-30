@@ -2,7 +2,7 @@
     <x-slot name="header">
         <x-admin.page-header
             title="Help & Support"
-            description="How to use the Safer Handling enquiry system — Training Matrix, Day 1 / Day 2 courses, vouchers, and integrations."
+            description="How to use the Safer Handling enquiry system — Live/Archive enquiries, quote recipients, Training Matrix, vouchers, Attendees API, and integrations."
         />
     </x-slot>
 
@@ -319,12 +319,15 @@
                         <a href="#enquiry-journey"><span class="help-nav-dot"></span>Enquiry journey</a>
                         <a href="#form-paths"><span class="help-nav-dot"></span>Form paths (It's for me)</a>
                         <a href="#second-date"><span class="help-nav-dot"></span>Day 1 &amp; Day 2 courses</a>
+                        <a href="#enquiries-list"><span class="help-nav-dot"></span>Live &amp; Archive</a>
+                        <a href="#quote-recipient"><span class="help-nav-dot"></span>Quote / invoice recipient</a>
                         <a href="#enquiry-page"><span class="help-nav-dot"></span>Working an enquiry</a>
                         <a href="#delete-enquiry"><span class="help-nav-dot"></span>Delete an enquiry</a>
                         <a href="#activity-log"><span class="help-nav-dot"></span>Activity log</a>
                         <a href="#emails"><span class="help-nav-dot"></span>Emails & read status</a>
                         <a href="#booking"><span class="help-nav-dot"></span>Booking & terms</a>
                         <a href="#integrations"><span class="help-nav-dot"></span>Integrations</a>
+                        <a href="#attendees-api"><span class="help-nav-dot"></span>Attendees API</a>
                         <a href="#forge-delivery-stages"><span class="help-nav-dot"></span>Forge delivery stages</a>
                         <a class="is-section" href="#vouchers"><span class="help-nav-dot"></span>Vouchers</a>
                         <a class="is-section" href="#training-matrix"><span class="help-nav-dot"></span>Training Matrix</a>
@@ -354,7 +357,7 @@
                             </div>
                             <div>
                                 <h4>Enquiries</h4>
-                                <p>Search, filter, and open each customer journey. Filter by Quote Sent, Accepted, or Won.</p>
+                                <p>Live (last 30 days) and Archive tabs, search, status filters, and open each customer journey.</p>
                             </div>
                         </div>
                         <div class="help-feature-card">
@@ -390,7 +393,7 @@
                             </div>
                             <div>
                                 <h4>Integration settings</h4>
-                                <p>Monday, Brevo, Xero, Kajabi, Forge, postcodes, and email open tracking — under your profile menu.</p>
+                                <p>Monday, Brevo, Xero, Kajabi, Forge, Enquiry API token &amp; candidate price, postcodes, and email open tracking.</p>
                             </div>
                         </div>
                     </div>
@@ -456,6 +459,51 @@
                                 <p>On the Enquiries list, select multiple rows and use Delete selected. Monday items are left unchanged; Forge bookings are cancelled first when present. See <a href="#delete-enquiry" class="link-brand">Delete an enquiry</a>.</p>
                             </div>
                         </div>
+                        <div class="help-feature-card">
+                            <div class="help-icon" style="background:#eef7ff;color:#0255a4;">
+                                <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" /></svg>
+                            </div>
+                            <div>
+                                <h4>Attendees API</h4>
+                                <p>External systems (e.g. Forge) can add attendees to an enquiry, log them on the timeline, and raise an extra Xero invoice at £{{ $additionalAttendeeUnitPrice }} each (ex VAT). Price is editable in Integration settings. See <a href="#attendees-api" class="link-brand">Attendees API</a>.</p>
+                            </div>
+                        </div>
+                        <div class="help-feature-card">
+                            <div class="help-icon" style="background:#eef7ff;color:#0255a4;">
+                                <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 010 3.75H5.625a1.875 1.875 0 010-3.75z" /></svg>
+                            </div>
+                            <div>
+                                <h4>Live &amp; Archive</h4>
+                                <p>Enquiries from the last 30 days stay on <strong class="text-sh-text">Live</strong>; older ones move to <strong class="text-sh-text">Archive</strong>. Tabs switch without a full page reload. See <a href="#enquiries-list" class="link-brand">Live &amp; Archive</a>.</p>
+                            </div>
+                        </div>
+                        <div class="help-feature-card">
+                            <div class="help-icon" style="background:#fff7e8;color:#9a6700;">
+                                <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" /></svg>
+                            </div>
+                            <div>
+                                <h4>Quote / invoice recipient</h4>
+                                <p>Optional name and email on the public form for who should receive Xero quotes and invoices (when different from the main contact). Highlighted on the enquiry page. See <a href="#quote-recipient" class="link-brand">Quote / invoice recipient</a>.</p>
+                            </div>
+                        </div>
+                        <div class="help-feature-card">
+                            <div class="help-icon">
+                                <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" /></svg>
+                            </div>
+                            <div>
+                                <h4>Edit Your Quote in email</h4>
+                                <p>The training quote email includes an <strong class="text-sh-text">Edit Your Quote</strong> button linking back to the customer’s enquiry form, alongside Accept Quote. See <a href="#emails" class="link-brand">Emails</a>.</p>
+                            </div>
+                        </div>
+                        <div class="help-feature-card">
+                            <div class="help-icon">
+                                <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>
+                            </div>
+                            <div>
+                                <h4>Edit Enquiry Email off by default</h4>
+                                <p>The “Continue your Safer Handling enquiry” email is <strong class="text-sh-text">disabled</strong> by default. Turn it back on under Integration settings if needed. Customers can still edit via the quote email button when a quote has been sent.</p>
+                            </div>
+                        </div>
                     </div>
                 </section>
 
@@ -514,7 +562,7 @@
                         <div class="help-step-card">
                             <div class="help-step-num">1</div>
                             <h4>Customer starts the form</h4>
-                            <p>Name, email, and enquiry type. Progress can be resumed via the Edit Enquiry Email.</p>
+                            <p>Name, email, phone, optional quote/invoice recipient, and enquiry type. The automatic Edit Enquiry Email is off by default.</p>
                         </div>
                         <div class="help-step-card">
                             <div class="help-step-num">2</div>
@@ -524,7 +572,7 @@
                         <div class="help-step-card">
                             <div class="help-step-num">3</div>
                             <h4>Submit</h4>
-                            <p>Enquiry is saved; Monday may update; quote / edit emails and office lead notification can send.</p>
+                            <p>Enquiry is saved; Monday may update; quote email (with Edit Your Quote + Accept Quote) and office lead notification can send.</p>
                         </div>
                         <div class="help-step-card">
                             <div class="help-step-num">4</div>
@@ -680,6 +728,39 @@
                     </ul>
                 </section>
 
+                <section id="enquiries-list" class="brand-panel help-section help-stack scroll-mt-6">
+                    <div class="help-section-head">
+                        <div>
+                            <h3 class="text-base font-semibold text-brand-header">Live &amp; Archive</h3>
+                            <p class="text-sm text-sh-mid">How enquiries are organised on the Enquiries list.</p>
+                        </div>
+                        <a href="{{ route('admin.enquiries.index') }}" class="btn-brand-outline text-xs">Open Enquiries</a>
+                    </div>
+                    <ul class="list-disc text-sm text-sh-mid">
+                        <li><strong class="text-sh-text">Live</strong> — enquiries created in the last 30 days.</li>
+                        <li><strong class="text-sh-text">Archive</strong> — enquiries older than 30 days (they move here automatically).</li>
+                        <li>Switching Live / Archive (and status chips / pagination) updates the table in place — no full page reload.</li>
+                        <li>Search, status filters, and rows-per-page still apply within the selected tab.</li>
+                        <li>Counts on each tab show how many enquiries sit in Live vs Archive.</li>
+                    </ul>
+                </section>
+
+                <section id="quote-recipient" class="brand-panel help-section help-stack scroll-mt-6">
+                    <div class="help-section-head">
+                        <div>
+                            <h3 class="text-base font-semibold text-brand-header">Quote / invoice recipient</h3>
+                            <p class="text-sm text-sh-mid">Optional details when quotes and invoices should go to someone other than the main contact.</p>
+                        </div>
+                    </div>
+                    <ul class="list-disc text-sm text-sh-mid">
+                        <li>On the public form (after phone number), customers can enter an optional <strong class="text-sh-text">Name</strong> and <strong class="text-sh-text">Email</strong> under Quote / invoice recipient.</li>
+                        <li>When set, Xero quotes and invoices use these details as the recipient.</li>
+                        <li>The main enquiry contact email is still used for Edit Enquiry / form resume links.</li>
+                        <li>On the admin enquiry page the recipient is highlighted (header chip and a dedicated card under Enquiry details).</li>
+                        <li>The Enquiries list shows an <strong class="text-sh-text">Invoice to</strong> badge when a custom recipient is set.</li>
+                    </ul>
+                </section>
+
                 <section id="enquiry-page" class="brand-panel help-section help-stack scroll-mt-6">
                     <div class="help-section-head">
                         <div>
@@ -689,12 +770,13 @@
                         <a href="{{ route('admin.enquiries.index') }}" class="btn-brand-outline text-xs">Open Enquiries</a>
                     </div>
                     <ul class="list-disc text-sm text-sh-mid">
-                        <li>Use the journey timeline to see successes/failures and retry failed steps.</li>
+                        <li>Use the journey timeline to see successes/failures and retry failed steps — including additional attendees invoices from the API.</li>
                         <li><strong class="text-sh-text">Edit form</strong> opens the customer enquiry form with saved details.</li>
                         <li><strong class="text-sh-text">View / Edit booking</strong> lets staff complete Accept Quote details for the client.</li>
                         <li>Preferred date can be “Not sure yet”; staff can set it later in booking edit.</li>
                         <li>Matrix rows with <strong class="text-sh-text">Enable second date</strong> show Day 1 + Day 2 on the enquiry; Forge receives both as <code class="rounded bg-sh-surface px-1 text-xs">session_dates</code>. See <a href="#second-date" class="link-brand">Day 1 &amp; Day 2</a>.</li>
                         <li>Apply or remove a <strong class="text-sh-text">voucher</strong> on the enquiry page (locked once Quote Won). See <a href="#vouchers" class="link-brand">Vouchers</a>.</li>
+                        <li>Check <a href="#quote-recipient" class="link-brand">Quote / invoice recipient</a> when Xero should bill a different person.</li>
                         <li>Once Quote Won, the customer enquiry form is locked from further online edits (including vouchers).</li>
                         <li><strong class="text-sh-text">Delete enquiry</strong> removes the record from this admin system — see <a href="#delete-enquiry" class="link-brand">Delete an enquiry</a>.</li>
                     </ul>
@@ -747,7 +829,10 @@
                             </div>
                             <div>
                                 <h4>Edit Enquiry Email</h4>
-                                <p>Link for the customer to continue or edit their saved form.</p>
+                                <p>
+                                    “Continue your Safer Handling enquiry” — optional link to resume the saved form.
+                                    Currently <strong class="text-sh-text">off by default</strong>; enable under Integration settings → Send Edit Enquiry Emails after the full form is submitted.
+                                </p>
                             </div>
                         </div>
                         <div class="help-feature-card">
@@ -755,8 +840,11 @@
                                 <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>
                             </div>
                             <div>
-                                <h4>Quote & invoice emails</h4>
-                                <p>Quote confirmation (often with Xero PDF), Accept Quote CTA, and invoice PDF.</p>
+                                <h4>Quote &amp; invoice emails</h4>
+                                <p>
+                                    Quote confirmation (often with Xero PDF) includes <strong class="text-sh-text">Edit Your Quote</strong> (back to the enquiry form) and <strong class="text-sh-text">Accept Quote and add venue details</strong>.
+                                    Invoice emails attach the Xero PDF.
+                                </p>
                             </div>
                         </div>
                     </div>
@@ -817,7 +905,7 @@
                             <div class="help-icon"><x-xero-badge compact class="!h-5 !w-5" /></div>
                             <div>
                                 <h4>Xero</h4>
-                                <p>Quotes and draft invoices; email the invoice from the enquiry page. Applied vouchers appear in the quote/invoice line description (discounted net amount).</p>
+                                <p>Quotes and draft invoices (including optional quote/invoice recipient); email the invoice from the enquiry page. Additional attendees via API create a separate draft invoice. Applied vouchers appear in the quote/invoice line description.</p>
                             </div>
                         </div>
                         <div class="help-feature-card">
@@ -844,6 +932,107 @@
                             </div>
                         </div>
                     </div>
+                </section>
+
+                <section id="attendees-api" class="brand-panel help-section help-stack scroll-mt-6">
+                    <div class="help-section-head">
+                        <div>
+                            <h3 class="text-base font-semibold text-brand-header">Attendees API</h3>
+                            <p class="text-sm text-sh-mid">
+                                Let an external system add candidates/attendees to an enquiry. Each call updates the count, writes a timeline entry
+                                (for example <strong class="text-sh-text">2 new attendees from Forge</strong>), creates an additional Xero draft invoice
+                                at <strong class="text-sh-text">£{{ $additionalAttendeeUnitPrice }}</strong> per candidate (ex VAT — editable in Integration settings), and emails the PDF by default.
+                            </p>
+                        </div>
+                        <a href="{{ route('admin.settings.edit') }}#enquiry_api_token" class="btn-brand-outline text-xs">API settings</a>
+                    </div>
+
+                    <div class="help-card-grid">
+                        <div class="help-feature-card">
+                            <div class="help-icon" style="background:#eef7ff;color:#0255a4;font-weight:800;font-size:0.65rem;">POST</div>
+                            <div>
+                                <h4>Endpoint</h4>
+                                <p class="font-mono text-xs break-all text-sh-text">{{ $attendeesApiUrl }}</p>
+                                <p class="mt-2 text-sm text-sh-mid">Replace <code class="rounded bg-sh-surface px-1 text-xs">{id}</code> with the enquiry ID from the admin enquiry page URL.</p>
+                            </div>
+                        </div>
+                        <div class="help-feature-card">
+                            <div class="help-icon" style="background:{{ $attendeesApiTokenConfigured ? '#f3f9e8' : '#fff7e8' }};color:{{ $attendeesApiTokenConfigured ? '#3f6d1c' : '#9a6700' }};">
+                                <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg>
+                            </div>
+                            <div>
+                                <h4>Authentication</h4>
+                                <p>
+                                    @if ($attendeesApiTokenConfigured)
+                                        API token is configured in Integration settings.
+                                    @else
+                                        Set an <strong class="text-sh-text">Enquiry API</strong> token under Integration settings before calling the endpoint (requests are rejected until set).
+                                    @endif
+                                </p>
+                                <p class="mt-2 text-sm text-sh-mid">Send the token as <code class="rounded bg-sh-surface px-1 text-xs">Authorization: Bearer …</code>, <code class="rounded bg-sh-surface px-1 text-xs">X-Api-Token</code>, or <code class="rounded bg-sh-surface px-1 text-xs">?token=</code>.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h4 class="text-sm font-semibold text-brand-header">Request body (JSON)</h4>
+                        <div class="help-table-wrap" style="margin-top:0.75rem;">
+                            <table class="admin-table">
+                                <thead>
+                                    <tr>
+                                        <th>Field</th>
+                                        <th>Required</th>
+                                        <th>Description</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><code class="rounded bg-sh-surface px-1 text-xs">count</code></td>
+                                        <td>Yes</td>
+                                        <td>Number of new attendees to add (integer, 1–500).</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code class="rounded bg-sh-surface px-1 text-xs">source</code></td>
+                                        <td>No</td>
+                                        <td>System name shown on the timeline (default <code class="rounded bg-sh-surface px-1 text-xs">API</code>). Example: <code class="rounded bg-sh-surface px-1 text-xs">Forge</code>.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code class="rounded bg-sh-surface px-1 text-xs">email_invoice</code></td>
+                                        <td>No</td>
+                                        <td>Email the new invoice PDF via Brevo (default <code class="rounded bg-sh-surface px-1 text-xs">true</code>).</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h4 class="text-sm font-semibold text-brand-header">Example</h4>
+                        <pre class="mt-3 overflow-x-auto rounded-[12px] border border-[#d8e8f8] bg-[#0b1f33] p-4 text-xs leading-relaxed text-[#e8f4ff]"><code>curl -X POST "{{ str_replace('{id}', '123', $attendeesApiUrl) }}" \
+  -H "Authorization: Bearer YOUR_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"count": 2, "source": "Forge", "email_invoice": true}'</code></pre>
+                    </div>
+
+                    <div>
+                        <h4 class="text-sm font-semibold text-brand-header">What happens</h4>
+                        <ul class="mt-2 list-disc space-y-2 pl-5 text-sm text-sh-mid">
+                            <li>Attendee count on the enquiry is increased by <code class="rounded bg-sh-surface px-1 text-xs">count</code>.</li>
+                            <li>Timeline shows e.g. <strong class="text-sh-text">2 new attendees from Forge</strong>.</li>
+                            <li>A separate Xero draft invoice is created (does not replace the main course invoice) charging £{{ $additionalAttendeeUnitPrice }} × attendees (ex VAT + VAT).</li>
+                            <li>Unless <code class="rounded bg-sh-surface px-1 text-xs">email_invoice</code> is false, the invoice PDF is emailed to the customer.</li>
+                            <li>The enquiry must already have a Xero contact and an invoice/booking address (same requirements as the main invoice).</li>
+                        </ul>
+                    </div>
+
+                    <p class="text-sm text-sh-mid">
+                        Unit price is configurable under
+                        <a href="{{ route('admin.settings.edit') }}" class="link-brand">Integration settings → Enquiry API — add attendees</a>
+                        as <strong class="text-sh-text">Additional candidate / attendee price</strong>
+                        (<code class="rounded bg-sh-surface px-1 text-xs">additional_attendee_unit_price</code>
+                        (currently £{{ $additionalAttendeeUnitPrice }}).
+                        Full request docs are also shown on that settings page.
+                    </p>
                 </section>
 
                 <section id="forge-delivery-stages" class="brand-panel help-section help-stack scroll-mt-6">

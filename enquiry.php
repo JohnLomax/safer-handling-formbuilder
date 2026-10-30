@@ -782,10 +782,76 @@ if ($kajabiCoursesUrl === '') {
       margin-top: 14px;
     }
 
-    .voucher-block .optional {
+    .voucher-block .optional,
+    .invoice-quote-recipient .optional {
       font-weight: 500;
       color: #5a7a96;
       font-size: 0.9em;
+    }
+
+    .invoice-quote-recipient {
+      margin: 1.75rem 0 1rem;
+      padding: 0;
+      border: 1px solid #c5ddf3;
+      border-radius: 14px;
+      background: #f7fbff;
+      box-shadow: 0 4px 14px rgba(2, 85, 164, 0.06);
+      overflow: hidden;
+    }
+
+    .invoice-quote-recipient-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 14px 16px 12px;
+      border-bottom: 1px solid #d8e8f8;
+      background: linear-gradient(180deg, #eef6ff 0%, #f7fbff 100%);
+    }
+
+    .invoice-quote-recipient-icon {
+      flex: 0 0 auto;
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: #0255a4;
+      color: #ffffff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .invoice-quote-recipient-icon svg {
+      width: 18px;
+      height: 18px;
+      display: block;
+    }
+
+    .invoice-quote-recipient-title {
+      margin: 0;
+      color: #0255a4;
+      font-size: 1.05rem;
+      font-weight: 800;
+      letter-spacing: 0.01em;
+      line-height: 1.25;
+    }
+
+    .invoice-quote-recipient-copy {
+      margin: 4px 0 0;
+      color: #2e5d84;
+      font-size: 0.92rem;
+      line-height: 1.45;
+    }
+
+    .invoice-quote-recipient-fields {
+      padding: 12px 16px 16px;
+    }
+
+    .invoice-quote-recipient-fields label {
+      margin-top: 0.7rem;
+    }
+
+    .invoice-quote-recipient-fields label:first-of-type {
+      margin-top: 0;
     }
 
     .voucher-row {
@@ -1089,6 +1155,30 @@ if ($kajabiCoursesUrl === '') {
 
           <label for="phone">Phone Number</label>
           <input id="phone" name="phone" type="tel" required maxlength="40" autocomplete="tel" placeholder="e.g. +44 7700 900123" />
+
+          <div class="invoice-quote-recipient">
+            <div class="invoice-quote-recipient-header">
+              <span class="invoice-quote-recipient-icon" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M3 4a2 2 0 012-2h10a2 2 0 012 2v1H3V4z" />
+                  <path fill-rule="evenodd" d="M3 7h14v7a2 2 0 01-2 2H5a2 2 0 01-2-2V7zm4 2a1 1 0 000 2h6a1 1 0 100-2H7z" clip-rule="evenodd" />
+                </svg>
+              </span>
+              <div>
+                <p class="invoice-quote-recipient-title">Quote / invoice recipient</p>
+                <p class="invoice-quote-recipient-copy">
+                  If quotes and invoices should go to someone else, add their details below.
+                </p>
+              </div>
+            </div>
+            <div class="invoice-quote-recipient-fields">
+              <label for="invoiceQuoteName">Name <span class="optional">(optional)</span></label>
+              <input id="invoiceQuoteName" name="invoiceQuoteName" type="text" maxlength="200" autocomplete="organization-title" placeholder="Accounts contact name" />
+
+              <label for="invoiceQuoteEmail">Email <span class="optional">(optional)</span></label>
+              <input id="invoiceQuoteEmail" name="invoiceQuoteEmail" type="email" maxlength="200" autocomplete="email" placeholder="accounts@example.com" />
+            </div>
+          </div>
 
           <label>I am looking to make an enquiry about</label>
           <div class="choice-group" id="enquiryTypeGroup">

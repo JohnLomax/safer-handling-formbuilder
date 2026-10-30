@@ -97,8 +97,8 @@
                 </div>
 
                 <div class="flex items-center gap-2">
-                    <input id="brevo_resume_email_enabled" name="brevo_resume_email_enabled" type="checkbox" value="1" class="rounded border-[#b9d4ef] text-brand shadow-sm focus:ring-brand" @checked(old('brevo_resume_email_enabled', filter_var($settings['brevo_resume_email_enabled'] ?? '1', FILTER_VALIDATE_BOOLEAN)))>
-                    <label for="brevo_resume_email_enabled" class="text-sm text-sh-mid">Send Edit Enquiry Emails after the full form is submitted</label>
+                    <input id="brevo_resume_email_enabled" name="brevo_resume_email_enabled" type="checkbox" value="1" class="rounded border-[#b9d4ef] text-brand shadow-sm focus:ring-brand" @checked(old('brevo_resume_email_enabled', filter_var($settings['brevo_resume_email_enabled'] ?? '0', FILTER_VALIDATE_BOOLEAN)))>
+                    <label for="brevo_resume_email_enabled" class="text-sm text-sh-mid">Send Edit Enquiry Emails after the full form is submitted (“Continue your Safer Handling enquiry”)</label>
                 </div>
 
                 <div class="rounded-[12px] border border-[#9fc8ed] bg-[#eef7ff] p-4 space-y-3">
@@ -416,6 +416,142 @@
                     <x-input-label for="forge_webhook_token" value="Webhook token" />
                     <x-text-input id="forge_webhook_token" name="forge_webhook_token" type="password" class="mt-1 block w-full font-mono text-sm" :value="old('forge_webhook_token', $settings['forge_webhook_token'] ?? '')" autocomplete="off" />
                     <p class="mt-1 text-xs text-sh-mid">Sent as <code>X-Webhook-Token</code>. Leave blank when saving to keep the existing token.</p>
+                </div>
+            </div>
+
+            <div class="brand-panel space-y-4">
+                <div>
+                    <h3 class="text-base font-semibold text-brand-header">Enquiry API — add attendees</h3>
+                    <p class="mt-1 text-sm text-sh-mid">
+                        External systems (for example Forge) can add attendees to an existing enquiry.
+                        Each call updates the attendee count, writes a timeline entry such as
+                        <em>“2 new attendees from Forge”</em>, creates an additional Xero draft invoice
+                        at the unit price below, and emails the invoice PDF to the customer (unless disabled in the request).
+                    </p>
+                </div>
+
+                <div class="rounded-[10px] border border-[#d8e8f8] bg-sh-surface px-4 py-3 text-sm text-sh-mid space-y-2">
+                    <p>
+                        <span class="font-semibold text-brand-header">Status:</span>
+                        @if ($enquiryApiTokenConfigured ?? false)
+                            <span class="text-green-700">API token configured — endpoint is ready.</span>
+                        @else
+                            <span class="text-amber-700">No API token set — all requests return 401 until you save one below.</span>
+                        @endif
+                    </p>
+                    <p>
+                        <span class="font-semibold text-brand-header">Endpoint:</span>
+                        <code class="ml-1 break-all font-mono text-xs text-sh-ink">POST {{ $enquiryAttendeesApiUrl }}</code>
+                    </p>
+                    <p class="text-xs">Replace <code>{id}</code> with the enquiry ID from the admin enquiries list.</p>
+                </div>
+
+                <div>
+                    <x-input-label for="enquiry_api_token" value="API token" />
+                    <x-text-input id="enquiry_api_token" name="enquiry_api_token" type="password" class="mt-1 block w-full font-mono text-sm" :value="old('enquiry_api_token', $settings['enquiry_api_token'] ?? '')" autocomplete="off" />
+                    <p class="mt-1 text-xs text-sh-mid">Leave blank when saving to keep the existing token. Can also be set as <code>ENQUIRY_API_TOKEN</code> in the server env.</p>
+                </div>
+
+                <div>
+                    <x-input-label for="additional_attendee_unit_price" value="Additional candidate / attendee price (ex VAT, £)" />
+                    <x-text-input id="additional_attendee_unit_price" name="additional_attendee_unit_price" type="number" step="0.01" min="0.01" class="mt-1 block w-full font-mono text-sm" :value="old('additional_attendee_unit_price', $settings['additional_attendee_unit_price'] ?? '80')" />
+                    <p class="mt-1 text-xs text-sh-mid">Charged per new candidate on the additional Xero invoice (VAT added by Xero). Editable here any time — default £80.</p>
+                </div>
+
+                <div class="space-y-3 border-t border-[#d8e8f8] pt-4">
+                    <h4 class="text-sm font-semibold text-brand-header">API documentation</h4>
+
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-wide text-sh-mid">Authentication</p>
+                        <p class="mt-1 text-sm text-sh-mid">Send the API token using one of:</p>
+                        <ul class="mt-1 list-disc space-y-1 pl-5 text-sm text-sh-mid">
+                            <li><code class="font-mono text-xs">Authorization: Bearer YOUR_TOKEN</code> (preferred)</li>
+                            <li><code class="font-mono text-xs">X-Api-Token: YOUR_TOKEN</code></li>
+                            <li><code class="font-mono text-xs">?token=YOUR_TOKEN</code> query parameter</li>
+                        </ul>
+                    </div>
+
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-wide text-sh-mid">Request body (JSON)</p>
+                        <div class="mt-2 overflow-x-auto rounded-[10px] border border-[#b7d3ee] bg-white">
+                            <table class="min-w-full text-left text-sm">
+                                <thead class="bg-[#f4f9ff] text-xs uppercase tracking-wide text-sh-mid">
+                                    <tr>
+                                        <th class="px-3 py-2 font-semibold">Field</th>
+                                        <th class="px-3 py-2 font-semibold">Type</th>
+                                        <th class="px-3 py-2 font-semibold">Required</th>
+                                        <th class="px-3 py-2 font-semibold">Description</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="text-sh-ink">
+                                    <tr class="border-t border-[#e8eef5]">
+                                        <td class="px-3 py-2 font-mono text-xs">count</td>
+                                        <td class="px-3 py-2">integer</td>
+                                        <td class="px-3 py-2">Yes</td>
+                                        <td class="px-3 py-2 text-sh-mid">Number of new attendees to add (1–500).</td>
+                                    </tr>
+                                    <tr class="border-t border-[#e8eef5]">
+                                        <td class="px-3 py-2 font-mono text-xs">source</td>
+                                        <td class="px-3 py-2">string</td>
+                                        <td class="px-3 py-2">No</td>
+                                        <td class="px-3 py-2 text-sh-mid">System name shown in the timeline (e.g. <code>Forge</code>). Defaults to <code>API</code>.</td>
+                                    </tr>
+                                    <tr class="border-t border-[#e8eef5]">
+                                        <td class="px-3 py-2 font-mono text-xs">email_invoice</td>
+                                        <td class="px-3 py-2">boolean</td>
+                                        <td class="px-3 py-2">No</td>
+                                        <td class="px-3 py-2 text-sh-mid">Email the new invoice PDF via Brevo. Defaults to <code>true</code>.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-wide text-sh-mid">Example request</p>
+                        <pre class="mt-2 overflow-x-auto rounded-[10px] border border-[#b7d3ee] bg-white px-3 py-3 font-mono text-xs leading-relaxed text-sh-ink">curl -X POST "{{ $enquiryAttendeesApiUrl }}" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -d '{"count": 2, "source": "Forge", "email_invoice": true}'</pre>
+                        <p class="mt-1 text-xs text-sh-mid">In the URL above, replace <code>{id}</code> with the real enquiry ID (for example <code>123</code>).</p>
+                    </div>
+
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-wide text-sh-mid">Example success response</p>
+                        <pre class="mt-2 overflow-x-auto rounded-[10px] border border-[#b7d3ee] bg-white px-3 py-3 font-mono text-xs leading-relaxed text-sh-ink">{
+  "ok": true,
+  "enquiry_id": 123,
+  "source": "Forge",
+  "previous_attendees": 10,
+  "added": 2,
+  "attendees": 12,
+  "unit_amount": 80,
+  "net_total": 160,
+  "invoice": {
+    "id": "…",
+    "number": "INV-0001",
+    "status": "DRAFT",
+    "subtotal": 160,
+    "vat": 32,
+    "total": 192
+  },
+  "emailed": true,
+  "to_email": "accounts@example.com"
+}</pre>
+                    </div>
+
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-wide text-sh-mid">Behaviour notes</p>
+                        <ul class="mt-1 list-disc space-y-1 pl-5 text-sm text-sh-mid">
+                            <li>Timeline shows <em>“2 new attendees from Forge”</em> (or whatever <code>source</code> you send).</li>
+                            <li>Creates a <strong>separate</strong> Xero draft invoice — it does not replace the enquiry’s main invoice.</li>
+                            <li>Line item is charged at the unit price × <code>count</code> (ex VAT); Xero adds VAT.</li>
+                            <li>The enquiry must already have a Xero contact and an invoice address (same as the main invoice flow).</li>
+                            <li>If invoice creation fails after attendees are updated, the response is <code>502</code> with <code>invoice_error</code>; attendees remain increased.</li>
+                            <li>HTTP <code>401</code> = missing/invalid token; <code>404</code> = enquiry not found; <code>422</code> = validation error.</li>
+                        </ul>
+                    </div>
                 </div>
             </div>
 

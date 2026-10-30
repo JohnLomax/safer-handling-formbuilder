@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\EnquiryController;
 use App\Http\Controllers\Admin\FeedbackController;
 use App\Http\Controllers\Admin\HelpController;
 use App\Http\Controllers\Admin\SettingController;
+use App\Http\Controllers\Admin\SystemConfigurationController;
 use App\Http\Controllers\Admin\TrainingMatrixController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\VoucherController;
@@ -64,6 +65,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::resource('vouchers', VoucherController::class);
 
     Route::get('/help', [HelpController::class, 'index'])->name('help.index');
+
+    Route::get('/system', [SystemConfigurationController::class, 'index'])->name('system.index');
 
     Route::get('/activity', [ActivityLogController::class, 'index'])->name('activity.index');
 });

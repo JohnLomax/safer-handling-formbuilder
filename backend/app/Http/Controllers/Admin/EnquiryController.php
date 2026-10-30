@@ -19,6 +19,7 @@ class EnquiryController extends Controller
     {
         $search = trim((string) $request->query('q', ''));
         $status = trim((string) $request->query('status', 'all'));
+        $tab = trim((string) $request->query('tab', 'live'));
         $perPage = (int) $request->query('per_page', 25);
         if (! in_array($perPage, [25, 50, 100], true)) {
             $perPage = 25;
@@ -29,7 +30,15 @@ class EnquiryController extends Controller
             $status = 'all';
         }
 
+        if (! in_array($tab, ['live', 'archive'], true)) {
+            $tab = 'live';
+        }
+
+        // Live = last 30 days; Archive = older than 30 days (auto-moves out of Live).
+        $archiveBefore = now()->subDays(30);
+
         $query = Enquiry::query()->withCount('events');
+        $this->applyEnquiryTabFilter($query, $tab, $archiveBefore);
 
         if ($status !== 'all') {
             $query->where('status', $status);
@@ -58,22 +67,59 @@ class EnquiryController extends Controller
             ->paginate($perPage)
             ->withQueryString();
 
-        return view('admin.enquiries.index', [
+        $viewData = [
             'enquiries' => $enquiries,
             'search' => $search,
             'statusFilter' => $status,
+            'tab' => $tab,
             'perPage' => $perPage,
-            'statusCounts' => [
-                'all' => Enquiry::query()->count(),
-                'in_progress' => Enquiry::query()->where('status', 'in_progress')->count(),
-                'contacted' => Enquiry::query()->where('status', 'contacted')->count(),
-                'quote_sent' => Enquiry::query()->where('status', 'quote_sent')->count(),
-                'quote_accepted' => Enquiry::query()->where('status', 'quote_accepted')->count(),
-                'quote_won' => Enquiry::query()->where('status', 'quote_won')->count(),
-                'submitted' => Enquiry::query()->where('status', 'submitted')->count(),
-                'failed' => Enquiry::query()->where('status', 'failed')->count(),
+            'tabCounts' => [
+                'live' => Enquiry::query()->where('created_at', '>=', $archiveBefore)->count(),
+                'archive' => Enquiry::query()->where('created_at', '<', $archiveBefore)->count(),
             ],
-        ]);
+            'statusCounts' => $this->enquiryStatusCountsForTab($tab, $archiveBefore),
+        ];
+
+        if ($request->ajax() || $request->headers->get('X-Requested-With') === 'XMLHttpRequest') {
+            return view('admin.enquiries._index_panel', $viewData);
+        }
+
+        return view('admin.enquiries.index', $viewData);
+    }
+
+    /**
+     * @param  \Illuminate\Database\Eloquent\Builder<\App\Models\Enquiry>  $query
+     * @param  \Illuminate\Support\Carbon  $archiveBefore
+     */
+    private function applyEnquiryTabFilter($query, string $tab, $archiveBefore): void
+    {
+        if ($tab === 'archive') {
+            $query->where('created_at', '<', $archiveBefore);
+
+            return;
+        }
+
+        $query->where('created_at', '>=', $archiveBefore);
+    }
+
+    /**
+     * @param  \Illuminate\Support\Carbon  $archiveBefore
+     * @return array<string, int>
+     */
+    private function enquiryStatusCountsForTab(string $tab, $archiveBefore): array
+    {
+        $counts = ['all' => 0];
+        foreach (['in_progress', 'contacted', 'quote_sent', 'quote_accepted', 'quote_won', 'submitted', 'failed'] as $status) {
+            $query = Enquiry::query();
+            $this->applyEnquiryTabFilter($query, $tab, $archiveBefore);
+            $counts[$status] = $query->where('status', $status)->count();
+        }
+
+        $allQuery = Enquiry::query();
+        $this->applyEnquiryTabFilter($allQuery, $tab, $archiveBefore);
+        $counts['all'] = $allQuery->count();
+
+        return $counts;
     }
 
     public function show(Enquiry $enquiry, EnquiryProcessRetry $retry): View

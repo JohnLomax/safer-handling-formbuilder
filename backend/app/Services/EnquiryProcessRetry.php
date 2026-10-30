@@ -139,13 +139,20 @@ class EnquiryProcessRetry
             $quoteData['quoteValueOriginal'] = '';
         }
 
+        $recipient = $this->invoiceQuoteRecipient($enquiry);
         $quoteData['enquiryId'] = (int) $enquiry->id;
         $quoteData['resumeToken'] = enquiryLoggerEnsureResumeToken((int) $enquiry->id);
-        $quoteData['email'] = (string) $enquiry->email;
-        $quoteData['name'] = (string) $enquiry->name;
+        $quoteData['email'] = $recipient['email'];
+        $quoteData['name'] = $recipient['name'];
+        $quoteData['enquiryContactName'] = (string) $enquiry->name;
+        $quoteData['enquiryContactEmail'] = (string) $enquiry->email;
+        if ($recipient['custom']) {
+            $quoteData['invoiceQuoteName'] = $recipient['name'];
+            $quoteData['invoiceQuoteEmail'] = $recipient['email'];
+        }
 
         try {
-            $result = sendQuoteToClient((string) $enquiry->email, (string) $enquiry->name, $quoteData);
+            $result = sendQuoteToClient($recipient['email'], $recipient['name'], $quoteData);
             $enquiry->forceFill(['quote_email_sent_at' => now()])->save();
 
             if (($result['channel'] ?? '') === 'xero') {
@@ -461,12 +468,20 @@ class EnquiryProcessRetry
         }
 
         $quoteData = $this->buildQuoteEmailData($enquiry);
+        $recipient = $this->invoiceQuoteRecipient($enquiry);
         $quoteData['enquiryId'] = (int) $enquiry->id;
         $quoteData['resumeToken'] = enquiryLoggerEnsureResumeToken((int) $enquiry->id);
-        $quoteData['email'] = (string) $enquiry->email;
+        $quoteData['email'] = $recipient['email'];
+        $quoteData['name'] = $recipient['name'];
+        $quoteData['enquiryContactName'] = (string) $enquiry->name;
+        $quoteData['enquiryContactEmail'] = (string) $enquiry->email;
+        if ($recipient['custom']) {
+            $quoteData['invoiceQuoteName'] = $recipient['name'];
+            $quoteData['invoiceQuoteEmail'] = $recipient['email'];
+        }
 
         try {
-            $result = sendQuoteToClient((string) $enquiry->email, (string) $enquiry->name, $quoteData);
+            $result = sendQuoteToClient($recipient['email'], $recipient['name'], $quoteData);
             $enquiry->forceFill(['quote_email_sent_at' => now()])->save();
             if (($result['channel'] ?? '') === 'xero') {
                 $quote = $result['xero']['quote'] ?? [];
@@ -878,8 +893,29 @@ class EnquiryProcessRetry
     private function buildQuoteEmailData(Enquiry $enquiry): array
     {
         $post = $this->formPayload($enquiry);
+        $recipient = $this->invoiceQuoteRecipient($enquiry);
 
-        return buildQuoteEmailDataFromSubmission($post, (string) $enquiry->name, (string) $enquiry->email);
+        return buildQuoteEmailDataFromSubmission($post, $recipient['name'], $recipient['email']);
+    }
+
+    /**
+     * @return array{name:string,email:string,custom:bool}
+     */
+    private function invoiceQuoteRecipient(Enquiry $enquiry): array
+    {
+        require_once dirname(base_path()).'/enquiry_logger.php';
+
+        $form = is_array($enquiry->form_data_json) ? $enquiry->form_data_json : [];
+
+        return enquiryResolveInvoiceQuoteRecipient(
+            $form,
+            [
+                'invoice_quote_name' => $enquiry->invoice_quote_name,
+                'invoice_quote_email' => $enquiry->invoice_quote_email,
+            ],
+            (string) $enquiry->name,
+            (string) $enquiry->email
+        );
     }
 
     /**
@@ -891,6 +927,12 @@ class EnquiryProcessRetry
 
         $payload['name'] = $payload['name'] ?? $enquiry->name;
         $payload['email'] = $payload['email'] ?? $enquiry->email;
+        if (filled($enquiry->invoice_quote_name)) {
+            $payload['invoiceQuoteName'] = (string) $enquiry->invoice_quote_name;
+        }
+        if (filled($enquiry->invoice_quote_email)) {
+            $payload['invoiceQuoteEmail'] = (string) $enquiry->invoice_quote_email;
+        }
         $payload['enquiryType'] = $payload['enquiryType'] ?? $enquiry->enquiry_type;
         $payload['audienceType'] = $payload['audienceType'] ?? $enquiry->audience_type;
         $payload['personalGoal'] = $payload['personalGoal'] ?? $enquiry->personal_goal;

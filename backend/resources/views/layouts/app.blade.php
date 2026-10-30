@@ -11,10 +11,10 @@
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
     <body class="overflow-x-hidden font-sans antialiased text-sh-text">
-        <div class="min-h-screen overflow-x-hidden brand-page-bg">
+        <div class="flex min-h-screen flex-col overflow-x-hidden brand-page-bg">
             @include('layouts.navigation')
 
-            <main class="overflow-x-hidden pb-8">
+            <main class="flex-1 overflow-x-hidden pb-8">
                 @isset($header)
                     <div class="border-b border-sh-border/80 bg-white/75 backdrop-blur-md">
                         <div class="admin-shell !pb-5 !pt-6">
@@ -26,12 +26,7 @@
                 {{ $slot }}
             </main>
 
-            <footer class="px-4 pb-8 pt-2 text-center text-xs text-sh-mid sm:px-6 lg:px-8">
-                Created by
-                <a href="https://d3-digital.com" target="_blank" rel="noopener noreferrer" class="font-semibold text-brand-header hover:underline">
-                    D3 Digital
-                </a>
-            </footer>
+            <x-admin-footer />
         </div>
     </body>
 </html>

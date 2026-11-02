@@ -1174,10 +1174,15 @@ try {
     $shouldSendQuoteEmail = (brevoEmailEnabled() || xeroEnabled())
         && $isQuoteFlow
         && !$quoteAlreadySent;
-    $shouldRegenerateQuoteForVoucher = (brevoEmailEnabled() || xeroEnabled())
+    // Re-submit after a quote was already sent (Edit Quote / Edit Enquiry) — or voucher change —
+    // must regenerate and resend the quote email with the latest details.
+    $shouldResendEditedQuote = (brevoEmailEnabled() || xeroEnabled())
         && $isQuoteFlow
-        && $quoteAlreadySent
-        && $voucherChanged;
+        && $quoteAlreadySent;
+    $quoteResendReason = null;
+    if ($shouldResendEditedQuote) {
+        $quoteResendReason = $voucherChanged ? 'voucher_change' : 'enquiry_edit';
+    }
 
     // Edit Enquiry Email always goes out on initial submit (when enabled) so the
     // customer can return to their form. Quote / Accept Quote is a separate email.
@@ -1204,19 +1209,8 @@ try {
             }
         });
     }
-    if ($isQuoteFlow && !$shouldSendQuoteEmail && !$shouldRegenerateQuoteForVoucher && $enquiryId !== null) {
-        enquiryLoggerSafe(function () use ($enquiryId, $quoteAlreadySent): void {
-            if ($quoteAlreadySent) {
-                enquiryLoggerEvent(
-                    $enquiryId,
-                    'quote_email_skipped',
-                    'Enquiry details updated without creating a new quote — a quote was already sent for this enquiry.',
-                    ['quote_already_sent' => true]
-                );
-
-                return;
-            }
-
+    if ($isQuoteFlow && !$shouldSendQuoteEmail && !$shouldResendEditedQuote && $enquiryId !== null) {
+        enquiryLoggerSafe(function () use ($enquiryId): void {
             if (!brevoEmailEnabled() && !xeroEnabled()) {
                 enquiryLoggerEvent(
                     $enquiryId,
@@ -1227,7 +1221,7 @@ try {
             }
         });
     }
-    if ($shouldSendQuoteEmail || $shouldRegenerateQuoteForVoucher) {
+    if ($shouldSendQuoteEmail || $shouldResendEditedQuote) {
         try {
             $quoteRecipient = enquiryResolveInvoiceQuoteRecipient($_POST, null, $name, $email);
             $quoteEmailData = $resolvedOrganisation !== null
@@ -1258,7 +1252,7 @@ try {
             $quoteSendResult = sendQuoteToClient($quoteRecipient['email'], $quoteRecipient['name'], $quoteEmailData);
             if ($enquiryId !== null) {
                 $quoteChannel = (string) ($quoteSendResult['channel'] ?? '');
-                enquiryLoggerSafe(function () use ($enquiryId, $quoteSendResult, $shouldRegenerateQuoteForVoucher, $quoteChannel): void {
+                enquiryLoggerSafe(function () use ($enquiryId, $quoteSendResult, $shouldResendEditedQuote, $quoteResendReason, $quoteChannel): void {
                     enquiryLoggerMarkQuoteEmailSent($enquiryId);
                     if ($quoteChannel === 'xero') {
                         $quote = $quoteSendResult['xero']['quote'] ?? [];
@@ -1269,16 +1263,20 @@ try {
                             (string)($quote['QuoteID'] ?? ''),
                             (string)($quote['QuoteNumber'] ?? '')
                         );
+                        $xeroMessage = 'Xero quote created and emailed to the customer via Brevo (PDF attached).';
+                        if ($quoteResendReason === 'voucher_change') {
+                            $xeroMessage = 'Xero quote regenerated and emailed after voucher change (PDF attached).';
+                        } elseif ($quoteResendReason === 'enquiry_edit') {
+                            $xeroMessage = 'Xero quote regenerated and emailed after the enquiry was edited (PDF attached).';
+                        }
                         enquiryLoggerEvent(
                             $enquiryId,
                             'quote_email_sent',
-                            $shouldRegenerateQuoteForVoucher
-                                ? 'Xero quote regenerated and emailed after voucher change (PDF attached).'
-                                : 'Xero quote created and emailed to the customer via Brevo (PDF attached).',
+                            $xeroMessage,
                             [
                                 'channel' => 'xero',
-                                'regenerated' => $shouldRegenerateQuoteForVoucher,
-                                'reason' => $shouldRegenerateQuoteForVoucher ? 'voucher_change' : null,
+                                'regenerated' => $shouldResendEditedQuote,
+                                'reason' => $quoteResendReason,
                                 'xero_quote_id' => $quote['QuoteID'] ?? null,
                                 'xero_quote_number' => $quote['QuoteNumber'] ?? null,
                                 'xero_contact_id' => $contact['ContactID'] ?? null,
@@ -1291,21 +1289,25 @@ try {
                             ]
                         );
                     } else {
-                        // Auto Brevo quote email = Contacted.
-                        if (!$shouldRegenerateQuoteForVoucher) {
+                        // Auto Brevo quote email = Contacted (first send only).
+                        if (!$shouldResendEditedQuote) {
                             enquiryLoggerMarkContacted($enquiryId);
+                        }
+                        $brevoMessage = 'Automatic quote confirmation email sent via Brevo.';
+                        if ($quoteResendReason === 'voucher_change') {
+                            $brevoMessage = 'Quote confirmation regenerated and emailed after voucher change.';
+                        } elseif ($quoteResendReason === 'enquiry_edit') {
+                            $brevoMessage = 'Updated quote confirmation emailed after the enquiry was edited.';
                         }
                         enquiryLoggerEvent(
                             $enquiryId,
                             'quote_email_sent',
-                            $shouldRegenerateQuoteForVoucher
-                                ? 'Quote confirmation regenerated and emailed after voucher change.'
-                                : 'Automatic quote confirmation email sent via Brevo.',
+                            $brevoMessage,
                             [
                                 'channel' => 'brevo',
-                                'regenerated' => $shouldRegenerateQuoteForVoucher,
-                                'reason' => $shouldRegenerateQuoteForVoucher ? 'voucher_change' : null,
-                                'status' => $shouldRegenerateQuoteForVoucher ? null : 'contacted',
+                                'regenerated' => $shouldResendEditedQuote,
+                                'reason' => $quoteResendReason,
+                                'status' => $shouldResendEditedQuote ? null : 'contacted',
                                 'brevo_message_id' => $quoteSendResult['brevo_message_id'] ?? null,
                                 'email_kind' => 'quote',
                             ]
@@ -1314,7 +1316,7 @@ try {
                 });
 
                 // Monday move + Accept Quote email after the browser gets success (see deferred work below).
-                if ($quoteChannel === 'xero' && !$shouldRegenerateQuoteForVoucher) {
+                if ($quoteChannel === 'xero' && !$shouldResendEditedQuote) {
                     $deferredAfterQuote = true;
                 }
             }

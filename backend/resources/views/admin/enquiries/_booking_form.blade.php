@@ -59,6 +59,16 @@
                         ?? (preg_match('/^\d{4}-\d{2}-\d{2}/', (string) $enquiry->preferred_date_time, $m) ? $m[0] : '')
                 )
         );
+        $preferredTimeSource = (string) old(
+            'preferredTime',
+            $booking['preferredTime']
+                ?? (
+                    preg_match('/T([01]\d|2[0-3]):([0-5]\d)/', str_replace(' ', 'T', (string) $enquiry->preferred_date_time), $tm)
+                        ? sprintf('%02d:%02d', (int) $tm[1], (int) $tm[2])
+                        : ''
+                )
+        );
+        $preferredTimeValue = $defaultNotSure ? '' : $preferredTimeSource;
     @endphp
     <div
         x-data="{
@@ -68,9 +78,16 @@
                     this.$refs.preferredDate.value = '';
                     this.$refs.preferredDate.disabled = true;
                     this.$refs.preferredDate.required = false;
+                    if (this.$refs.preferredTime) {
+                        this.$refs.preferredTime.value = '';
+                        this.$refs.preferredTime.disabled = true;
+                    }
                 } else {
                     this.$refs.preferredDate.disabled = false;
                     this.$refs.preferredDate.required = true;
+                    if (this.$refs.preferredTime) {
+                        this.$refs.preferredTime.disabled = false;
+                    }
                 }
             }
         }"
@@ -87,6 +104,18 @@
             :value="$preferredDateValue"
             x-on:input="if ($event.target.value) { notSure = false; sync(); }"
         />
+        <div class="mt-2">
+            <x-input-label for="preferredTime" value="Session time" />
+            <x-text-input
+                id="preferredTime"
+                name="preferredTime"
+                type="time"
+                class="mt-1 block w-full"
+                x-ref="preferredTime"
+                :value="$preferredTimeValue"
+            />
+            <p class="mt-1 text-xs text-sh-mid">Admins can set any time here. Matrix default times are locked for customers on the public form.</p>
+        </div>
         <label class="mt-2 flex items-center gap-2 text-sm text-sh-text">
             <input
                 type="checkbox"

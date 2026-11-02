@@ -21,6 +21,7 @@ class TrainingMatrixEntry extends Model
         'is_active',
         'kajabi_enabled',
         'enable_second_date',
+        'default_time',
         'sort_order',
     ];
 
@@ -77,6 +78,11 @@ class TrainingMatrixEntry extends Model
 
         if ($this->default_attendees !== null) {
             $row['defaultAttendees'] = $this->default_attendees;
+        }
+
+        $defaultTime = trim((string) ($this->default_time ?? ''));
+        if ($defaultTime !== '' && preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $defaultTime)) {
+            $row['defaultTime'] = $defaultTime;
         }
 
         return $row;

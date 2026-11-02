@@ -16,6 +16,41 @@ require_once __DIR__ . '/enquiry_logger.php';
 require_once __DIR__ . '/voucher_helpers.php';
 
 /**
+ * Send the JSON success response to the browser immediately, then keep processing
+ * non-critical work (lead email, Forge, Monday move, booking email) in the background.
+ *
+ * @param array<string, mixed> $payload
+ */
+function submitEnquiryRespondAndContinue(array $payload, callable $continue): void
+{
+    echo json_encode($payload);
+
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_write_close();
+    }
+
+    ignore_user_abort(true);
+    @set_time_limit(180);
+
+    if (function_exists('fastcgi_finish_request')) {
+        fastcgi_finish_request();
+    } else {
+        while (ob_get_level() > 0) {
+            ob_end_flush();
+        }
+        flush();
+    }
+
+    try {
+        $continue();
+    } catch (Throwable $e) {
+        error_log('submit_enquiry deferred work failed: ' . $e->getMessage());
+    }
+
+    exit;
+}
+
+/**
  * Apply a posted voucher code to a quote net and persist on the enquiry.
  *
  * @return array{
@@ -1131,6 +1166,7 @@ try {
 
     $emailWarning = '';
     $quoteEmailData = null;
+    $deferredAfterQuote = false;
     require_once __DIR__ . '/xero.php';
 
     $isQuoteFlow = $isTrainerFlow || $isOrganisationTrainingFlow;
@@ -1221,9 +1257,10 @@ try {
             // Brevo sends to form filler + accounts (if filled). Xero contact still prefers accounts.
             $quoteSendResult = sendQuoteToClient($quoteRecipient['email'], $quoteRecipient['name'], $quoteEmailData);
             if ($enquiryId !== null) {
-                enquiryLoggerSafe(function () use ($enquiryId, $quoteSendResult, $name, $email, $shouldRegenerateQuoteForVoucher): void {
+                $quoteChannel = (string) ($quoteSendResult['channel'] ?? '');
+                enquiryLoggerSafe(function () use ($enquiryId, $quoteSendResult, $shouldRegenerateQuoteForVoucher, $quoteChannel): void {
                     enquiryLoggerMarkQuoteEmailSent($enquiryId);
-                    if (($quoteSendResult['channel'] ?? '') === 'xero') {
+                    if ($quoteChannel === 'xero') {
                         $quote = $quoteSendResult['xero']['quote'] ?? [];
                         $contact = $quoteSendResult['xero']['contact'] ?? [];
                         enquiryLoggerMarkXeroQuoteSent(
@@ -1253,21 +1290,6 @@ try {
                                 'email_kind' => 'quote',
                             ]
                         );
-                        if (!$shouldRegenerateQuoteForVoucher) {
-                            require_once __DIR__ . '/monday_helpers.php';
-                            mondayMoveEnquiryToQuoteSentAfterXeroQuote($enquiryId);
-
-                            try {
-                                maybeSendBookingDetailsEmail($enquiryId, $name, $email);
-                            } catch (Throwable $bookingEmailError) {
-                                enquiryLoggerEvent(
-                                    $enquiryId,
-                                    'booking_email_failed',
-                                    'Booking details / terms acceptance email could not be sent.',
-                                    ['error' => $bookingEmailError->getMessage()]
-                                );
-                            }
-                        }
                     } else {
                         // Auto Brevo quote email = Contacted.
                         if (!$shouldRegenerateQuoteForVoucher) {
@@ -1290,6 +1312,11 @@ try {
                         );
                     }
                 });
+
+                // Monday move + Accept Quote email after the browser gets success (see deferred work below).
+                if ($quoteChannel === 'xero' && !$shouldRegenerateQuoteForVoucher) {
+                    $deferredAfterQuote = true;
+                }
             }
         } catch (Throwable $emailError) {
             if ($enquiryId !== null) {
@@ -1306,81 +1333,6 @@ try {
         }
     }
 
-    $shouldSendLeadNotification = brevoLeadNotificationEnabled()
-        && ($isTrainerFlow || $isOrganisationTrainingFlow)
-        && ($enquiryId === null || !enquiryLoggerLeadNotificationAlreadySent($enquiryId));
-    if ($shouldSendLeadNotification) {
-        try {
-            if ($quoteEmailData === null) {
-                $quoteEmailData = $resolvedOrganisation !== null
-                    ? buildQuoteEmailDataFromResolvedOrganisation($resolvedOrganisation, $name, $email)
-                    : buildQuoteEmailDataFromSubmission($_POST, $name, $email);
-            }
-
-            $leadEmailData = buildNewLeadEmailData(
-                $name,
-                $email,
-                $enquiryType,
-                $enquiryId,
-                $isTrainerFlow,
-                $quoteEmailData,
-                $_POST
-            );
-            sendNewLeadNotificationViaBrevo($leadEmailData);
-            if ($enquiryId !== null) {
-                $officeEmail = brevoOfficeEmail();
-                enquiryLoggerSafe(function () use ($enquiryId, $officeEmail): void {
-                    enquiryLoggerEvent(
-                        $enquiryId,
-                        'lead_notification_sent',
-                        'New lead notification email sent to ' . $officeEmail . ' via Brevo.',
-                        ['office_email' => $officeEmail]
-                    );
-                });
-            }
-        } catch (Throwable $leadEmailError) {
-            if ($enquiryId !== null) {
-                $officeEmail = brevoOfficeEmail();
-                enquiryLoggerSafe(function () use ($enquiryId, $leadEmailError, $officeEmail): void {
-                    enquiryLoggerEvent(
-                        $enquiryId,
-                        'lead_notification_failed',
-                        'New lead notification email to ' . $officeEmail . ' could not be sent.',
-                        [
-                            'office_email' => $officeEmail,
-                            'error' => $leadEmailError->getMessage(),
-                        ]
-                    );
-                });
-            }
-        }
-    }
-
-    // First Forge snapshot: provisional_book once the enquiry form is completed
-    // (before Accept Quote / terms). Failures are logged but must not block submit.
-    if ($enquiryId !== null && ($isTrainerFlow || $isOrganisationTrainingFlow)) {
-        try {
-            require_once __DIR__ . '/forge_webhook.php';
-            forgeMaybeMarkProvisionalFromEnquiry($enquiryId, $_POST);
-        } catch (Throwable $forgeError) {
-            require_once __DIR__ . '/forge_webhook.php';
-            if (!forgeExceptionAlreadyLogged($forgeError)) {
-                enquiryLoggerSafe(function () use ($enquiryId, $forgeError): void {
-                    enquiryLoggerEvent(
-                        $enquiryId,
-                        'forge_booking_sync_failed',
-                        forgeFailureReasonFromException($forgeError),
-                        [
-                            'error' => $forgeError->getMessage(),
-                            'trigger' => 'enquiry_submit_provisional',
-                            'booking_status' => 'provisional_book',
-                        ]
-                    );
-                });
-            }
-        }
-    }
-
     $successPayload = [
         'success' => true,
         'message' => 'Enquiry submitted successfully.',
@@ -1392,7 +1344,127 @@ try {
     if ($emailWarning !== '') {
         $successPayload['emailWarning'] = $emailWarning;
     }
-    echo json_encode($successPayload);
+
+    $shouldSendLeadNotification = brevoLeadNotificationEnabled()
+        && ($isTrainerFlow || $isOrganisationTrainingFlow)
+        && ($enquiryId === null || !enquiryLoggerLeadNotificationAlreadySent($enquiryId));
+    $shouldSyncForge = $enquiryId !== null && ($isTrainerFlow || $isOrganisationTrainingFlow);
+
+    // Return success to the browser now; finish lead/Forge/Monday/booking in the background.
+    submitEnquiryRespondAndContinue($successPayload, function () use (
+        $enquiryId,
+        $name,
+        $email,
+        $enquiryType,
+        $isTrainerFlow,
+        $resolvedOrganisation,
+        $quoteEmailData,
+        $shouldSendLeadNotification,
+        $shouldSyncForge,
+        $deferredAfterQuote
+    ): void {
+        if ($deferredAfterQuote && $enquiryId !== null) {
+            try {
+                require_once __DIR__ . '/monday_helpers.php';
+                mondayMoveEnquiryToQuoteSentAfterXeroQuote($enquiryId);
+            } catch (Throwable $moveError) {
+                enquiryLoggerSafe(function () use ($enquiryId, $moveError): void {
+                    enquiryLoggerEvent(
+                        $enquiryId,
+                        'monday_move_failed',
+                        'Could not move enquiry to Monday group "Quote Sent" after Xero quote was emailed.',
+                        ['error' => $moveError->getMessage()]
+                    );
+                });
+            }
+
+            try {
+                maybeSendBookingDetailsEmail($enquiryId, $name, $email);
+            } catch (Throwable $bookingEmailError) {
+                enquiryLoggerSafe(function () use ($enquiryId, $bookingEmailError): void {
+                    enquiryLoggerEvent(
+                        $enquiryId,
+                        'booking_email_failed',
+                        'Booking details / terms acceptance email could not be sent.',
+                        ['error' => $bookingEmailError->getMessage()]
+                    );
+                });
+            }
+        }
+
+        if ($shouldSendLeadNotification) {
+            try {
+                $leadQuoteData = $quoteEmailData;
+                if ($leadQuoteData === null) {
+                    $leadQuoteData = $resolvedOrganisation !== null
+                        ? buildQuoteEmailDataFromResolvedOrganisation($resolvedOrganisation, $name, $email)
+                        : buildQuoteEmailDataFromSubmission($_POST, $name, $email);
+                }
+
+                $leadEmailData = buildNewLeadEmailData(
+                    $name,
+                    $email,
+                    $enquiryType,
+                    $enquiryId,
+                    $isTrainerFlow,
+                    $leadQuoteData,
+                    $_POST
+                );
+                sendNewLeadNotificationViaBrevo($leadEmailData);
+                if ($enquiryId !== null) {
+                    $officeEmail = brevoOfficeEmail();
+                    enquiryLoggerSafe(function () use ($enquiryId, $officeEmail): void {
+                        enquiryLoggerEvent(
+                            $enquiryId,
+                            'lead_notification_sent',
+                            'New lead notification email sent to ' . $officeEmail . ' via Brevo.',
+                            ['office_email' => $officeEmail]
+                        );
+                    });
+                }
+            } catch (Throwable $leadEmailError) {
+                if ($enquiryId !== null) {
+                    $officeEmail = brevoOfficeEmail();
+                    enquiryLoggerSafe(function () use ($enquiryId, $leadEmailError, $officeEmail): void {
+                        enquiryLoggerEvent(
+                            $enquiryId,
+                            'lead_notification_failed',
+                            'New lead notification email to ' . $officeEmail . ' could not be sent.',
+                            [
+                                'office_email' => $officeEmail,
+                                'error' => $leadEmailError->getMessage(),
+                            ]
+                        );
+                    });
+                }
+            }
+        }
+
+        // First Forge snapshot: provisional_book once the enquiry form is completed
+        // (before Accept Quote / terms). Failures are logged but must not block submit.
+        if ($shouldSyncForge && $enquiryId !== null) {
+            try {
+                require_once __DIR__ . '/forge_webhook.php';
+                forgeMaybeMarkProvisionalFromEnquiry($enquiryId, $_POST);
+            } catch (Throwable $forgeError) {
+                require_once __DIR__ . '/forge_webhook.php';
+                if (!forgeExceptionAlreadyLogged($forgeError)) {
+                    enquiryLoggerSafe(function () use ($enquiryId, $forgeError): void {
+                        enquiryLoggerEvent(
+                            $enquiryId,
+                            'forge_booking_sync_failed',
+                            forgeFailureReasonFromException($forgeError),
+                            [
+                                'error' => $forgeError->getMessage(),
+                                'trigger' => 'enquiry_submit_provisional',
+                                'booking_status' => 'provisional_book',
+                            ]
+                        );
+                    });
+                }
+            }
+        }
+    });
 } catch (Throwable $e) {
     http_response_code(500);
     echo json_encode([

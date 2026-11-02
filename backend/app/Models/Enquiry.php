@@ -282,13 +282,28 @@ class Enquiry extends Model
             return $raw;
         }
 
-        $dateOnly = substr(str_replace(' ', 'T', $raw), 0, 10);
+        $normalised = str_replace(' ', 'T', $raw);
+        $dateOnly = substr($normalised, 0, 10);
         $dt = \DateTimeImmutable::createFromFormat('!Y-m-d', $dateOnly, new \DateTimeZone('Europe/London'));
         if ($dt === false || $dt->format('Y-m-d') !== $dateOnly) {
             return $raw;
         }
 
-        return $dt->format('l j F Y');
+        $label = $dt->format('l j F Y');
+        if (preg_match('/T([01]\d|2[0-3]):([0-5]\d)/', $normalised, $matches)) {
+            $hour = (int) $matches[1];
+            $minute = (int) $matches[2];
+            $suffix = $hour >= 12 ? 'pm' : 'am';
+            $hour12 = $hour % 12;
+            if ($hour12 === 0) {
+                $hour12 = 12;
+            }
+            $label .= $minute === 0
+                ? sprintf(' at %d%s', $hour12, $suffix)
+                : sprintf(' at %d:%02d%s', $hour12, $minute, $suffix);
+        }
+
+        return $label;
     }
 
     /**
@@ -313,13 +328,28 @@ class Enquiry extends Model
             return $raw;
         }
 
-        $dateOnly = substr(str_replace(' ', 'T', $raw), 0, 10);
+        $normalised = str_replace(' ', 'T', $raw);
+        $dateOnly = substr($normalised, 0, 10);
         $dt = \DateTimeImmutable::createFromFormat('!Y-m-d', $dateOnly, new \DateTimeZone('Europe/London'));
         if ($dt === false || $dt->format('Y-m-d') !== $dateOnly) {
             return $raw;
         }
 
-        return $dt->format('l j F Y');
+        $label = $dt->format('l j F Y');
+        if (preg_match('/T([01]\d|2[0-3]):([0-5]\d)/', $normalised, $matches)) {
+            $hour = (int) $matches[1];
+            $minute = (int) $matches[2];
+            $suffix = $hour >= 12 ? 'pm' : 'am';
+            $hour12 = $hour % 12;
+            if ($hour12 === 0) {
+                $hour12 = 12;
+            }
+            $label .= $minute === 0
+                ? sprintf(' at %d%s', $hour12, $suffix)
+                : sprintf(' at %d:%02d%s', $hour12, $minute, $suffix);
+        }
+
+        return $label;
     }
 
     /**

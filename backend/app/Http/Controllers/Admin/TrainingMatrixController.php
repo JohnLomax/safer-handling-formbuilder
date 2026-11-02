@@ -150,6 +150,7 @@ class TrainingMatrixController extends Controller
             'is_active' => ['nullable', 'boolean'],
             'kajabi_enabled' => ['nullable', 'boolean'],
             'enable_second_date' => ['nullable', 'boolean'],
+            'default_time' => ['nullable', 'string', 'regex:/^([01]\d|2[0-3]):[0-5]\d$/'],
             'sort_order' => ['nullable', 'integer', 'min:0'],
         ];
     }
@@ -175,6 +176,7 @@ class TrainingMatrixController extends Controller
             'is_active' => $request->boolean('is_active'),
             'kajabi_enabled' => $request->boolean('kajabi_enabled'),
             'enable_second_date' => $request->boolean('enable_second_date'),
+            'default_time' => trim((string) ($validated['default_time'] ?? '')) ?: null,
             'sort_order' => $validated['sort_order'] ?? 0,
         ];
     }
@@ -242,6 +244,7 @@ class TrainingMatrixController extends Controller
             'is_active' => (bool) ($entry->is_active ?? true),
             'kajabi_enabled' => (bool) ($entry->kajabi_enabled ?? true),
             'enable_second_date' => (bool) ($entry->enable_second_date ?? false),
+            'default_time' => $entry->default_time,
             'min_attendees' => (int) $entry->min_attendees,
             'max_cap' => $entry->max_cap,
             'max_cap_description' => $entry->max_cap_description,

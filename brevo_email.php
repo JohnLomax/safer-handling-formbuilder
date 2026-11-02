@@ -93,51 +93,141 @@ function brevoWithEnquiryTracking(array $payload, int $enquiryId, string $kind):
  */
 function brevoExecuteSmtpSend(array $payload): string
 {
+    $ids = brevoExecuteSmtpSendMany([$payload]);
+    $messageId = $ids[0] ?? '';
+    if ($messageId === '') {
+        throw new RuntimeException('Brevo API did not return a message id.');
+    }
+
+    return $messageId;
+}
+
+/**
+ * Send one or more Brevo SMTP payloads in parallel (curl_multi).
+ *
+ * @param list<array<string, mixed>> $payloads
+ * @return list<string> message ids aligned to payloads (empty string on failure for that item)
+ */
+function brevoExecuteSmtpSendMany(array $payloads): array
+{
     $apiKey = brevoApiKey();
     if ($apiKey === '') {
         throw new RuntimeException('Brevo API key is not configured.');
     }
 
-    $ch = curl_init('https://api.brevo.com/v3/smtp/email');
-    if ($ch === false) {
-        throw new RuntimeException('Could not initialize cURL for Brevo.');
+    $payloads = array_values(array_filter($payloads, static fn ($p): bool => is_array($p)));
+    if ($payloads === []) {
+        return [];
     }
 
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_POST => true,
-        CURLOPT_HTTPHEADER => [
-            'accept: application/json',
-            'api-key: ' . $apiKey,
-            'content-type: application/json',
-        ],
-        CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-    ]);
-
-    $raw = curl_exec($ch);
-    $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    if ($raw === false) {
-        $err = curl_error($ch);
-        curl_close($ch);
-        throw new RuntimeException('Brevo API request failed: ' . $err);
-    }
-    curl_close($ch);
-
-    $decoded = json_decode($raw, true);
-    if ($status >= 400) {
-        $message = is_array($decoded) ? trim((string) ($decoded['message'] ?? '')) : '';
-        if ($message === '') {
-            $message = 'Brevo API returned HTTP ' . $status . '.';
+    if (count($payloads) === 1) {
+        $ch = curl_init('https://api.brevo.com/v3/smtp/email');
+        if ($ch === false) {
+            throw new RuntimeException('Could not initialize cURL for Brevo.');
         }
-        throw new RuntimeException($message);
+
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_HTTPHEADER => [
+                'accept: application/json',
+                'api-key: ' . $apiKey,
+                'content-type: application/json',
+            ],
+            CURLOPT_POSTFIELDS => json_encode($payloads[0], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        ]);
+
+        $raw = curl_exec($ch);
+        $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        if ($raw === false) {
+            $err = curl_error($ch);
+            curl_close($ch);
+            throw new RuntimeException('Brevo API request failed: ' . $err);
+        }
+        curl_close($ch);
+
+        $decoded = json_decode($raw, true);
+        if ($status >= 400) {
+            $message = is_array($decoded) ? trim((string) ($decoded['message'] ?? '')) : '';
+            if ($message === '') {
+                $message = 'Brevo API returned HTTP ' . $status . '.';
+            }
+            throw new RuntimeException($message);
+        }
+
+        $messageId = '';
+        if (is_array($decoded)) {
+            $messageId = brevoNormaliseMessageId((string) ($decoded['messageId'] ?? $decoded['message_id'] ?? ''));
+        }
+
+        return [$messageId];
     }
 
-    $messageId = '';
-    if (is_array($decoded)) {
-        $messageId = brevoNormaliseMessageId((string) ($decoded['messageId'] ?? $decoded['message_id'] ?? ''));
+    $mh = curl_multi_init();
+    if ($mh === false) {
+        throw new RuntimeException('Could not initialize cURL multi for Brevo.');
     }
 
-    return $messageId;
+    $handles = [];
+    foreach ($payloads as $index => $payload) {
+        $ch = curl_init('https://api.brevo.com/v3/smtp/email');
+        if ($ch === false) {
+            continue;
+        }
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_HTTPHEADER => [
+                'accept: application/json',
+                'api-key: ' . $apiKey,
+                'content-type: application/json',
+            ],
+            CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        ]);
+        curl_multi_add_handle($mh, $ch);
+        $handles[$index] = $ch;
+    }
+
+    $running = null;
+    do {
+        $status = curl_multi_exec($mh, $running);
+        if ($running > 0) {
+            curl_multi_select($mh, 1.0);
+        }
+    } while ($running > 0 && $status === CURLM_OK);
+
+    $messageIds = array_fill(0, count($payloads), '');
+    $lastError = null;
+    foreach ($handles as $index => $ch) {
+        $raw = curl_multi_getcontent($ch);
+        $httpStatus = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $decoded = is_string($raw) ? json_decode($raw, true) : null;
+        if ($httpStatus >= 400 || $raw === false || $raw === null) {
+            $message = is_array($decoded) ? trim((string) ($decoded['message'] ?? '')) : '';
+            if ($message === '') {
+                $message = 'Brevo API returned HTTP ' . $httpStatus . '.';
+            }
+            $lastError = new RuntimeException($message);
+        } elseif (is_array($decoded)) {
+            $messageIds[$index] = brevoNormaliseMessageId((string) ($decoded['messageId'] ?? $decoded['message_id'] ?? ''));
+        }
+        curl_multi_remove_handle($mh, $ch);
+        curl_close($ch);
+    }
+    curl_multi_close($mh);
+
+    $any = false;
+    foreach ($messageIds as $id) {
+        if ($id !== '') {
+            $any = true;
+            break;
+        }
+    }
+    if (! $any && $lastError instanceof Throwable) {
+        throw $lastError;
+    }
+
+    return $messageIds;
 }
 
 /**
@@ -1077,14 +1167,29 @@ function formatPreferredTrainingDate(string $preferredDateTime, bool $dateNotSur
         return $preferredDateTime;
     }
 
-    // Date-only: ignore any time/timezone suffix so emails never shift by a day.
-    $dateOnly = substr(str_replace(' ', 'T', $preferredDateTime), 0, 10);
+    // Prefer date portion so emails never shift by a day across timezones.
+    $normalised = str_replace(' ', 'T', $preferredDateTime);
+    $dateOnly = substr($normalised, 0, 10);
     $dt = \DateTimeImmutable::createFromFormat('!Y-m-d', $dateOnly, new \DateTimeZone('Europe/London'));
     if ($dt === false || $dt->format('Y-m-d') !== $dateOnly) {
         return $preferredDateTime;
     }
 
-    return $dt->format('l j F Y');
+    $label = $dt->format('l j F Y');
+    if (preg_match('/T([01]\d|2[0-3]):([0-5]\d)/', $normalised, $matches)) {
+        $hour = (int) $matches[1];
+        $minute = (int) $matches[2];
+        $suffix = $hour >= 12 ? 'pm' : 'am';
+        $hour12 = $hour % 12;
+        if ($hour12 === 0) {
+            $hour12 = 12;
+        }
+        $label .= $minute === 0
+            ? sprintf(' at %d%s', $hour12, $suffix)
+            : sprintf(' at %d:%02d%s', $hour12, $minute, $suffix);
+    }
+
+    return $label;
 }
 
 function quoteEmailHasPreferredDate(array $data): bool
@@ -1509,9 +1614,8 @@ function sendQuoteEmailViaBrevo(string $toEmail, string $toName, array $quoteDat
         ]];
     }
 
-    // One Brevo send per recipient — multi-TO can look "delivered" while one inbox never shows it.
-    $messageId = '';
-    $lastError = null;
+    // One Brevo send per recipient (parallel) — multi-TO can look "delivered" while one inbox never shows it.
+    $payloads = [];
     foreach ($recipients as $recipient) {
         $payload = [
             'sender' => $sender,
@@ -1527,17 +1631,16 @@ function sendQuoteEmailViaBrevo(string $toEmail, string $toName, array $quoteDat
         if ($attachment !== null) {
             $payload['attachment'] = $attachment;
         }
-        $payload = brevoWithEnquiryTracking($payload, $enquiryId, 'quote');
-
-        try {
-            $messageId = brevoExecuteSmtpSend($payload);
-        } catch (Throwable $e) {
-            $lastError = $e;
-        }
+        $payloads[] = brevoWithEnquiryTracking($payload, $enquiryId, 'quote');
     }
 
-    if ($messageId === '' && $lastError instanceof Throwable) {
-        throw $lastError;
+    $messageIds = brevoExecuteSmtpSendMany($payloads);
+    $messageId = '';
+    foreach ($messageIds as $id) {
+        if (trim((string) $id) !== '') {
+            $messageId = (string) $id;
+            break;
+        }
     }
     if ($messageId === '') {
         throw new RuntimeException('Quote email could not be sent to any recipient.');

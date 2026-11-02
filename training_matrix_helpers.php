@@ -315,6 +315,31 @@ function trainingMatrixResolveOrganisationSubmission(array $post): array
         }
     }
 
+    $defaultTime = enquiryPreferredTimeOnly((string)($row['defaultTime'] ?? ''));
+    $adminAssisted = !empty($post['adminAssisted'])
+        && (string)$post['adminAssisted'] !== '0'
+        && strtolower((string)$post['adminAssisted']) !== 'false';
+    if ($defaultTime !== '' && ! $preferred['dateNotSure']) {
+        $dateOnly = enquiryPreferredDateOnly($preferred['preferredDateTime']);
+        $date2Only = enquiryPreferredDateOnly($preferred['preferredDate2']);
+        $timeToUse = $defaultTime;
+        if ($adminAssisted) {
+            $overrideTime = enquiryPreferredTimeOnly((string)($post['preferredTime'] ?? ''));
+            if ($overrideTime === '') {
+                $overrideTime = enquiryPreferredTimeOnly($preferred['preferredDateTime']);
+            }
+            if ($overrideTime !== '') {
+                $timeToUse = $overrideTime;
+            }
+        }
+        if ($dateOnly !== '') {
+            $preferred['preferredDateTime'] = $dateOnly . 'T' . $timeToUse;
+        }
+        if ($preferred['enableSecondDate'] && $date2Only !== '') {
+            $preferred['preferredDate2'] = $date2Only . 'T' . $timeToUse;
+        }
+    }
+
     return [
         'sector' => (string)$row['sector'],
         'orgCourse' => (string)$row['course'],

@@ -133,6 +133,10 @@
             'title' => 'Enable second date',
             'body' => "When checked, the enquiry form asks for Day 1 and Day 2 dates plus a separate address for each day.\n\nThose dates are stored on the enquiry, written to Monday notes, shown in quote emails, and sent to Forge as two session_dates.",
         ],
+        'default_time' => [
+            'title' => 'Default session time',
+            'body' => "Optional fixed session time for this course option (24-hour clock, e.g. 15:00 for 3pm).\n\nWhen set, customers can only pick a date — the enquiry is stored with this time. They see a message to email office@safer-handling.co.uk if they need a different time. Admins can still change the time on the enquiry booking form or when using Create new enquiry (assisted).",
+        ],
     ];
 
     $value = function (string $name, mixed $default = '') use ($restoreOld, $isEdit, $entry) {
@@ -368,4 +372,19 @@
         <span class="text-sm text-sh-text">Enable second date (Day 1 + Day 2 on the form)</span>
         <x-field-help-button :title="$help('enable_second_date')['title']" :body="$help('enable_second_date')['body']" />
     </label>
+
+    <div>
+        <div class="flex items-center gap-1.5">
+            <x-input-label for="{{ $formId }}_default_time" value="Default session time" />
+            <x-field-help-button :title="$help('default_time')['title']" :body="$help('default_time')['body']" />
+        </div>
+        <x-text-input
+            id="{{ $formId }}_default_time"
+            name="default_time"
+            type="time"
+            class="mt-1 block w-full"
+            :value="$value('default_time')"
+        />
+        <p class="mt-1 text-xs text-sh-mid">Leave blank for no fixed time. Example: 15:00 locks customer date selection to 3pm.</p>
+    </div>
 </form>

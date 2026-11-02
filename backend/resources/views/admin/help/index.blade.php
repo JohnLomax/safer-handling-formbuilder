@@ -1348,6 +1348,14 @@
                                     </td>
                                 </tr>
                                 <tr>
+                                    <td class="font-medium text-sh-text">Default session time</td>
+                                    <td class="text-sh-mid">
+                                        Optional fixed time (e.g. 15:00). When set, customers pick a date only and the enquiry stores that time.
+                                        They see a message to email <code class="rounded bg-sh-surface px-1 text-xs">office@safer-handling.co.uk</code> to change it.
+                                        Admins can override the time on the booking form or Create new enquiry (assisted).
+                                    </td>
+                                </tr>
+                                <tr>
                                     <td class="font-medium text-sh-text">Active</td>
                                     <td class="text-sh-mid">Unchecked rows stay in admin but are hidden from customers.</td>
                                 </tr>

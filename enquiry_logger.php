@@ -527,7 +527,8 @@ function enquiryLoggerMarkResumeEmailSent(int $enquiryId): void
  */
 /**
  * Normalise preferred date / "not sure" from enquiry form POST.
- * Stored as YYYY-MM-DD (date only). "Not sure" clears the date.
+ * Stored as YYYY-MM-DD, or YYYY-MM-DDTHH:MM when a session time is set.
+ * "Not sure" clears the date.
  *
  * @param array<string, mixed> $post
  * @return array{preferredDateTime: string, preferredDate2: string, dateNotSure: bool, enableSecondDate: bool}
@@ -558,19 +559,37 @@ function enquiryPreferredDateFromPost(array $post): array
 
     $dateOnly = enquiryPreferredDateOnly($preferredDate);
     $date2Only = enquiryPreferredDateOnly((string)($post['preferredDate2'] ?? ($post['preferredDateTime2'] ?? '')));
+    $timeOnly = enquiryPreferredTimeOnly((string)($post['preferredTime'] ?? ''));
+    if ($timeOnly === '') {
+        $timeOnly = enquiryPreferredTimeOnly($pdt !== '' ? $pdt : $preferredDate);
+    }
+    if ($timeOnly === '') {
+        $timeOnly = enquiryPreferredTimeOnly((string)($post['preferredDateTime2'] ?? ($post['preferredDate2'] ?? '')));
+    }
 
     if ($dateNotSure) {
         $dateOnly = '';
         $date2Only = '';
+        $timeOnly = '';
     }
 
     if (! $enableSecondDate) {
         $date2Only = '';
     }
 
+    $preferredDateTime = $dateOnly;
+    if ($dateOnly !== '' && $timeOnly !== '') {
+        $preferredDateTime = $dateOnly . 'T' . $timeOnly;
+    }
+
+    $preferredDate2 = $date2Only;
+    if ($date2Only !== '' && $timeOnly !== '') {
+        $preferredDate2 = $date2Only . 'T' . $timeOnly;
+    }
+
     return [
-        'preferredDateTime' => $dateOnly,
-        'preferredDate2' => $date2Only,
+        'preferredDateTime' => $preferredDateTime,
+        'preferredDate2' => $preferredDate2,
         'dateNotSure' => $dateNotSure,
         'enableSecondDate' => $enableSecondDate,
     ];
@@ -595,6 +614,46 @@ function enquiryPreferredDateOnly(?string $value): string
     }
 
     return '';
+}
+
+/**
+ * Extract a valid HH:MM preferred time (24-hour), or empty string.
+ */
+function enquiryPreferredTimeOnly(?string $value): string
+{
+    $value = trim((string) $value);
+    if ($value === '') {
+        return '';
+    }
+
+    if (preg_match('/^([01]\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?$/', $value, $matches)) {
+        return sprintf('%02d:%02d', (int) $matches[1], (int) $matches[2]);
+    }
+
+    $normalised = str_replace(' ', 'T', $value);
+    if (preg_match('/T([01]\d|2[0-3]):([0-5]\d)/', $normalised, $matches)) {
+        return sprintf('%02d:%02d', (int) $matches[1], (int) $matches[2]);
+    }
+
+    return '';
+}
+
+/**
+ * Combine a date-only value with an optional HH:MM time.
+ */
+function enquiryPreferredDateTimeCombine(?string $dateOrDatetime, ?string $time = null): string
+{
+    $dateOnly = enquiryPreferredDateOnly($dateOrDatetime);
+    if ($dateOnly === '') {
+        return '';
+    }
+
+    $timeOnly = enquiryPreferredTimeOnly($time);
+    if ($timeOnly === '') {
+        $timeOnly = enquiryPreferredTimeOnly($dateOrDatetime);
+    }
+
+    return $timeOnly !== '' ? ($dateOnly . 'T' . $timeOnly) : $dateOnly;
 }
 
 /**
@@ -628,12 +687,12 @@ function enquiryPreferredDateIsLocked(?string $preferredDateTime, ?\DateTimeImmu
     return $days !== null && $days <= 2;
 }
 
-function enquiryLoggerUpdatePreferredDate(int $enquiryId, string $preferredDateOnly = '', bool $dateNotSure = false): void
+function enquiryLoggerUpdatePreferredDate(int $enquiryId, string $preferredDateTime = '', bool $dateNotSure = false): void
 {
-    $dateOnly = enquiryPreferredDateOnly($preferredDateOnly);
+    $stored = enquiryPreferredDateTimeCombine($preferredDateTime);
     if ($dateNotSure) {
-        $dateOnly = '';
-    } elseif ($dateOnly === '') {
+        $stored = '';
+    } elseif ($stored === '') {
         throw new RuntimeException('Preferred date is invalid.');
     }
 
@@ -648,7 +707,7 @@ function enquiryLoggerUpdatePreferredDate(int $enquiryId, string $preferredDateO
     );
     $stmt->execute([
         ':id' => $enquiryId,
-        ':preferred_date_time' => $dateOnly,
+        ':preferred_date_time' => $stored,
         ':date_not_sure' => $dateNotSure ? 1 : 0,
         ':updated_at' => $now,
     ]);

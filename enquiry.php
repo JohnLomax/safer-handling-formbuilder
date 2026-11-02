@@ -727,6 +727,66 @@ if ($kajabiCoursesUrl === '') {
       color: #9f1239;
     }
 
+    .form-submitting-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: rgba(11, 31, 51, 0.62);
+      backdrop-filter: blur(2px);
+    }
+
+    .form-submitting-overlay.hidden {
+      display: none;
+    }
+
+    .form-submitting-card {
+      width: min(100%, 420px);
+      padding: 28px 24px;
+      border-radius: 16px;
+      background: #ffffff;
+      border: 1px solid #d8e8f8;
+      box-shadow: 0 18px 50px rgba(2, 85, 164, 0.22);
+      text-align: center;
+    }
+
+    .form-submitting-spinner {
+      width: 42px;
+      height: 42px;
+      margin: 0 auto 16px;
+      border-radius: 50%;
+      border: 3px solid #d8e8f8;
+      border-top-color: #0255a4;
+      animation: form-submitting-spin 0.8s linear infinite;
+    }
+
+    .form-submitting-card strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 1.1rem;
+      color: #0255a4;
+    }
+
+    .form-submitting-card p {
+      margin: 0;
+      font-size: 0.95rem;
+      line-height: 1.5;
+      color: #2e5d84;
+    }
+
+    @keyframes form-submitting-spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    body.is-form-submitting {
+      overflow: hidden;
+    }
+
     form.is-locked .actions,
     form.is-locked #continueBtn,
     form.is-locked #submitBtn {
@@ -1506,6 +1566,17 @@ if ($kajabiCoursesUrl === '') {
                 type="date"
               />
               <input type="hidden" id="preferredDateTime" name="preferredDateTime" value="" />
+              <input type="hidden" id="adminAssisted" name="adminAssisted" value="" />
+              <div id="preferredTimeBlock" class="hidden" style="margin-top:12px;">
+                <label for="preferredTime">Session time</label>
+                <input
+                  class="datetime-input"
+                  id="preferredTime"
+                  name="preferredTime"
+                  type="time"
+                />
+                <p class="datetime-hint" id="preferredTimeHint"></p>
+              </div>
               <div id="day2DateBlock" class="hidden" style="margin-top:12px;">
                 <label for="preferredDate2">Day 2 date</label>
                 <input
@@ -1565,6 +1636,14 @@ if ($kajabiCoursesUrl === '') {
           </div>
         </section>
       </form>
+
+      <div id="formSubmittingOverlay" class="form-submitting-overlay hidden" role="alert" aria-live="assertive" aria-busy="true">
+        <div class="form-submitting-card">
+          <div class="form-submitting-spinner" aria-hidden="true"></div>
+          <strong>Submitting your request</strong>
+          <p>Please wait — this can take a little while. Don’t leave or refresh this page.</p>
+        </div>
+      </div>
 
       <section id="thankYouView" class="thank-you-view hidden">
         <img
@@ -1629,9 +1708,53 @@ if ($kajabiCoursesUrl === '') {
       var extraNotesBlock = document.getElementById("extraNotesBlock");
       var extraNotesInput = document.getElementById("extraNotes");
       var submitBtn = document.getElementById("submitBtn");
+      var formSubmittingOverlay = document.getElementById("formSubmittingOverlay");
+      var isFormSubmitting = false;
+
+      function getSubmitButtonLabel() {
+        if (isOnlineCourseMode()) {
+          return "View Online Courses";
+        }
+        if (isTrainerMode()) {
+          var bookingViaCompany = !!(bookingViaCompanyInput && bookingViaCompanyInput.checked);
+          return bookingViaCompany ? "Send Quote" : "Book Now";
+        }
+        return "Submit enquiry and generate my quote";
+      }
+
+      function setFormSubmitting(active, buttonLabel) {
+        isFormSubmitting = !!active;
+        document.body.classList.toggle("is-form-submitting", isFormSubmitting);
+        if (formSubmittingOverlay) {
+          formSubmittingOverlay.classList.toggle("hidden", !isFormSubmitting);
+        }
+        if (submitBtn) {
+          submitBtn.disabled = isFormSubmitting;
+          submitBtn.setAttribute("aria-busy", isFormSubmitting ? "true" : "false");
+          submitBtn.textContent = isFormSubmitting
+            ? (buttonLabel || "Submitting your request — please wait…")
+            : getSubmitButtonLabel();
+        }
+        if (form) {
+          form.setAttribute("aria-busy", isFormSubmitting ? "true" : "false");
+        }
+      }
+
+      window.addEventListener("beforeunload", function (event) {
+        if (!isFormSubmitting) {
+          return;
+        }
+        event.preventDefault();
+        event.returnValue = "";
+      });
       var preferredDateInput = document.getElementById("preferredDate");
       var preferredDateTimeInput = document.getElementById("preferredDateTime");
+      var preferredTimeInput = document.getElementById("preferredTime");
+      var preferredTimeBlock = document.getElementById("preferredTimeBlock");
+      var preferredTimeHint = document.getElementById("preferredTimeHint");
+      var adminAssistedInput = document.getElementById("adminAssisted");
       var dateNotSureInput = document.getElementById("dateNotSure");
+      var OFFICE_EMAIL = "office@safer-handling.co.uk";
       var sectorSelect = document.getElementById("sector");
       var orgCourseSelect = document.getElementById("orgCourse");
       var courseFormatSelect = document.getElementById("courseFormat");
@@ -1737,6 +1860,50 @@ if ($kajabiCoursesUrl === '') {
         return match ? match[1] : "";
       }
 
+      function normalizePreferredTimeValue(value) {
+        if (value == null) {
+          return "";
+        }
+        var raw = String(value).trim();
+        if (!raw) {
+          return "";
+        }
+        if (/^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/.test(raw)) {
+          return raw.slice(0, 5);
+        }
+        raw = raw.replace(" ", "T");
+        var match = raw.match(/T([01]\d|2[0-3]):([0-5]\d)/);
+        return match ? match[1] + ":" + match[2] : "";
+      }
+
+      function formatPreferredTimeLabel(hhmm) {
+        var match = String(hhmm || "").match(/^([01]\d|2[0-3]):([0-5]\d)$/);
+        if (!match) {
+          return "";
+        }
+        var hour = Number(match[1]);
+        var minute = Number(match[2]);
+        var suffix = hour >= 12 ? "pm" : "am";
+        var hour12 = hour % 12;
+        if (hour12 === 0) {
+          hour12 = 12;
+        }
+        return minute === 0 ? hour12 + suffix : hour12 + ":" + String(minute).padStart(2, "0") + suffix;
+      }
+
+      function isAdminAssistedMode() {
+        var params = new URLSearchParams(window.location.search);
+        return params.get("assisted") === "1";
+      }
+
+      function getSelectedDefaultTime() {
+        var row = getSelectedTrainingRow();
+        if (!row || typeof row.defaultTime !== "string") {
+          return "";
+        }
+        return normalizePreferredTimeValue(row.defaultTime);
+      }
+
       function isSecondDateEnabled() {
         var pkg = getSelectedPackage();
         if (pkg && pkg.enableSecondDate) {
@@ -1761,11 +1928,71 @@ if ($kajabiCoursesUrl === '') {
         if (!preferredDateTimeInput) {
           return;
         }
-        preferredDateTimeInput.value = preferredDateInput.value.trim();
+        var dateValue = preferredDateInput ? preferredDateInput.value.trim() : "";
+        var timeValue = preferredTimeInput ? preferredTimeInput.value.trim() : "";
+        if (!dateValue) {
+          preferredDateTimeInput.value = "";
+          return;
+        }
+        preferredDateTimeInput.value = timeValue ? dateValue + "T" + timeValue : dateValue;
       }
 
       function setPreferredDateValue(value) {
         preferredDateInput.value = normalizePreferredDateValue(value);
+        var timeFromValue = normalizePreferredTimeValue(value);
+        if (timeFromValue && preferredTimeInput) {
+          preferredTimeInput.value = timeFromValue;
+        }
+        syncPreferredDateTimeHidden();
+      }
+
+      function syncDefaultTimeUi() {
+        if (!preferredTimeInput || !preferredTimeBlock) {
+          return;
+        }
+
+        if (adminAssistedInput) {
+          adminAssistedInput.value = isAdminAssistedMode() ? "1" : "";
+        }
+
+        var defaultTime = getSelectedDefaultTime();
+        var notSure = !!(dateNotSureInput && dateNotSureInput.checked);
+        var showTime = !!defaultTime && !notSure;
+
+        preferredTimeBlock.classList.toggle("hidden", !showTime);
+
+        if (!showTime) {
+          if (!isAdminAssistedMode() || !defaultTime) {
+            preferredTimeInput.value = "";
+          }
+          preferredTimeInput.readOnly = false;
+          preferredTimeInput.required = false;
+          if (preferredTimeHint) {
+            preferredTimeHint.textContent = "";
+          }
+          syncPreferredDateTimeHidden();
+          return;
+        }
+
+        var canEditTime = isAdminAssistedMode();
+        if (!canEditTime || !preferredTimeInput.value.trim()) {
+          preferredTimeInput.value = defaultTime;
+        }
+        preferredTimeInput.readOnly = !canEditTime;
+        preferredTimeInput.required = false;
+
+        if (preferredTimeHint) {
+          var label = formatPreferredTimeLabel(defaultTime) || defaultTime;
+          if (canEditTime) {
+            preferredTimeHint.textContent = "Default session time is " + label + ". As admin you can change this time before submitting.";
+          } else {
+            preferredTimeHint.textContent =
+              "The default session time is " + label +
+              ". If you want to change this, please book the enquiry and email us at " +
+              OFFICE_EMAIL + ".";
+          }
+        }
+
         syncPreferredDateTimeHidden();
       }
 
@@ -1828,6 +2055,9 @@ if ($kajabiCoursesUrl === '') {
         if (dateNotSureInput.checked) {
           preferredDateInput.value = "";
           preferredDateTimeInput.value = "";
+          if (preferredTimeInput) {
+            preferredTimeInput.value = "";
+          }
           preferredDateInput.disabled = true;
           preferredDateInput.required = false;
           setInputError(preferredDateInput, false);
@@ -1847,6 +2077,7 @@ if ($kajabiCoursesUrl === '') {
           }
         }
         syncSecondDateUi();
+        syncDefaultTimeUi();
         refreshOrganisationDateGuidance();
       }
 
@@ -1905,6 +2136,14 @@ if ($kajabiCoursesUrl === '') {
 
         if (data.preferredDate || data.preferredDateTime) {
           setPreferredDateValue(data.preferredDate || data.preferredDateTime);
+        }
+        if (data.preferredTime && preferredTimeInput) {
+          preferredTimeInput.value = normalizePreferredTimeValue(data.preferredTime);
+        } else if ((data.preferredDateTime || data.preferredDate) && preferredTimeInput) {
+          var restoredTime = normalizePreferredTimeValue(data.preferredDateTime || data.preferredDate);
+          if (restoredTime) {
+            preferredTimeInput.value = restoredTime;
+          }
         }
         if (data.preferredDate2 || data.preferredDateTime2) {
           applySavedFormValue("preferredDate2", data.preferredDate2 || data.preferredDateTime2);
@@ -2036,14 +2275,17 @@ if ($kajabiCoursesUrl === '') {
       }
 
       function showAdminAssistedBannerIfNeeded() {
-        var params = new URLSearchParams(window.location.search);
-        if (params.get("assisted") !== "1") {
+        if (!isAdminAssistedMode()) {
           return;
         }
         var banner = document.getElementById("adminAssistedBanner");
         if (banner) {
           banner.classList.remove("hidden");
         }
+        if (adminAssistedInput) {
+          adminAssistedInput.value = "1";
+        }
+        syncDefaultTimeUi();
       }
 
       function tryRestoreEnquiryFromUrl() {
@@ -2964,11 +3206,13 @@ if ($kajabiCoursesUrl === '') {
         if (voucherBlock) {
           voucherBlock.classList.toggle("hidden", isOnlineCourse || !shouldShow || (!shouldShowForMatrix && !shouldShowForTrainer));
         }
-        submitBtn.textContent = isOnlineCourse
-          ? "View Online Courses"
-          : isTrainer
-            ? (bookingViaCompany ? "Send Quote" : "Book Now")
-            : "Submit enquiry and generate my quote";
+        if (!isFormSubmitting) {
+          submitBtn.textContent = isOnlineCourse
+            ? "View Online Courses"
+            : isTrainer
+              ? (bookingViaCompany ? "Send Quote" : "Book Now")
+              : "Submit enquiry and generate my quote";
+        }
         attendeesInput.required = false;
       }
 
@@ -3005,6 +3249,9 @@ if ($kajabiCoursesUrl === '') {
         dateNotSureInput.checked = false;
         preferredDateInput.value = "";
         preferredDateTimeInput.value = "";
+        if (preferredTimeInput) {
+          preferredTimeInput.value = "";
+        }
         preferredDateInput.disabled = false;
         var preferredDate2Input = document.getElementById("preferredDate2");
         if (preferredDate2Input) {
@@ -3023,6 +3270,7 @@ if ($kajabiCoursesUrl === '') {
           enableSecondDateInput.value = "";
         }
         syncSecondDateUi();
+        syncDefaultTimeUi();
         syncMatrixStepperButtons();
         setGroupError(audienceTypeGroup, false);
         setGroupError(personalGoalGroup, false);
@@ -3680,6 +3928,7 @@ if ($kajabiCoursesUrl === '') {
 
         syncMondaySpecificCourse();
         syncSecondDateUi();
+        syncDefaultTimeUi();
 
         if (isOrganisationStyleTrainingPath()) {
           matrixAttendeesInput.required = !matrixAttendeesInput.disabled;
@@ -4137,6 +4386,7 @@ if ($kajabiCoursesUrl === '') {
       });
 
       function onPreferredDateInput() {
+        syncDefaultTimeUi();
         syncPreferredDateTimeHidden();
         if (!dateNotSureInput.checked) {
           setInputError(preferredDateInput, !preferredDateInput.value.trim());
@@ -4146,6 +4396,27 @@ if ($kajabiCoursesUrl === '') {
       }
       preferredDateInput.addEventListener("input", onPreferredDateInput);
       preferredDateInput.addEventListener("change", onPreferredDateInput);
+
+      if (preferredTimeInput) {
+        preferredTimeInput.addEventListener("input", function () {
+          if (!isAdminAssistedMode()) {
+            var locked = getSelectedDefaultTime();
+            if (locked) {
+              preferredTimeInput.value = locked;
+            }
+          }
+          syncPreferredDateTimeHidden();
+        });
+        preferredTimeInput.addEventListener("change", function () {
+          if (!isAdminAssistedMode()) {
+            var locked = getSelectedDefaultTime();
+            if (locked) {
+              preferredTimeInput.value = locked;
+            }
+          }
+          syncPreferredDateTimeHidden();
+        });
+      }
 
       var preferredDate2InputEl = document.getElementById("preferredDate2");
       if (preferredDate2InputEl) {
@@ -4292,8 +4563,7 @@ if ($kajabiCoursesUrl === '') {
         }
 
         if (audienceType === "me" && personalGoal === "onlineCourse") {
-          submitBtn.disabled = true;
-          submitBtn.textContent = "Opening courses...";
+          setFormSubmitting(true, "Opening courses — please wait…");
 
           var onlinePayload = new FormData();
           onlinePayload.append("email", emailInput.value.trim());
@@ -4325,14 +4595,12 @@ if ($kajabiCoursesUrl === '') {
             .catch(function (error) {
               window.alert(error && error.message ? error.message : "Could not update your enquiry before redirect.");
               console.error(error);
-              submitBtn.disabled = false;
-              submitBtn.textContent = "View Online Courses";
+              setFormSubmitting(false);
             });
           return;
         }
 
-        submitBtn.disabled = true;
-        submitBtn.textContent = "Submitting...";
+        setFormSubmitting(true, "Submitting your request — please wait…");
 
         fetch(form.action, {
           method: "POST",
@@ -4352,15 +4620,13 @@ if ($kajabiCoursesUrl === '') {
               });
           })
           .then(function () {
+            setFormSubmitting(false);
             showThankYouPage();
           })
           .catch(function (error) {
             window.alert(error && error.message ? error.message : "We could not submit your enquiry. Please try again.");
             console.error(error);
-          })
-          .finally(function () {
-            submitBtn.disabled = false;
-            submitBtn.textContent = "Submit enquiry and generate my quote";
+            setFormSubmitting(false);
           });
       });
 

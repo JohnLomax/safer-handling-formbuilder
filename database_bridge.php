@@ -291,46 +291,47 @@ function appTrainingMatrixRows(): array
     }
 
     try {
-        $sql = 'SELECT sector, course, course_value, course_description, format, sub_option, min_attendees, max_cap, max_cap_description, default_attendees, pricing, kajabi_enabled, enable_second_date
+        $sql = 'SELECT sector, course, course_value, course_description, format, sub_option, min_attendees, max_cap, max_cap_description, default_attendees, pricing, kajabi_enabled, enable_second_date, default_time
              FROM training_matrix_entries
              WHERE is_active = 1
              ORDER BY sort_order ASC, id ASC';
         try {
             $stmt = $pdo->query($sql);
         } catch (Throwable $e) {
-            // Older DBs before enable_second_date / max_cap_description / kajabi_enabled / course_description migrations.
-            try {
-                $stmt = $pdo->query(
-                    'SELECT sector, course, course_value, course_description, format, sub_option, min_attendees, max_cap, max_cap_description, default_attendees, pricing, kajabi_enabled
+            // Older DBs before default_time / enable_second_date / max_cap_description / kajabi_enabled / course_description migrations.
+            $fallbackQueries = [
+                'SELECT sector, course, course_value, course_description, format, sub_option, min_attendees, max_cap, max_cap_description, default_attendees, pricing, kajabi_enabled, enable_second_date
                      FROM training_matrix_entries
                      WHERE is_active = 1
-                     ORDER BY sort_order ASC, id ASC'
-                );
-            } catch (Throwable $e2) {
+                     ORDER BY sort_order ASC, id ASC',
+                'SELECT sector, course, course_value, course_description, format, sub_option, min_attendees, max_cap, max_cap_description, default_attendees, pricing, kajabi_enabled
+                     FROM training_matrix_entries
+                     WHERE is_active = 1
+                     ORDER BY sort_order ASC, id ASC',
+                'SELECT sector, course, course_value, course_description, format, sub_option, min_attendees, max_cap, default_attendees, pricing, kajabi_enabled
+                     FROM training_matrix_entries
+                     WHERE is_active = 1
+                     ORDER BY sort_order ASC, id ASC',
+                'SELECT sector, course, course_value, course_description, format, sub_option, min_attendees, max_cap, default_attendees, pricing
+                     FROM training_matrix_entries
+                     WHERE is_active = 1
+                     ORDER BY sort_order ASC, id ASC',
+                'SELECT sector, course, course_value, format, sub_option, min_attendees, max_cap, default_attendees, pricing
+                     FROM training_matrix_entries
+                     WHERE is_active = 1
+                     ORDER BY sort_order ASC, id ASC',
+            ];
+            $stmt = false;
+            foreach ($fallbackQueries as $fallbackSql) {
                 try {
-                    $stmt = $pdo->query(
-                        'SELECT sector, course, course_value, course_description, format, sub_option, min_attendees, max_cap, default_attendees, pricing, kajabi_enabled
-                         FROM training_matrix_entries
-                         WHERE is_active = 1
-                         ORDER BY sort_order ASC, id ASC'
-                    );
-                } catch (Throwable $e3) {
-                    try {
-                        $stmt = $pdo->query(
-                            'SELECT sector, course, course_value, course_description, format, sub_option, min_attendees, max_cap, default_attendees, pricing
-                             FROM training_matrix_entries
-                             WHERE is_active = 1
-                             ORDER BY sort_order ASC, id ASC'
-                        );
-                    } catch (Throwable $e4) {
-                        $stmt = $pdo->query(
-                            'SELECT sector, course, course_value, format, sub_option, min_attendees, max_cap, default_attendees, pricing
-                             FROM training_matrix_entries
-                             WHERE is_active = 1
-                             ORDER BY sort_order ASC, id ASC'
-                        );
-                    }
+                    $stmt = $pdo->query($fallbackSql);
+                    break;
+                } catch (Throwable $ignored) {
+                    $stmt = false;
                 }
+            }
+            if ($stmt === false) {
+                throw $e;
             }
         }
         if ($stmt === false) {
@@ -372,6 +373,11 @@ function appTrainingMatrixRows(): array
 
             if ($row['default_attendees'] !== null) {
                 $item['defaultAttendees'] = (int)$row['default_attendees'];
+            }
+
+            $defaultTime = trim((string)($row['default_time'] ?? ''));
+            if ($defaultTime !== '' && preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $defaultTime)) {
+                $item['defaultTime'] = $defaultTime;
             }
 
             $cache[] = $item;

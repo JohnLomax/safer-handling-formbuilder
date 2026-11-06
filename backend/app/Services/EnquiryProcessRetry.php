@@ -356,9 +356,9 @@ class EnquiryProcessRetry
 
     public function canSyncXeroInvoiceSent(Enquiry $enquiry): bool
     {
+        // Allow first send and resend (authorise + email tax invoice PDF).
         return xeroEnabled()
-            && trim((string) $enquiry->xero_invoice_id) !== ''
-            && $enquiry->xero_invoice_sent_at === null;
+            && trim((string) $enquiry->xero_invoice_id) !== '';
     }
 
     public function canRetryKajabiEnroll(Enquiry $enquiry): bool
@@ -813,7 +813,7 @@ class EnquiryProcessRetry
      */
     public function emailXeroInvoiceToCustomer(Enquiry $enquiry): array
     {
-        if (! $this->canSyncXeroInvoiceSent($enquiry) && $enquiry->xero_invoice_sent_at === null) {
+        if (! $this->canSyncXeroInvoiceSent($enquiry)) {
             throw new RuntimeException('This enquiry has no Xero invoice to email.');
         }
 

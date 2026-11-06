@@ -472,21 +472,16 @@ class EnquiryController extends Controller
             $result = $retry->emailXeroInvoiceToCustomer($enquiry);
             $enquiry->refresh();
 
-            if (! empty($result['already_sent'])) {
-                $status = 'Invoice was already sent to the customer for this enquiry.';
-                if (! empty($result['kajabi']['enrolled'])) {
-                    $status .= ' Kajabi enrollment completed.';
-                }
-
-                return redirect()
-                    ->route('admin.enquiries.show', $enquiry)
-                    ->with('status', $status);
-            }
-
             if (! empty($result['emailed']) || ! empty($result['processed'])) {
-                $parts = ['Invoice emailed to the customer'
-                    .(! empty($result['to_email']) ? ' ('.$result['to_email'].')' : '')
-                    .'.'];
+                $parts = [
+                    ! empty($result['resent'])
+                        ? ('Authorised and re-emailed the tax invoice to the customer'
+                            .(! empty($result['to_email']) ? ' ('.$result['to_email'].')' : '')
+                            .'.')
+                        : ('Invoice emailed to the customer'
+                            .(! empty($result['to_email']) ? ' ('.$result['to_email'].')' : '')
+                            .'.'),
+                ];
                 if (! empty($result['monday_quote_won']['moved'])) {
                     $parts[] = 'Moved to Monday "'.($result['monday_quote_won']['groupName'] ?? 'Quote Won').'".';
                 }

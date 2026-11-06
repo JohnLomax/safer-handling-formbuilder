@@ -580,10 +580,14 @@
                                     <form method="POST" action="{{ route('admin.enquiries.sync.xero-invoice-sent', $enquiry) }}" class="mt-3">
                                         @csrf
                                         <button type="submit" class="btn-brand-outline text-xs">
-                                            Email invoice to customer
+                                            {{ $enquiry->xero_invoice_sent_at ? 'Authorise & resend tax invoice' : 'Email invoice to customer' }}
                                         </button>
                                     </form>
-                                    <p class="mt-2 text-xs text-sh-mid">Emails the invoice PDF to the customer via Brevo, then marks it sent and progresses Monday / Kajabi.</p>
+                                    <p class="mt-2 text-xs text-sh-mid">
+                                        {{ $enquiry->xero_invoice_sent_at
+                                            ? 'Authorises the Xero invoice (if still draft) and re-emails the tax invoice PDF via Brevo.'
+                                            : 'Authorises the Xero invoice, emails the tax invoice PDF via Brevo, then marks it sent and progresses Monday / Kajabi.' }}
+                                    </p>
                                 @endif
                             </div>
 

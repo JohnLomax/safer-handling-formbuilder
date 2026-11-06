@@ -908,7 +908,7 @@
                             <div class="help-icon"><x-xero-badge compact class="!h-5 !w-5" /></div>
                             <div>
                                 <h4>Xero</h4>
-                                <p>Quotes and draft invoices (including optional quote/invoice recipient); email the invoice from the enquiry page. Additional attendees via API create a separate draft invoice. Applied vouchers appear in the quote/invoice line description.</p>
+                                <p>Quotes and draft invoices (including optional quote/invoice recipient); email the invoice from the enquiry page — sending authorises it in Xero so the PDF is a tax invoice (not a proforma) for VAT reclaim. Additional attendees via API create a separate draft invoice. Applied vouchers appear in the quote/invoice line description.</p>
                             </div>
                         </div>
                         <div class="help-feature-card">

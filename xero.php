@@ -1335,6 +1335,52 @@ function xeroDownloadInvoicePdf(string $invoiceId, string $invoiceNumber = ''): 
 }
 
 /**
+ * Approve a draft Xero invoice so the PDF is a real tax invoice (not DRAFT/proforma).
+ * Required for customers who need to reclaim VAT.
+ *
+ * @return array<string, mixed> Authorised (or already-final) invoice payload from Xero
+ */
+function xeroAuthoriseInvoice(string $invoiceId): array
+{
+    $invoiceId = trim($invoiceId);
+    if ($invoiceId === '') {
+        throw new RuntimeException('Xero invoice ID is missing.');
+    }
+
+    $invoice = xeroGetInvoice($invoiceId);
+    $status = strtoupper(trim((string) ($invoice['Status'] ?? '')));
+
+    if (in_array($status, ['AUTHORISED', 'PAID', 'SUBMITTED'], true)) {
+        return $invoice;
+    }
+
+    if (in_array($status, ['VOIDED', 'DELETED'], true)) {
+        throw new RuntimeException('Xero invoice is '.$status.' and cannot be authorised for emailing.');
+    }
+
+    $resp = xeroApiRequest('POST', 'Invoices', [
+        'Invoices' => [[
+            'InvoiceID' => $invoiceId,
+            'Status' => 'AUTHORISED',
+        ]],
+    ]);
+
+    if ($resp['status'] >= 400 || empty($resp['body']['Invoices'][0])) {
+        throw new RuntimeException(xeroApiResponseError($resp, 'Could not authorise Xero invoice before emailing.'));
+    }
+
+    $authorised = $resp['body']['Invoices'][0];
+    $newStatus = strtoupper(trim((string) ($authorised['Status'] ?? '')));
+    if ($newStatus !== 'AUTHORISED' && $newStatus !== 'PAID' && $newStatus !== 'SUBMITTED') {
+        throw new RuntimeException(
+            'Xero invoice was not authorised (status: '.($newStatus !== '' ? $newStatus : 'unknown').').'
+        );
+    }
+
+    return $authorised;
+}
+
+/**
  * Best-effort: mark the invoice as sent in Xero after we email the customer ourselves.
  */
 function xeroMarkInvoiceSentToContact(string $invoiceId): void
@@ -1407,27 +1453,7 @@ function xeroEmailInvoiceToCustomer(int $enquiryId): array
         throw new RuntimeException('This enquiry has no Xero invoice to email.');
     }
 
-    if (trim((string) ($row['xero_invoice_sent_at'] ?? '')) !== '') {
-        $kajabi = null;
-        try {
-            require_once __DIR__ . '/kajabi.php';
-            $kajabi = kajabiMaybeEnrollAfterQuoteWon($enquiryId);
-        } catch (Throwable $e) {
-            $kajabi = ['attempted' => true, 'enrolled' => false, 'error' => $e->getMessage()];
-        }
-
-        return [
-            'processed' => false,
-            'sent' => true,
-            'already_sent' => true,
-            'emailed' => false,
-            'invoice_status' => null,
-            'to_email' => null,
-            'monday_quote_won' => null,
-            'monday_courses_ongoing' => null,
-            'kajabi' => $kajabi,
-        ];
-    }
+    $wasAlreadyEmailed = trim((string) ($row['xero_invoice_sent_at'] ?? '')) !== '';
 
     $bookingDetails = [];
     $rawBooking = trim((string) ($row['booking_details_json'] ?? ''));
@@ -1477,13 +1503,25 @@ function xeroEmailInvoiceToCustomer(int $enquiryId): array
 
     $invoiceNumber = trim((string) ($row['xero_invoice_number'] ?? ''));
     $invoiceStatus = null;
-    try {
-        $invoice = xeroGetInvoice($invoiceId);
-        $invoiceNumber = trim((string) ($invoice['InvoiceNumber'] ?? $invoiceNumber));
-        $invoiceStatus = strtoupper(trim((string) ($invoice['Status'] ?? '')));
-    } catch (Throwable $e) {
-        // PDF download may still work; continue with stored invoice number.
-        $invoiceStatus = null;
+    // Authorise before PDF download so the attachment is a tax invoice, not a DRAFT/proforma.
+    $invoice = xeroAuthoriseInvoice($invoiceId);
+    $invoiceNumber = trim((string) ($invoice['InvoiceNumber'] ?? $invoiceNumber));
+    $invoiceStatus = strtoupper(trim((string) ($invoice['Status'] ?? '')));
+    if ($invoiceNumber !== '' && $invoiceNumber !== trim((string) ($row['xero_invoice_number'] ?? ''))) {
+        enquiryLoggerSafe(static function () use ($enquiryId, $invoiceId, $invoiceNumber): void {
+            $pdo = enquiryLoggerPdo();
+            $stmt = $pdo->prepare(
+                'UPDATE enquiries
+                 SET xero_invoice_number = :number, updated_at = :updated_at
+                 WHERE id = :id AND xero_invoice_id = :invoice_id'
+            );
+            $stmt->execute([
+                ':number' => $invoiceNumber,
+                ':updated_at' => enquiryLoggerNow(),
+                ':id' => $enquiryId,
+                ':invoice_id' => $invoiceId,
+            ]);
+        });
     }
 
     $pdf = xeroDownloadInvoicePdf($invoiceId, $invoiceNumber);
@@ -1515,7 +1553,9 @@ function xeroEmailInvoiceToCustomer(int $enquiryId): array
     enquiryLoggerEvent(
         $enquiryId,
         'xero_invoice_emailed',
-        'Invoice emailed to the customer via Brevo (PDF attached).',
+        $wasAlreadyEmailed
+            ? 'Invoice authorised and re-emailed to the customer via Brevo (tax invoice PDF).'
+            : 'Invoice emailed to the customer via Brevo (PDF attached).',
         [
             'channel' => 'brevo',
             'to_email' => $toEmail,
@@ -1523,6 +1563,9 @@ function xeroEmailInvoiceToCustomer(int $enquiryId): array
             'xero_invoice_number' => $invoiceNumber !== '' ? $invoiceNumber : null,
             'brevo_message_id' => $messageId !== '' ? $messageId : null,
             'email_kind' => 'invoice',
+            'authorised' => true,
+            'resent' => $wasAlreadyEmailed,
+            'invoice_status' => $invoiceStatus,
         ]
     );
 
@@ -1535,9 +1578,12 @@ function xeroEmailInvoiceToCustomer(int $enquiryId): array
         'brevo'
     );
 
+    // Resends still email; already_sent only means Monday/Kajabi progression was skipped.
     return array_merge($progress, [
         'emailed' => true,
+        'resent' => $wasAlreadyEmailed,
         'to_email' => $toEmail,
+        'invoice_status' => $invoiceStatus,
     ]);
 }
 
@@ -2101,7 +2147,8 @@ function xeroCreateDraftInvoiceFromQuote(string $quoteId, array $bookingDetails 
 }
 
 /**
- * After booking/terms acceptance: create a DRAFT Xero invoice from the stored quote (not sent).
+ * After booking/terms acceptance: create a DRAFT Xero invoice from the stored quote (not emailed yet).
+ * Emailing later authorises the invoice so the customer receives a tax invoice PDF, not a proforma.
  *
  * @param array<string, mixed> $bookingDetails
  * @return array{InvoiceID:string,InvoiceNumber:string,Status:string}|null
@@ -2789,12 +2836,9 @@ function xeroEmailAdditionalInvoiceToCustomer(int $enquiryId, string $invoiceId,
         $toName = $toEmail;
     }
 
-    try {
-        $invoice = xeroGetInvoice($invoiceId);
-        $invoiceNumber = trim((string) ($invoice['InvoiceNumber'] ?? $invoiceNumber));
-    } catch (Throwable $e) {
-        // PDF download may still work with the provided number.
-    }
+    // Authorise before PDF download so the attachment is a tax invoice, not a DRAFT/proforma.
+    $invoice = xeroAuthoriseInvoice($invoiceId);
+    $invoiceNumber = trim((string) ($invoice['InvoiceNumber'] ?? $invoiceNumber));
 
     $pdf = xeroDownloadInvoicePdf($invoiceId, $invoiceNumber);
     $messageId = sendInvoiceEmailViaBrevo($toEmail, $toName, [

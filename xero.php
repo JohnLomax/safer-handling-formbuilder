@@ -1335,10 +1335,19 @@ function xeroDownloadInvoicePdf(string $invoiceId, string $invoiceNumber = ''): 
 }
 
 /**
- * Approve a draft Xero invoice so the PDF is a real tax invoice (not DRAFT/proforma).
+ * True when a Xero invoice status produces a tax invoice PDF (not a proforma).
+ * DRAFT and SUBMITTED PDFs are labelled proforma / awaiting approval.
+ */
+function xeroInvoiceStatusIsTaxInvoice(string $status): bool
+{
+    return in_array(strtoupper(trim($status)), ['AUTHORISED', 'PAID'], true);
+}
+
+/**
+ * Approve a draft/submitted Xero invoice so the PDF is a real tax invoice (not proforma).
  * Required for customers who need to reclaim VAT.
  *
- * @return array<string, mixed> Authorised (or already-final) invoice payload from Xero
+ * @return array<string, mixed> Authorised (or already-paid) invoice payload from Xero
  */
 function xeroAuthoriseInvoice(string $invoiceId): array
 {
@@ -1350,7 +1359,7 @@ function xeroAuthoriseInvoice(string $invoiceId): array
     $invoice = xeroGetInvoice($invoiceId);
     $status = strtoupper(trim((string) ($invoice['Status'] ?? '')));
 
-    if (in_array($status, ['AUTHORISED', 'PAID', 'SUBMITTED'], true)) {
+    if (xeroInvoiceStatusIsTaxInvoice($status)) {
         return $invoice;
     }
 
@@ -1358,6 +1367,7 @@ function xeroAuthoriseInvoice(string $invoiceId): array
         throw new RuntimeException('Xero invoice is '.$status.' and cannot be authorised for emailing.');
     }
 
+    // DRAFT or SUBMITTED (or any other non-final status) — attempt AUTHORISED.
     $resp = xeroApiRequest('POST', 'Invoices', [
         'Invoices' => [[
             'InvoiceID' => $invoiceId,
@@ -1369,11 +1379,25 @@ function xeroAuthoriseInvoice(string $invoiceId): array
         throw new RuntimeException(xeroApiResponseError($resp, 'Could not authorise Xero invoice before emailing.'));
     }
 
-    $authorised = $resp['body']['Invoices'][0];
+    $posted = $resp['body']['Invoices'][0];
+    if (!empty($posted['HasErrors']) || !empty($posted['ValidationErrors'])) {
+        throw new RuntimeException(xeroApiErrorMessage($resp['body'], 'Could not authorise Xero invoice before emailing.'));
+    }
+    foreach ($posted['LineItems'] ?? [] as $line) {
+        if (is_array($line) && !empty($line['ValidationErrors'])) {
+            throw new RuntimeException(xeroApiErrorMessage($resp['body'], 'Could not authorise Xero invoice before emailing.'));
+        }
+    }
+
+    // Re-GET so we never trust a stale POST payload before downloading the PDF.
+    $authorised = xeroGetInvoice($invoiceId);
     $newStatus = strtoupper(trim((string) ($authorised['Status'] ?? '')));
-    if ($newStatus !== 'AUTHORISED' && $newStatus !== 'PAID' && $newStatus !== 'SUBMITTED') {
+    if (!xeroInvoiceStatusIsTaxInvoice($newStatus)) {
+        $hint = $newStatus === 'SUBMITTED'
+            ? ' Xero left it as SUBMITTED — approve it in Xero (or disable invoice approvals), then retry.'
+            : '';
         throw new RuntimeException(
-            'Xero invoice was not authorised (status: '.($newStatus !== '' ? $newStatus : 'unknown').').'
+            'Xero invoice was not authorised (status: '.($newStatus !== '' ? $newStatus : 'unknown').').'.$hint
         );
     }
 
@@ -1507,6 +1531,13 @@ function xeroEmailInvoiceToCustomer(int $enquiryId): array
     $invoice = xeroAuthoriseInvoice($invoiceId);
     $invoiceNumber = trim((string) ($invoice['InvoiceNumber'] ?? $invoiceNumber));
     $invoiceStatus = strtoupper(trim((string) ($invoice['Status'] ?? '')));
+    if (!xeroInvoiceStatusIsTaxInvoice($invoiceStatus)) {
+        throw new RuntimeException(
+            'Refusing to email invoice PDF while Xero status is '
+            .($invoiceStatus !== '' ? $invoiceStatus : 'unknown')
+            .' (needs AUTHORISED for a tax invoice, not a proforma).'
+        );
+    }
     if ($invoiceNumber !== '' && $invoiceNumber !== trim((string) ($row['xero_invoice_number'] ?? ''))) {
         enquiryLoggerSafe(static function () use ($enquiryId, $invoiceId, $invoiceNumber): void {
             $pdo = enquiryLoggerPdo();
@@ -2839,6 +2870,14 @@ function xeroEmailAdditionalInvoiceToCustomer(int $enquiryId, string $invoiceId,
     // Authorise before PDF download so the attachment is a tax invoice, not a DRAFT/proforma.
     $invoice = xeroAuthoriseInvoice($invoiceId);
     $invoiceNumber = trim((string) ($invoice['InvoiceNumber'] ?? $invoiceNumber));
+    $invoiceStatus = strtoupper(trim((string) ($invoice['Status'] ?? '')));
+    if (!xeroInvoiceStatusIsTaxInvoice($invoiceStatus)) {
+        throw new RuntimeException(
+            'Refusing to email invoice PDF while Xero status is '
+            .($invoiceStatus !== '' ? $invoiceStatus : 'unknown')
+            .' (needs AUTHORISED for a tax invoice, not a proforma).'
+        );
+    }
 
     $pdf = xeroDownloadInvoicePdf($invoiceId, $invoiceNumber);
     $messageId = sendInvoiceEmailViaBrevo($toEmail, $toName, [
@@ -2856,5 +2895,6 @@ function xeroEmailAdditionalInvoiceToCustomer(int $enquiryId, string $invoiceId,
         'to_name' => $toName,
         'brevo_message_id' => $messageId !== '' ? $messageId : null,
         'invoice_number' => $invoiceNumber,
+        'invoice_status' => $invoiceStatus,
     ];
 }

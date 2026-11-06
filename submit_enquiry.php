@@ -992,15 +992,27 @@ if (!class_exists('PDO') || !in_array($requiredPdoDriver, PDO::getAvailableDrive
  */
 function persistEnquiryRecord(array $post, string $name, string $email, string $enquiryType): int
 {
-    // Edit flow: enquiryId + resumeToken must match an existing enquiry.
-    // New flow: no valid token → always create a fresh enquiry row.
-    $enquiryId = enquiryLoggerResolveAuthenticatedEnquiryId($post);
+    // Prefer enquiryId + resumeToken. Otherwise reuse a recent open enquiry for
+    // the same email so retries / refresh / lost tokens do not create duplicates.
+    $authenticatedId = enquiryLoggerResolveAuthenticatedEnquiryId($post);
+    $enquiryId = enquiryLoggerResolveReusableEnquiryId($post);
     $reusingExisting = $enquiryId !== null;
+    $reusedByEmail = $reusingExisting && $authenticatedId === null;
     $alreadyHadQuote = $reusingExisting && enquiryLoggerQuoteEmailAlreadySent($enquiryId);
     $alreadySubmitted = $reusingExisting && enquiryLoggerHasEvent($enquiryId, 'form_submitted');
 
     if (!$reusingExisting) {
         $enquiryId = enquiryLoggerCreateInitial($post);
+    } elseif ($reusedByEmail) {
+        enquiryLoggerEvent(
+            $enquiryId,
+            'enquiry_reused',
+            'Submitted against an existing open enquiry for this email instead of creating a duplicate.',
+            [
+                'email' => strtolower(trim($email)),
+                'source' => 'submit_enquiry',
+            ]
+        );
     }
 
     enquiryLoggerUpdateFromPost($enquiryId, $post, 'submitted');

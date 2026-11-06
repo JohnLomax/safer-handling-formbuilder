@@ -176,15 +176,6 @@ $hasUpload = isset($_FILES['studentNamesFile'])
     && is_array($_FILES['studentNamesFile'])
     && (int)($_FILES['studentNamesFile']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE;
 
-if (count($nameLines) === 0 && count($emailLines) === 0 && !$hasUpload) {
-    http_response_code(422);
-    echo json_encode([
-        'success' => false,
-        'message' => 'Please provide student names and emails, or upload a delegate list.',
-    ]);
-    exit;
-}
-
 if ((count($nameLines) > 0 || count($emailLines) > 0) && count($nameLines) !== count($emailLines)) {
     http_response_code(422);
     echo json_encode([

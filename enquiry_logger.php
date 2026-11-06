@@ -98,6 +98,7 @@ function enquiryLoggerEnsureSchema(PDO $pdo): void
     enquiryLoggerEnsureColumn($pdo, 'enquiries', 'booking_details_json', 'TEXT');
     enquiryLoggerEnsureColumn($pdo, 'enquiries', 'booking_email_sent_at', 'TEXT');
     enquiryLoggerEnsureColumn($pdo, 'enquiries', 'booking_reminder_sent_at', 'TEXT');
+    enquiryLoggerEnsureColumn($pdo, 'enquiries', 'quote_reminder_sent_at', 'TEXT');
     enquiryLoggerEnsureColumn($pdo, 'enquiries', 'booking_submitted_at', 'TEXT');
     enquiryLoggerEnsureColumn($pdo, 'enquiries', 'terms_accepted_at', 'TEXT');
     enquiryLoggerEnsureColumn($pdo, 'enquiries', 'xero_invoice_id', 'TEXT');
@@ -267,8 +268,7 @@ function enquiryLoggerPostResumeToken(array $post): string
 
 /**
  * Authenticated enquiry reuse for Edit Enquiry / same-session continue.
- * Requires enquiryId + matching resume token. Without a valid token a new
- * enquiry flow is always started (even if the email already exists).
+ * Requires enquiryId + matching resume token.
  */
 function enquiryLoggerResolveAuthenticatedEnquiryId(array $post): ?int
 {
@@ -290,12 +290,107 @@ function enquiryLoggerResolveAuthenticatedEnquiryId(array $post): ?int
     return $enquiryId;
 }
 
+/**
+ * Statuses that can safely be reused when the same email continues/submits
+ * again without a resume token (prevents duplicate rows from retries/refresh).
+ *
+ * @return list<string>
+ */
+function enquiryLoggerReusableStatusesForEmailDedupe(): array
+{
+    return [
+        'in_progress',
+        'contacted',
+        'submitted',
+        'quote_sent',
+        'failed',
+    ];
+}
+
+/**
+ * Find a recent open enquiry for this email that should be updated in place
+ * instead of creating a duplicate.
+ */
+function enquiryLoggerFindRecentReusableByEmail(string $email, int $withinHours = 48): ?int
+{
+    $email = strtolower(trim($email));
+    if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        return null;
+    }
+
+    $withinHours = max(1, min(168, $withinHours));
+    $since = (new \DateTimeImmutable('now', new \DateTimeZone('Europe/London')))
+        ->modify('-' . $withinHours . ' hours')
+        ->format('Y-m-d H:i:s');
+
+    $statuses = enquiryLoggerReusableStatusesForEmailDedupe();
+    $placeholders = [];
+    $params = [
+        ':email' => $email,
+        ':since' => $since,
+    ];
+    foreach ($statuses as $index => $status) {
+        $key = ':status' . $index;
+        $placeholders[] = $key;
+        $params[$key] = $status;
+    }
+
+    $pdo = enquiryLoggerPdo();
+    $stmt = $pdo->prepare(
+        'SELECT id FROM enquiries
+         WHERE LOWER(email) = :email
+           AND status IN (' . implode(', ', $placeholders) . ')
+           AND updated_at >= :since
+         ORDER BY id DESC
+         LIMIT 1'
+    );
+    $stmt->execute($params);
+    $row = $stmt->fetch();
+    if (!$row) {
+        return null;
+    }
+
+    $enquiryId = (int) $row['id'];
+    if ($enquiryId <= 0 || !enquiryLoggerIsEligibleForSubmitReuse($enquiryId)) {
+        return null;
+    }
+
+    return $enquiryId;
+}
+
+/**
+ * Resolve an existing enquiry for create/continue/submit without creating a duplicate.
+ * Prefers authenticated resume token, then recent same-email open enquiry.
+ */
+function enquiryLoggerResolveReusableEnquiryId(array $post): ?int
+{
+    $authenticatedId = enquiryLoggerResolveAuthenticatedEnquiryId($post);
+    if ($authenticatedId !== null) {
+        return $authenticatedId;
+    }
+
+    $email = trim((string) ($post['email'] ?? ''));
+
+    return enquiryLoggerFindRecentReusableByEmail($email);
+}
+
 function enquiryLoggerFindOrCreateInitial(array $post): int
 {
-    $existingId = enquiryLoggerResolveAuthenticatedEnquiryId($post);
+    $existingId = enquiryLoggerResolveReusableEnquiryId($post);
     if ($existingId !== null) {
         enquiryLoggerUpdateFromPost($existingId, $post, 'in_progress');
         enquiryLoggerEnsureResumeToken($existingId);
+        if (enquiryLoggerResolveAuthenticatedEnquiryId($post) === null) {
+            enquiryLoggerEvent(
+                $existingId,
+                'enquiry_reused',
+                'Continued an existing open enquiry for this email instead of creating a duplicate.',
+                [
+                    'email' => strtolower(trim((string) ($post['email'] ?? ''))),
+                    'source' => 'continue_or_progress',
+                ]
+            );
+        }
 
         return $existingId;
     }
@@ -1008,6 +1103,54 @@ function enquiryLoggerMarkBookingReminderSent(int $enquiryId): void
         ':id' => $enquiryId,
         ':booking_reminder_sent_at' => $now,
         ':booking_email_sent_at' => $now,
+        ':updated_at' => $now,
+    ]);
+}
+
+/**
+ * True when a Quote Sent reminder was already sent today (Europe/London).
+ */
+function enquiryLoggerQuoteReminderSentToday(int $enquiryId, ?\DateTimeImmutable $now = null): bool
+{
+    enquiryLoggerEnsureColumn(enquiryLoggerPdo(), 'enquiries', 'quote_reminder_sent_at', 'TEXT');
+
+    $pdo = enquiryLoggerPdo();
+    $stmt = $pdo->prepare('SELECT quote_reminder_sent_at FROM enquiries WHERE id = :id LIMIT 1');
+    $stmt->execute([':id' => $enquiryId]);
+    $row = $stmt->fetch();
+    $raw = trim((string) ($row['quote_reminder_sent_at'] ?? ''));
+    if ($raw === '') {
+        return false;
+    }
+
+    $tz = new \DateTimeZone('Europe/London');
+    try {
+        $sentAt = new \DateTimeImmutable($raw, $tz);
+    } catch (\Throwable) {
+        return false;
+    }
+
+    $today = ($now ?? new \DateTimeImmutable('now', $tz))->setTimezone($tz)->format('Y-m-d');
+
+    return $sentAt->setTimezone($tz)->format('Y-m-d') === $today;
+}
+
+function enquiryLoggerMarkQuoteReminderSent(int $enquiryId): void
+{
+    enquiryLoggerEnsureColumn(enquiryLoggerPdo(), 'enquiries', 'quote_reminder_sent_at', 'TEXT');
+
+    $pdo = enquiryLoggerPdo();
+    $now = enquiryLoggerNow();
+
+    $stmt = $pdo->prepare(
+        'UPDATE enquiries SET
+            quote_reminder_sent_at = :quote_reminder_sent_at,
+            updated_at = :updated_at
+         WHERE id = :id'
+    );
+    $stmt->execute([
+        ':id' => $enquiryId,
+        ':quote_reminder_sent_at' => $now,
         ':updated_at' => $now,
     ]);
 }

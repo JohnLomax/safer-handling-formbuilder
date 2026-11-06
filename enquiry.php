@@ -1835,6 +1835,26 @@ if ($kajabiCoursesUrl === '') {
         if (editResume === true) {
           isEditResumeFlow = true;
         }
+        persistEnquirySessionInUrl();
+      }
+
+      function persistEnquirySessionInUrl() {
+        if (!currentEnquiryId || !currentResumeToken || window.location.protocol === "file:") {
+          return;
+        }
+        try {
+          var url = new URL(window.location.href);
+          var enquiryChanged = url.searchParams.get("enquiry") !== String(currentEnquiryId);
+          var tokenChanged = url.searchParams.get("token") !== String(currentResumeToken);
+          if (!enquiryChanged && !tokenChanged) {
+            return;
+          }
+          url.searchParams.set("enquiry", String(currentEnquiryId));
+          url.searchParams.set("token", String(currentResumeToken));
+          window.history.replaceState({}, "", url.toString());
+        } catch (error) {
+          console.error(error);
+        }
       }
 
       function appendEnquiryIdToFormData(fd) {
@@ -4160,6 +4180,14 @@ if ($kajabiCoursesUrl === '') {
                 return {};
               })
               .then(function (body) {
+                // Capture IDs even on Monday failure so retry reuses the same enquiry.
+                if (body && body.enquiryId) {
+                  setEnquirySession(
+                    body.enquiryId,
+                    body.resumeToken || currentResumeToken,
+                    isEditResumeFlow
+                  );
+                }
                 if (!response.ok) {
                   throw new Error(body && body.message ? body.message : "Unable to process Monday check");
                 }
@@ -4503,6 +4531,9 @@ if ($kajabiCoursesUrl === '') {
 
       form.addEventListener("submit", function (event) {
         event.preventDefault();
+        if (isFormSubmitting) {
+          return;
+        }
         syncPreferredDateUiState();
 
         var nameOk = !!nameInput.value.trim();

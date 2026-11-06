@@ -510,24 +510,24 @@ function bookingH(string $value): string
             <textarea id="venueAddress" name="venueAddress" required maxlength="1000"><?= bookingH($prefill['venueAddress']) ?></textarea>
 
             <div class="delegate-note">
-              <strong>Important — Please read before entering delegate details</strong><br /><br />
-              Enter one name per line in the Names field, and the corresponding email address per line in the Emails field.
-              Make sure the order matches exactly — the first name must correspond to the first email, and so on.
+              <strong>Optional — Delegate details</strong><br /><br />
+              You can leave these blank for now, or enter one name per line in the Names field and the matching email per line in the Emails field.
+              If you do fill them in, keep the order exact — the first name must match the first email, and so on.
               Incorrect ordering will result in training links being sent to the wrong person.<br /><br />
               Your name and email are pre-filled. Remove that line if you should not receive the online course, then add each delegate who should be enrolled.
             </div>
 
-            <label for="studentNames">Student Names</label>
+            <label for="studentNames">Student Names (optional)</label>
             <textarea id="studentNames" name="studentNames" maxlength="5000" placeholder="One name per line"><?= bookingH($prefill['studentNames']) ?></textarea>
-            <span class="hint">One name per line. These people receive the Kajabi course invite.</span>
+            <span class="hint">Optional. One name per line. These people receive the Kajabi course invite.</span>
 
-            <label for="studentEmails">Email Addresses</label>
+            <label for="studentEmails">Email Addresses (optional)</label>
             <textarea id="studentEmails" name="studentEmails" maxlength="5000" placeholder="One email per line"><?= bookingH($prefill['studentEmails']) ?></textarea>
-            <span class="hint">One email per line, matching the student names order above.</span>
+            <span class="hint">Optional. One email per line, matching the student names order above.</span>
 
-            <label for="studentNamesFile">Student Names — File Upload</label>
+            <label for="studentNamesFile">Student Names — File Upload (optional)</label>
             <input type="file" id="studentNamesFile" name="studentNamesFile" accept=".csv,.xlsx,.xls,.txt,.pdf,.doc,.docx" />
-            <span class="hint">For larger groups, upload a spreadsheet or document instead.</span>
+            <span class="hint">Optional. For larger groups, upload a spreadsheet or document instead.</span>
 
             <label for="specialRequests">Special Requests</label>
             <textarea id="specialRequests" name="specialRequests" maxlength="2000" placeholder="Accessibility requirements, dietary needs, or anything else we should know"></textarea>
@@ -771,16 +771,8 @@ TERMS
 
         var names = (document.getElementById("studentNames").value || "").trim();
         var emails = (document.getElementById("studentEmails").value || "").trim();
-        var fileInput = document.getElementById("studentNamesFile");
-        var hasFile = fileInput && fileInput.files && fileInput.files.length > 0;
-        if (!names && !emails && !hasFile) {
-          setError(document.getElementById("studentNames"), true);
-          setError(document.getElementById("studentEmails"), true);
-          ok = false;
-        } else {
-          setError(document.getElementById("studentNames"), false);
-          setError(document.getElementById("studentEmails"), false);
-        }
+        setError(document.getElementById("studentNames"), false);
+        setError(document.getElementById("studentEmails"), false);
 
         if (names || emails) {
           var nameLines = names ? names.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean) : [];

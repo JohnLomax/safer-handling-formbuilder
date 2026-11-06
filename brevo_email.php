@@ -237,6 +237,7 @@ function brevoEmailKindToSentEventType(string $kind): ?string
 {
     return match ($kind) {
         'quote' => 'quote_email_sent',
+        'quote_reminder' => 'quote_reminder_sent',
         'resume' => 'resume_email_sent',
         'booking' => 'booking_email_sent',
         'booking_reminder' => 'booking_reminder_sent',
@@ -252,6 +253,7 @@ function brevoEmailKindLabel(string $kind): string
 {
     return match ($kind) {
         'quote' => 'Quote email',
+        'quote_reminder' => 'Quote Sent reminder',
         'resume' => 'Edit Enquiry Email',
         'booking' => 'Accept Quote / venue details email',
         'booking_reminder' => 'Accept Quote / venue details reminder',
@@ -918,6 +920,290 @@ function maybeSendBookingVenueReminderEmail(int $enquiryId, string $name, string
             'automated' => true,
             'brevo_message_id' => $messageId !== '' ? $messageId : null,
             'email_kind' => 'booking_reminder',
+        ]
+    );
+
+    return true;
+}
+
+/**
+ * Daily Quote Sent reminder — please don't forget to confirm your booking.
+ *
+ * @param array<string, mixed> $data
+ */
+function buildQuoteSentReminderEmailHtml(array $data): string
+{
+    $name = htmlspecialchars((string) ($data['name'] ?? ''), ENT_QUOTES, 'UTF-8');
+    $contactEmail = htmlspecialchars(brevoContactEmail(), ENT_QUOTES, 'UTF-8');
+    $preferredLabel = trim((string) ($data['preferredDateLabel'] ?? ''));
+    $preferredHtml = $preferredLabel !== ''
+        ? '<p style="margin:12px 0 0;">Your preferred training date is <strong style="color:#0255a4;">'
+            . htmlspecialchars($preferredLabel, ENT_QUOTES, 'UTF-8')
+            . '</strong>.</p>'
+        : '';
+
+    $acceptUrl = resolveQuoteAcceptUrl($data);
+    if ($acceptUrl === '') {
+        $acceptUrl = 'mailto:' . brevoContactEmail() . '?subject=' . rawurlencode('Accept Quote - Safer Handling Training');
+    }
+    $acceptHref = htmlspecialchars($acceptUrl, ENT_QUOTES, 'UTF-8');
+
+    $editUrl = resolveQuoteEditUrl($data);
+    $editHref = htmlspecialchars($editUrl, ENT_QUOTES, 'UTF-8');
+    $editButtonRow = $editUrl !== ''
+        ? <<<HTML
+          <tr>
+            <td align="center" style="padding:8px 20px 8px;">
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="300" style="width:300px; background-color:#0255a4; border-radius:4px;">
+                <tr>
+                  <td align="center" style="padding:14px 20px; border-radius:4px;">
+                    <a href="{$editHref}" target="_blank" style="display:block; font-family:Arial,Helvetica,sans-serif; font-size:16px; font-weight:700; color:#ffffff; text-decoration:none; line-height:1.2;">Edit Your Quote</a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+HTML
+        : '';
+
+    $body = <<<HTML
+          <tr>
+            <td align="center" style="padding:0 20px 10px; font-family:Arial,Helvetica,sans-serif; font-size:16px; line-height:1.6; color:#414141; text-align:center;">
+              <p style="margin:0 0 12px;">Hello {$name} 👋</p>
+              <p style="margin:0;">Your Safer Handling training quote is ready for you to review and confirm.</p>
+              {$preferredHtml}
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding:20px 20px 8px; font-family:Arial,Helvetica,sans-serif; text-align:center;">
+              <h1 style="margin:0; font-size:24px; font-weight:700; color:#0255a4; line-height:1.3;">Please don't forget to confirm your booking</h1>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding:0 20px 16px; font-family:Arial,Helvetica,sans-serif; font-size:16px; line-height:1.6; color:#414141; text-align:center;">
+              <p style="margin:0;">Need to change anything first? Use <strong>Edit Your Quote</strong>. Ready to proceed? Click <strong>Accept Quote and add venue details</strong> to confirm your booking.</p>
+            </td>
+          </tr>
+{$editButtonRow}
+          <tr>
+            <td align="center" style="padding:8px 20px 28px;">
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="300" style="width:300px; background-color:#0255a4; border-radius:4px;">
+                <tr>
+                  <td align="center" style="padding:14px 20px; border-radius:4px;">
+                    <a href="{$acceptHref}" target="_blank" style="display:block; font-family:Arial,Helvetica,sans-serif; font-size:16px; font-weight:700; color:#ffffff; text-decoration:none; line-height:1.2;">Accept Quote and add venue details</a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding:0 20px 16px; font-family:Arial,Helvetica,sans-serif; font-size:15px; line-height:1.6; color:#414141; text-align:center;">
+              <p style="margin:0;">If you have any questions, please <a href="mailto:{$contactEmail}" style="color:#0255a4; font-weight:700; text-decoration:underline;">contact us</a>.</p>
+            </td>
+          </tr>
+HTML;
+
+    return brevoCustomerEmailHtml("Please don't forget to confirm your booking", $body);
+}
+
+/**
+ * @param array<string, mixed> $data
+ */
+function buildQuoteSentReminderEmailText(array $data): string
+{
+    $acceptUrl = resolveQuoteAcceptUrl($data);
+    $editUrl = resolveQuoteEditUrl($data);
+    $preferredLabel = trim((string) ($data['preferredDateLabel'] ?? ''));
+
+    $lines = [
+        'Hello ' . (string) ($data['name'] ?? '') . ',',
+        '',
+        'Your Safer Handling training quote is ready for you to review and confirm.',
+    ];
+
+    if ($preferredLabel !== '') {
+        $lines[] = '';
+        $lines[] = 'Your preferred training date is: ' . $preferredLabel;
+    }
+
+    if ($editUrl !== '') {
+        $lines[] = '';
+        $lines[] = 'Edit Your Quote:';
+        $lines[] = $editUrl;
+    }
+
+    $lines[] = '';
+    $lines[] = 'Accept Quote and add venue details:';
+    $lines[] = $acceptUrl !== '' ? $acceptUrl : ('Email ' . brevoContactEmail() . ' to accept your quote.');
+    $lines[] = '';
+    $lines[] = 'If you have any questions, please contact us at ' . brevoContactEmail() . '.';
+    $lines[] = '';
+    $lines[] = 'Safer Handling';
+    $lines[] = 'https://www.safer-handling.co.uk';
+
+    return implode("\n", $lines);
+}
+
+/**
+ * @param array<string, mixed> $data
+ */
+function sendQuoteSentReminderEmailViaBrevo(string $toEmail, string $toName, array $data): string
+{
+    $sender = brevoSenderConfig();
+    $recipients = brevoQuoteEmailRecipients($toEmail, $toName, $data);
+    $html = buildQuoteSentReminderEmailHtml($data);
+    $text = buildQuoteSentReminderEmailText($data);
+    $enquiryId = (int) ($data['enquiryId'] ?? 0);
+    $subject = "Please don't forget to confirm your booking — Safer Handling";
+
+    $payloads = [];
+    foreach ($recipients as $recipient) {
+        $payload = [
+            'sender' => $sender,
+            'to' => [$recipient],
+            'replyTo' => [
+                'email' => brevoContactEmail(),
+                'name' => $sender['name'],
+            ],
+            'subject' => $subject,
+            'htmlContent' => $html,
+            'textContent' => $text,
+        ];
+        $payloads[] = brevoWithEnquiryTracking($payload, $enquiryId, 'quote_reminder');
+    }
+
+    $messageIds = brevoExecuteSmtpSendMany($payloads);
+    $messageId = '';
+    foreach ($messageIds as $id) {
+        if (trim((string) $id) !== '') {
+            $messageId = (string) $id;
+            break;
+        }
+    }
+    if ($messageId === '') {
+        throw new RuntimeException('Quote reminder email could not be sent to any recipient.');
+    }
+
+    return $messageId;
+}
+
+/**
+ * Daily automated reminder for Quote Sent enquiries with preferred date within 30 days.
+ */
+function maybeSendQuoteSentReminderEmail(int $enquiryId, string $name = '', string $email = ''): bool
+{
+    if (brevoApiKey() === '') {
+        return false;
+    }
+
+    if (enquiryLoggerQuoteReminderSentToday($enquiryId)) {
+        return false;
+    }
+
+    $bookingMeta = enquiryLoggerGetBookingDetails($enquiryId);
+    if (is_array($bookingMeta) && trim((string) ($bookingMeta['booking_submitted_at'] ?? '')) !== '') {
+        return false;
+    }
+
+    $pdo = enquiryLoggerPdo();
+    $stmt = $pdo->prepare(
+        'SELECT name, email, status, preferred_date_time, date_not_sure, quote_email_sent_at, booking_submitted_at,
+                invoice_quote_name, invoice_quote_email, form_data_json
+         FROM enquiries WHERE id = :id LIMIT 1'
+    );
+    $stmt->execute([':id' => $enquiryId]);
+    $row = $stmt->fetch();
+    if (! is_array($row)) {
+        return false;
+    }
+
+    if (trim((string) ($row['booking_submitted_at'] ?? '')) !== '') {
+        return false;
+    }
+
+    if (trim((string) ($row['quote_email_sent_at'] ?? '')) === '') {
+        return false;
+    }
+
+    $status = strtolower(trim((string) ($row['status'] ?? '')));
+    if (in_array($status, ['quote_accepted', 'quote_won'], true)) {
+        return false;
+    }
+
+    if (! empty($row['date_not_sure'])) {
+        return false;
+    }
+
+    $preferredDate = enquiryPreferredDateOnly((string) ($row['preferred_date_time'] ?? ''));
+    $daysUntil = enquiryPreferredDateDaysUntil($preferredDate);
+    if ($preferredDate === '' || $daysUntil === null || $daysUntil < 0 || $daysUntil > 30) {
+        return false;
+    }
+
+    $formData = [];
+    $rawForm = trim((string) ($row['form_data_json'] ?? ''));
+    if ($rawForm !== '') {
+        $decoded = json_decode($rawForm, true);
+        if (is_array($decoded)) {
+            $formData = $decoded;
+        }
+    }
+
+    $recipient = enquiryResolveInvoiceQuoteRecipient(
+        $formData,
+        [
+            'invoice_quote_name' => $row['invoice_quote_name'] ?? '',
+            'invoice_quote_email' => $row['invoice_quote_email'] ?? '',
+        ],
+        trim($name) !== '' ? $name : (string) ($row['name'] ?? ''),
+        trim($email) !== '' ? $email : (string) ($row['email'] ?? '')
+    );
+
+    $toName = trim((string) ($recipient['name'] ?? ''));
+    $toEmail = trim((string) ($recipient['email'] ?? ''));
+    if ($toName === '' || $toEmail === '' || ! filter_var($toEmail, FILTER_VALIDATE_EMAIL)) {
+        throw new RuntimeException('Customer name and email are required for the quote reminder.');
+    }
+
+    $token = enquiryLoggerEnsureResumeToken($enquiryId);
+    $preferredLabel = formatPreferredTrainingDate($preferredDate, false);
+
+    $quoteData = [
+        'name' => $toName,
+        'email' => $toEmail,
+        'enquiryId' => $enquiryId,
+        'resumeToken' => $token,
+        'preferredDateLabel' => $preferredLabel,
+        'preferredDateTime' => $preferredDate,
+        'enquiryContactName' => trim((string) ($row['name'] ?? '')),
+        'enquiryContactEmail' => trim((string) ($row['email'] ?? '')),
+    ];
+
+    $invoiceQuoteName = trim((string) ($row['invoice_quote_name'] ?? ($formData['invoiceQuoteName'] ?? '')));
+    $invoiceQuoteEmail = trim((string) ($row['invoice_quote_email'] ?? ($formData['invoiceQuoteEmail'] ?? '')));
+    if ($invoiceQuoteName !== '') {
+        $quoteData['invoiceQuoteName'] = $invoiceQuoteName;
+    }
+    if ($invoiceQuoteEmail !== '') {
+        $quoteData['invoiceQuoteEmail'] = $invoiceQuoteEmail;
+    }
+
+    resolveQuoteAcceptUrl($quoteData);
+    resolveQuoteEditUrl($quoteData);
+
+    $messageId = sendQuoteSentReminderEmailViaBrevo($toEmail, $toName, $quoteData);
+
+    enquiryLoggerMarkQuoteReminderSent($enquiryId);
+    enquiryLoggerEvent(
+        $enquiryId,
+        'quote_reminder_sent',
+        'Quote Sent reminder emailed (preferred date within 30 days).',
+        [
+            'preferred_date' => $preferredDate,
+            'days_until' => $daysUntil,
+            'automated' => true,
+            'brevo_message_id' => $messageId !== '' ? $messageId : null,
+            'email_kind' => 'quote_reminder',
         ]
     );
 

@@ -249,14 +249,6 @@ class EnquiryController extends Controller
         $existing = is_array($enquiry->booking_details_json) ? $enquiry->booking_details_json : [];
         $existingFile = is_array($existing['studentNamesFile'] ?? null) ? $existing['studentNamesFile'] : null;
 
-        if (count($nameLines) === 0 && count($emailLines) === 0 && ! $hasUpload && $existingFile === null) {
-            return redirect()
-                ->route('admin.enquiries.show', ['enquiry' => $enquiry, 'edit_booking' => 1])
-                ->withErrors(['studentNames' => 'Provide student names and emails, or upload a delegate list.'])
-                ->withInput()
-                ->with('open_booking_edit', true);
-        }
-
         if ((count($nameLines) > 0 || count($emailLines) > 0) && count($nameLines) !== count($emailLines)) {
             return redirect()
                 ->route('admin.enquiries.show', ['enquiry' => $enquiry, 'edit_booking' => 1])

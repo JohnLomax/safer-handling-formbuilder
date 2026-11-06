@@ -846,6 +846,7 @@
                                 <p>
                                     Quote confirmation (often with Xero PDF) includes <strong class="text-sh-text">Edit Your Quote</strong> (back to the enquiry form) and <strong class="text-sh-text">Accept Quote and add venue details</strong>.
                                     Invoice emails attach the Xero PDF.
+                                    A daily <strong class="text-sh-text">Please don't forget to confirm your booking</strong> reminder (9:00 Europe/London) goes to Quote Sent enquiries whose preferred date is within 30 days, with the same Edit and Accept buttons, until booking is completed.
                                 </p>
                             </div>
                         </div>

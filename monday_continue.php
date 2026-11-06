@@ -122,10 +122,15 @@ function mondayErrorMessage(array $responseBody, string $fallback): string
     return $message !== '' ? $message : $fallback;
 }
 
+$enquiryId = null;
+$resumeToken = '';
+
 try {
-    $enquiryId = null;
-    enquiryLoggerSafe(function () use (&$enquiryId): void {
+    enquiryLoggerSafe(function () use (&$enquiryId, &$resumeToken): void {
         $enquiryId = enquiryLoggerFindOrCreateInitial($_POST);
+        if ($enquiryId !== null) {
+            $resumeToken = enquiryLoggerEnsureResumeToken($enquiryId);
+        }
     });
 
     $columnsQuery = <<<'GQL'
@@ -293,8 +298,7 @@ GQL;
     $columnValues = mondayAppendPhoneColumn($columns, $columnValues, $phone);
     $columnValues = mondayAppendCreatedDate($columns, $columnValues);
 
-    $resumeToken = '';
-    if ($enquiryId !== null) {
+    if ($enquiryId !== null && $resumeToken === '') {
         enquiryLoggerSafe(function () use ($enquiryId, &$resumeToken): void {
             $resumeToken = enquiryLoggerEnsureResumeToken($enquiryId);
         });
@@ -443,9 +447,22 @@ GQL;
         'message' => 'New enquiry created in Monday.',
     ]);
 } catch (Throwable $e) {
+    // If the DB enquiry was already created, always return its IDs so the
+    // browser can reuse it on retry instead of creating another duplicate.
+    if ($enquiryId !== null && $resumeToken === '') {
+        enquiryLoggerSafe(function () use ($enquiryId, &$resumeToken): void {
+            $resumeToken = enquiryLoggerEnsureResumeToken($enquiryId);
+        });
+    }
+
     http_response_code(500);
-    echo json_encode([
+    $errorPayload = [
         'success' => false,
         'message' => $e->getMessage(),
-    ]);
+    ];
+    if ($enquiryId !== null) {
+        $errorPayload['enquiryId'] = $enquiryId;
+        $errorPayload['resumeToken'] = $resumeToken;
+    }
+    echo json_encode($errorPayload);
 }

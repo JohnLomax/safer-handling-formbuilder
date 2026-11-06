@@ -25,6 +25,12 @@ return Application::configure(basePath: dirname(__DIR__))
         // Reminder to accept quote / add venue details 24 hours before preferred date.
         $schedule->command('booking:send-venue-reminders')->hourly()->withoutOverlapping();
 
+        // Daily Quote Sent reminder: please don't forget to confirm your booking (preferred date within 30 days).
+        $schedule->command('quote:send-reminders')
+            ->dailyAt('09:00')
+            ->timezone('Europe/London')
+            ->withoutOverlapping();
+
         // Auto-reply (email.html) for office inbox messages with no human reply after N hours.
         $schedule->command('email:send-office-auto-replies')->everyFifteenMinutes()->withoutOverlapping();
 

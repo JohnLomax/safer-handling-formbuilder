@@ -163,13 +163,13 @@
     @endphp
     <div class="grid gap-4 sm:grid-cols-2">
         <div>
-            <x-input-label for="studentNames" value="Student names (one per line)" />
-            <textarea id="studentNames" name="studentNames" rows="5" class="mt-1 block w-full rounded-[10px] border border-[#b7d3ee] px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30" placeholder="Pre-filled with the booker — remove or add lines as needed">{{ $defaultStudentNames }}</textarea>
-            <p class="mt-1 text-xs text-sh-mid">Kajabi enrolls these people. The booker is pre-filled and can be removed.</p>
+            <x-input-label for="studentNames" value="Student names (optional, one per line)" />
+            <textarea id="studentNames" name="studentNames" rows="5" class="mt-1 block w-full rounded-[10px] border border-[#b7d3ee] px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30" placeholder="Optional — pre-filled with the booker; remove or add lines as needed">{{ $defaultStudentNames }}</textarea>
+            <p class="mt-1 text-xs text-sh-mid">Optional. Kajabi enrolls these people. The booker is pre-filled and can be removed.</p>
         </div>
         <div>
-            <x-input-label for="studentEmails" value="Student emails (one per line)" />
-            <textarea id="studentEmails" name="studentEmails" rows="5" class="mt-1 block w-full rounded-[10px] border border-[#b7d3ee] px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30" placeholder="Matching emails, one per line">{{ $defaultStudentEmails }}</textarea>
+            <x-input-label for="studentEmails" value="Student emails (optional, one per line)" />
+            <textarea id="studentEmails" name="studentEmails" rows="5" class="mt-1 block w-full rounded-[10px] border border-[#b7d3ee] px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30" placeholder="Optional — matching emails, one per line">{{ $defaultStudentEmails }}</textarea>
         </div>
     </div>
 

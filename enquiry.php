@@ -1661,7 +1661,8 @@ if ($kajabiCoursesUrl === '') {
 
   <script>
     (function () {
-      var SHOP_URL = "https://www.safer-handling.co.uk/shop";
+      // /shop is retired ("booking has moved"); equipment lives on softrestraintkit.com
+      var EQUIPMENT_URL = "https://softrestraintkit.com";
       var RESOURCES_URL = "https://www.safer-handling.co.uk/resources";
       var KAJABI_COURSES_URL = <?= json_encode($kajabiCoursesUrl, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
       var MONDAY_CONTINUE_ENDPOINT = new URL("monday_continue.php", window.location.href).toString();
@@ -4211,7 +4212,7 @@ if ($kajabiCoursesUrl === '') {
 
             if (enquiryType === "equipment") {
               hideTrainingEnquiry();
-              window.location.href = SHOP_URL;
+              window.location.href = EQUIPMENT_URL;
               return;
             }
 

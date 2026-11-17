@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\ActivityLogController;
+use App\Http\Controllers\Admin\CustomFormController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\EnquiryController;
 use App\Http\Controllers\Admin\FeedbackController;
@@ -10,8 +11,16 @@ use App\Http\Controllers\Admin\SystemConfigurationController;
 use App\Http\Controllers\Admin\TrainingMatrixController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\VoucherController;
+use App\Http\Controllers\CustomFormPublicController;
 use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
+
+Route::get('/f/{slug}', [CustomFormPublicController::class, 'show'])
+    ->where('slug', '[a-z0-9]+(?:-[a-z0-9]+)*')
+    ->name('custom-forms.show');
+Route::post('/f/{slug}', [CustomFormPublicController::class, 'store'])
+    ->where('slug', '[a-z0-9]+(?:-[a-z0-9]+)*')
+    ->name('custom-forms.submit');
 
 Route::get('/', function () {
     if (auth()->check()) {
@@ -64,6 +73,10 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
         ->except(['show']);
 
     Route::resource('vouchers', VoucherController::class);
+
+    Route::get('/custom-forms/{custom_form}/export', [CustomFormController::class, 'export'])
+        ->name('custom-forms.export');
+    Route::resource('custom-forms', CustomFormController::class);
 
     Route::get('/help', [HelpController::class, 'index'])->name('help.index');
 

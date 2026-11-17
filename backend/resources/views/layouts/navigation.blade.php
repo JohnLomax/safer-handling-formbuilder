@@ -29,6 +29,9 @@
             <x-nav-link :href="route('admin.vouchers.index')" :active="request()->routeIs('admin.vouchers.*')">
                 Vouchers
             </x-nav-link>
+            <x-nav-link :href="route('admin.custom-forms.index')" :active="request()->routeIs('admin.custom-forms.*')">
+                Custom Forms
+            </x-nav-link>
         </div>
 
         <div class="hidden items-center md:flex">
@@ -105,6 +108,9 @@
             </x-responsive-nav-link>
             <x-responsive-nav-link :href="route('admin.vouchers.index')" :active="request()->routeIs('admin.vouchers.*')">
                 Vouchers
+            </x-responsive-nav-link>
+            <x-responsive-nav-link :href="route('admin.custom-forms.index')" :active="request()->routeIs('admin.custom-forms.*')">
+                Custom Forms
             </x-responsive-nav-link>
         </div>
 

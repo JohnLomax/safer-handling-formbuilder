@@ -330,6 +330,7 @@
                         <a href="#attendees-api"><span class="help-nav-dot"></span>Attendees API</a>
                         <a href="#forge-delivery-stages"><span class="help-nav-dot"></span>Forge delivery stages</a>
                         <a class="is-section" href="#vouchers"><span class="help-nav-dot"></span>Vouchers</a>
+                        <a class="is-section" href="#custom-forms"><span class="help-nav-dot"></span>Custom Forms</a>
                         <a class="is-section" href="#training-matrix"><span class="help-nav-dot"></span>Training Matrix</a>
                         <a href="#adding-to-form"><span class="help-nav-dot"></span>Adding to the form / skill matrix</a>
                         <a href="#matrix-fields"><span class="help-nav-dot"></span>Matrix fields</a>
@@ -1226,6 +1227,34 @@
                         <li>Deleting a voucher clears the link on enquiries but keeps the discount history fields on those enquiries.</li>
                         <li>It's for me (book a course) and organisation paths both show the voucher field under the live quote.</li>
                     </ul>
+                </section>
+
+                <section id="custom-forms" class="brand-panel help-section help-stack scroll-mt-6">
+                    <div class="help-section-head">
+                        <div>
+                            <h2 class="text-lg font-semibold text-brand-header">Custom Forms</h2>
+                            <p class="text-sm text-sh-mid">QR / link lead forms for events and stands — contact details plus light interest checkboxes, not the full booking matrix.</p>
+                        </div>
+                        <a href="{{ route('admin.custom-forms.index') }}" class="btn-brand-outline text-xs">Open Custom Forms</a>
+                    </div>
+
+                    <div class="help-step-grid">
+                        <div class="help-step-card">
+                            <div class="help-step-num">1</div>
+                            <h4>Create a form</h4>
+                            <p>Give it an internal name, URL slug, visitor title, and optional intro. Each form gets a public link at <code class="rounded bg-sh-surface px-1 text-xs">/f/your-slug</code>.</p>
+                        </div>
+                        <div class="help-step-card">
+                            <div class="help-step-num">2</div>
+                            <h4>Print the QR</h4>
+                            <p>Open the form to download the QR code or copy the link for flyers, badges, and stand displays.</p>
+                        </div>
+                        <div class="help-step-card">
+                            <div class="help-step-num">3</div>
+                            <h4>Review submissions</h4>
+                            <p>Leads land on the form page with interests and follow-up preference. Export CSV when you need a list for the team.</p>
+                        </div>
+                    </div>
                 </section>
 
                 <section id="training-matrix" class="brand-panel help-section help-stack scroll-mt-6">

@@ -15,6 +15,7 @@ declare(strict_types=1);
  *   /enquiry   → enquiry form
  *   /feedback  → feedback form
  *   /booking   → booking details (quote accept / venue / terms)
+ *   /f/{slug}  → custom QR lead form (Laravel)
  *   /admin/*   → Laravel admin
  *   /login     → Laravel auth
  */
